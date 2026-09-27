@@ -10,7 +10,9 @@ try {
  create table customer_invoices(id int primary key,amount int);insert into customer_invoices values(1,390);
  create table driver_job_status_events(id int primary key,status text);insert into driver_job_status_events values(1,'Job Completed');
  insert into bookings values(1,'OLD','completed','completed',now()-interval '1 year');`);
- const migration=readdirSync('supabase/migrations').find(n=>n.endsWith('_admin_message_attention_retention.sql'));
+ const migrations=readdirSync('supabase/migrations').filter(n=>n.endsWith('_admin_message_attention_retention.sql'));
+ assert.equal(migrations.length,1,'Exactly one retention migration must match the applied history; never duplicate it');
+ const migration=migrations[0];
  await db.exec(readFileSync('supabase/migrations/'+migration,'utf8'));
  const q=async sql=>(await db.query(sql)).rows;
  assert.ok((await q('select message_retention_anchor_at from bookings'))[0].message_retention_anchor_at,'Historic job gets fresh retention window, never guessed closure');

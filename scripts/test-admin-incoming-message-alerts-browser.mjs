@@ -16,7 +16,7 @@ try {
   const errors=[];client.on('Runtime.exceptionThrown',e=>errors.push(e.exceptionDetails.text));
   const evaluate=async expression=>{const result=await client.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});assert.ok(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));return result.result.value;};
   await client.send('Page.addScriptToEvaluateOnNewDocument',{source:`
-    window.qaWrites=[];window.qaMessagesFailed=false;
+    window.qaWrites=[];window.qaMessagesFailed=false;window.qaServerDone=new Set(JSON.parse(sessionStorage.getItem("qa-server-done")||"[]"));
     const now=Date.now();
     const booking=(ref,pub,driver)=>({id:ref,booking_reference:ref,public_booking_reference:pub,booking_type:'TRF',vehicle:'AVF',pickup_at:new Date(now-3600000).toISOString(),pickup_datetime:new Date(now-3600000).toISOString(),pickup_address:'Example pickup',dropoff_address:'Example destination',passenger_name:'Example customer',driver_name:driver,driver_id:71,status:'assigned',pax:1,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()});
     window.qaBookings=[booking('EXACT-A','11001','Example Driver A'),booking('EXACT-B','11002','Example Driver B')];
@@ -28,13 +28,20 @@ try {
       if(u.origin!==location.origin)throw Error('External fetch forbidden');
       if(!u.pathname.startsWith('/api/'))return original(input,init);
       const method=init?.method||'GET';
-      if(method!=='GET'){window.qaWrites.push(method+' '+u.pathname);return Response.json({ok:false},{status:403});}
+      if(method!=='GET'){
+        const body=JSON.parse(init?.body||'{}');
+        if(method==='POST'&&u.pathname==='/api/admin-customer-driver-app-notifications'&&body.action==='dismiss_admin_messages'){
+          body.message_ids.forEach(id=>window.qaServerDone.add(id));sessionStorage.setItem('qa-server-done',JSON.stringify([...window.qaServerDone]));
+          return Response.json({ok:true,message_ids:body.message_ids});
+        }
+        window.qaWrites.push(method+' '+u.pathname);return Response.json({ok:false},{status:403});
+      }
       if(u.pathname==='/api/admin-saved-bookings')return Response.json({ok:true,bookings:window.qaBookings});
       if(u.pathname==='/api/admin-load-bookings-typed-read')return Response.json({ok:true,bookings:[],read_gate_open:true,status:'ready'});
       if(u.pathname==='/api/admin-customer-driver-app-notifications'){
         if(u.searchParams.get('scope')==='admin_incoming_messages'){
           if(window.qaMessagesFailed)return Response.json({ok:false},{status:503});
-          return Response.json({ok:true,notifications:window.qaMessages,pagination:{has_next_page:false}});
+          return Response.json({ok:true,notifications:window.qaMessages.filter(m=>!window.qaServerDone.has(m.id)),pagination:{has_next_page:false}});
         }
         return Response.json({ok:true,notifications:window.qaMessages.filter(m=>m.booking_reference===u.searchParams.get('booking_reference'))});
       }
@@ -81,5 +88,5 @@ try {
   await wait(`document.body.innerText.includes('Incoming messages could not be loaded')`,'read failure visible');
   assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="existing"]')!==null`),true);
   assert.deepEqual(await evaluate('window.qaWrites'),[]);assert.deepEqual(errors,[]);
-  console.log('Browser passed: one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, no sends or writes.');
+  console.log('Browser passed: one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, no sends or source-history/status writes.');
 }finally{if(client)await client.close();await terminateChildProcess(chrome);await rm(profile,{recursive:true,force:true});}

@@ -12466,6 +12466,19 @@ async function updateAdminAutomationRuntimeControl(enabled: boolean) {
   return result;
 }
 
+async function dismissAdminIncomingMessageAlerts(messageIds: string[]) {
+  const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+    method: "POST", cache: "no-store",
+    headers: { "content-type": "application/json", "x-prestige-admin-purpose": adminLegacyDataPurpose },
+    body: JSON.stringify({ action: "dismiss_admin_messages", message_ids: messageIds }),
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || result?.ok !== true || !Array.isArray(result.message_ids)) {
+    throw new Error("Message alert could not sync. Use Refresh Dashboard to retry.");
+  }
+  return result.message_ids.filter((id: unknown): id is string => typeof id === "string" && messageIds.includes(id));
+}
+
 async function loadAdminAppNotificationsRead() {
   const notifications: AdminAppNotificationRecord[] = [];
   let pageCount = 1;
@@ -12545,11 +12558,27 @@ async function loadAdminAppNotificationsRead() {
       if (!result.pagination?.has_next_page) break;
       if (page === adminAppNotificationReadMaxPages) throw new Error("Incoming messages exceeded the safe read limit. Message history remains available on each job.");
     }
-    // Read dismissal after all pages finish, so a concurrent Done cannot reappear.
-    notifications.push(...incoming.filter((item) => {
-      try { return window.localStorage.getItem(`prestige.admin.incoming-message.done.${item.safe_context?.incoming_message_id}`) !== "1"; }
-      catch { return true; }
-    }));
+    // Move legacy device-only Done markers to the shared attention state once.
+    // Gather all pages first so dismissing rows cannot shift pagination mid-read.
+    const legacyIds = incoming.flatMap((item) => {
+      const id = String(item.safe_context?.incoming_message_id || "");
+      try { return window.localStorage.getItem(`prestige.admin.incoming-message.done.${id}`) === "1" ? [id] : []; }
+      catch { return []; }
+    });
+    const migrated = new Set<string>();
+    for (let offset = 0; offset < legacyIds.length; offset += 100) {
+      try {
+        const ids = await dismissAdminIncomingMessageAlerts(legacyIds.slice(offset, offset + 100));
+        for (const id of ids) {
+          migrated.add(id);
+          try { window.localStorage.removeItem(`prestige.admin.incoming-message.done.${id}`); } catch { /* Server remains authoritative. */ }
+        }
+      } catch {
+        incomingMessageError = "Earlier Done actions could not sync. Message alerts remain visible; use Refresh Dashboard to retry.";
+        break;
+      }
+    }
+    notifications.push(...incoming.filter((item) => !migrated.has(String(item.safe_context?.incoming_message_id || ""))));
   } catch (error) {
     incomingMessageError = error instanceof Error ? error.message : "Incoming messages could not be loaded.";
   }
@@ -16846,15 +16875,21 @@ export default function Home() {
       const sourceId = typeof sourceValue === "string" ? sourceValue.trim() : "";
       if (!sourceId || cleanedNotificationId !== `message:${sourceId}`) return;
       try {
-        window.localStorage.setItem(`prestige.admin.incoming-message.done.${sourceId}`, "1");
+        setAdminAppNotificationAction({ notificationId: cleanedNotificationId, status: notificationStatus });
+        const ids = await dismissAdminIncomingMessageAlerts([sourceId]);
+        if (!ids.includes(sourceId)) throw new Error("Message no longer available. Refresh Dashboard.");
+        // Cancel any older in-flight read and refresh from the shared state.
+        setAdminAppNotificationReadRevision((current) => current + 1);
         setAdminAppNotificationReadState((current) => ({ ...current,
           notifications: current.notifications.filter((item) => item.id !== cleanedNotificationId),
-          message: { tone: "success", text: "Message alert cleared on this browser. The job conversation is unchanged." },
+          message: { tone: "success", text: "Message alert cleared across Admin devices. The job conversation is unchanged." },
         }));
       } catch {
         setAdminAppNotificationReadState((current) => ({ ...current,
-          message: { tone: "error", text: "This browser could not save the cleared alert. The message remains visible." },
+          message: { tone: "error", text: "Message alert could not sync. The message remains visible; try again." },
         }));
+      } finally {
+        setAdminAppNotificationAction(null);
       }
       return;
     }

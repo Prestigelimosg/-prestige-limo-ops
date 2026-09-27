@@ -4245,6 +4245,48 @@ export async function createCustomerDriverAppNotification(
   };
 }
 
+// Done is Admin attention only; never mutate the Driver/Customer read status.
+export async function dismissAdminIncomingMessages(
+  input: unknown,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<{ message_ids: string[] }>> {
+  const body = asRecord(input);
+  const ids = body.message_ids;
+  if (body.action !== "dismiss_admin_messages" || Object.keys(body).some((key) => !["action", "message_ids"].includes(key)) ||
+      !Array.isArray(ids) || ids.length < 1 || ids.length > 100 ||
+      ids.some((id) => typeof id !== "string" || !uuidPattern.test(id)) || new Set(ids).size !== ids.length) {
+    return { ok: false, status: 400, error: "Invalid message alert dismissal." };
+  }
+  if (!["admin", "dispatcher"].includes(actor.actor_role)) {
+    return { ok: false, status: 403, error: "Admin access required." };
+  }
+  const connection = getAdminNotificationClient(actor);
+  if (!connection.ok) return connection;
+  const { data, error } = await connection.data.from(notificationTable)
+    .update({ admin_attention_done_at: new Date().toISOString() })
+    .in("id", ids)
+    .or([
+      "and(workflow_area.eq.admin_driver_job_messages,safe_context->>direction.eq.driver_to_admin,delivery_surface.eq.driver_app)",
+      "and(workflow_area.eq.customer_driver_quick_replies,safe_context->>direction.eq.customer_to_driver,delivery_surface.eq.driver_app)",
+    ].join(","))
+    .select("id");
+  if (error) return safeAdapterFailure("Message alert could not be cleared. Try again.", 500, error);
+  return { ok: true, data: { message_ids: asArray(data).map((row) => String(asRecord(row).id)) } };
+}
+
+export async function runJobMessageRetention() {
+  if (process.env.PRESTIGE_JOB_MESSAGE_RETENTION_ENABLED !== "true") return { ok: true, enabled: false, deleted: 0 };
+  const url = configValueOrNull(process.env.SUPABASE_URL);
+  const key = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  if (!url || !key) return { ok: false, enabled: true, deleted: 0 };
+  const client = createClient(url, key, { auth: { persistSession: false } });
+  const { data, error } = await client.rpc("cleanup_job_message_retention");
+  if (error) return { ok: false, enabled: true, deleted: 0 };
+  const result = asRecord(data);
+  if (!Number.isInteger(result.deleted) || Number(result.deleted) < 0 || Number(result.deleted) > 1000) return { ok: false, enabled: true, deleted: 0 };
+  return { ok: true, enabled: true, deleted: Number(result.deleted), batch_full: result.batch_full === true };
+}
+
 export async function loadCustomerDriverAppNotifications(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
@@ -4261,6 +4303,7 @@ export async function loadCustomerDriverAppNotifications(
     // Admin-only read projection of existing conversations. Never change their recipient/read state.
     const { data, count, error } = await clientResult.data.from(notificationTable)
       .select(notificationSelect, { count: "exact" })
+      .is("admin_attention_done_at", null)
       .or([
         "and(workflow_area.eq.admin_driver_job_messages,safe_context->>direction.eq.driver_to_admin,delivery_surface.eq.driver_app)",
         "and(workflow_area.eq.customer_driver_quick_replies,safe_context->>direction.eq.customer_to_driver,delivery_surface.eq.driver_app)",

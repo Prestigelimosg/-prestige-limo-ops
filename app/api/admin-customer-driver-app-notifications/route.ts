@@ -6,6 +6,7 @@ import {
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import {
   createCustomerDriverAppNotification,
+  dismissAdminIncomingMessages,
   loadCustomerDriverAppNotifications,
   parseCustomerDriverAppNotificationCreatePayload,
   parseCustomerDriverAppNotificationUpdatePayload,
@@ -108,7 +109,21 @@ export async function POST(request: Request) {
       return boundary.response;
     }
 
-    const parsed = parseCustomerDriverAppNotificationCreatePayload(await readJsonBody(request));
+    const input = await readJsonBody(request);
+    if (input?.action === "dismiss_admin_messages") {
+      const url = new URL(request.url);
+      const referer = new URL(request.headers.get("referer") || "https://invalid.invalid");
+      if (boundary.context.mode !== "server-session-role-surface" ||
+          request.headers.get("origin") !== url.origin || referer.origin !== url.origin || referer.pathname !== "/") {
+        return blockedResponse("Message dismissal requires the signed-in Admin dashboard.");
+      }
+      if (url.search || !request.headers.get("content-type")?.startsWith("application/json")) {
+        return Response.json({ ok: false }, { status: 400 });
+      }
+      const result = await dismissAdminIncomingMessages(input, adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context));
+      return Response.json(result.ok ? { ok: true, ...result.data } : { ok: false, error: result.error }, { status: result.ok ? 200 : result.status });
+    }
+    const parsed = parseCustomerDriverAppNotificationCreatePayload(input);
 
     if (!parsed.ok) {
       return Response.json(

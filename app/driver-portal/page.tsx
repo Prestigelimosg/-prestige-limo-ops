@@ -8,6 +8,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
+const driverBetaApkDownloadUrl =
+  "https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download";
+
 type DriverPortalJob = {
   combo?:{vehicle:string;trips:DriverComboTripSummary[]};
   job_key: string;
@@ -263,6 +266,7 @@ export default function DriverPortalPage() {
     installationId &&
     typeof (window as DriverNativeWindow).ReactNativeWebView?.postMessage === "function",
   );
+  const nativeAndroidApp = nativeBridgeReady && /\bAndroid\b/i.test(window.navigator.userAgent);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
   const [accountFirstSignIn, setAccountFirstSignIn] = useState(false);
@@ -923,6 +927,23 @@ export default function DriverPortalPage() {
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">
             View your upcoming and active jobs.
           </p>
+          {nativeAndroidApp ? (
+            <div className="mt-3 border-t border-slate-700 pt-3" data-driver-portal-update="true">
+              <a
+                className="inline-flex min-h-11 items-center rounded-lg border border-slate-500 px-3 py-2 text-sm font-semibold text-white"
+                data-driver-portal-update-download="true"
+                href={driverBetaApkDownloadUrl}
+                referrerPolicy="no-referrer"
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Update Driver App
+              </a>
+              <p className="mt-1 text-xs leading-5 text-slate-300">
+                Download the latest Android version and install it over this app. Do not uninstall.
+              </p>
+            </div>
+          ) : null}
           {readState.kind === "ready" && readState.accountSession && notificationCentreOpen ? (
             <section
               aria-label="Driver alerts"

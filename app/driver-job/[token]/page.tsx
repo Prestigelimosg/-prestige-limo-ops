@@ -3,6 +3,8 @@
 import { reportDriverActivity } from "../../../lib/driver-activity-client";
 
 import Link from "next/link";
+import Image from "next/image";
+import driverAppIcon from "../../../driver-companion/assets/icon.png";
 import {DriverComboTrips} from "../driver-combo-trips";
 import type {DriverComboView} from "../../../lib/driver-job-combo";
 import {DriverAccountActivation} from "../driver-account-activation";
@@ -2808,7 +2810,16 @@ export default function DriverJobPage() {
           ) : null}
           {(androidBrowser || iosBrowser) && !embeddedDriverApp && pageState.kind === "ready" ? (
             <div className="space-y-1 pt-2" data-driver-beta-install="true">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Image
+                  src={driverAppIcon}
+                  alt="Prestige Driver app logo"
+                  width={56}
+                  height={56}
+                  sizes="56px"
+                  className="shrink-0 rounded-xl"
+                  data-driver-app-logo="true"
+                />
                 <a
                   className="inline-flex min-h-11 items-center rounded-md border border-stone-300 bg-white px-2.5 text-xs font-semibold text-slate-950"
                   data-driver-beta-download="true"

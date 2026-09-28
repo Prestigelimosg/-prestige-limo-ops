@@ -47,6 +47,8 @@ const [
   readFile(windowPolicyPath, "utf8"),
 ]);
 
+assertIncludes(appPage, "const customerLiveLocationWindowMs = 60 * 60 * 1000;", "Admin customer viewing boundary");
+
 const ledgerSection = sectionBetween(
   ledger,
   "### Customer Live Location Link Readiness Contract Guard Lock",
@@ -77,8 +79,8 @@ for (const fragment of [
   "Customer app link can still be copied; live location is not available for this service type.",
   "Customer app link can still be copied after booking and driver details are ready; live location requires pickup date and time.",
   "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing.",
-  "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
-  "Customer app link remains available for trip status; live location is only available within 30 minutes before pickup.",
+  "Customer app link can be copied now; live location appears only when ready around one hour before pickup.",
+  "Customer app link remains available for trip status; live location is only available within one hour before pickup.",
   "Customer app link can still be copied; live location appears only after secure driver location setup is ready.",
   "copyLine: `Live location: ${secureLink}`",
 ]) {
@@ -98,7 +100,7 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "future_customer_window_minutes_before_pickup: 30",
+  "future_customer_window_minutes_before_pickup: 60",
   "future_pob_auto_stop_minutes_after_pob: 5",
   "service_eligibility: \"allowed_later\" | \"disabled_for_customer\"",
   "live_location_status: \"disabled\"",
@@ -121,13 +123,13 @@ for (const fragment of [
 
 for (const fragment of [
   "customer_live_map_link_planned: true",
-  "customer_visible_window_minutes_before_pickup: 30",
+  "customer_visible_window_minutes_before_pickup: 60",
   "customerVisible: false",
   "gpsCaptureEnabled: false",
   "liveAccessEnabled: false",
   "liveMapEnabled: false",
   "locationStorageEnabled: false",
-  "customer_window_before_pickup_minutes: 30",
+  "customer_window_before_pickup_minutes: 60",
   "customer_live_map_link: \"planned_only\"",
   "status: \"setup_only\"",
 ]) {

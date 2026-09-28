@@ -291,7 +291,7 @@ try {
       {
         booking_reference: bookingReference,
         customer_id: accountReference,
-        pickup_at: "2026-06-25T10:30:00.001Z",
+        pickup_at: "2026-06-25T11:00:00.001Z",
         route_type: "DEP",
         service_type: "Departure",
       },
@@ -324,6 +324,9 @@ try {
   );
 
   for (const pickupAt of [
+    "2026-06-25T11:00:00.000Z",
+    "2026-06-25T10:59:59.999Z",
+    "2026-06-25T10:45:00.000Z",
     "2026-06-25T10:30:00.000Z",
     "2026-06-25T10:29:59.999Z",
   ]) {
@@ -355,7 +358,71 @@ try {
       request: customerRequest({ bookingReference, origin, sessionToken }),
     });
     assert.equal(eligibleWindow.status, 200);
-    assert.equal(eligibleWindow.body.marker_count, 1);
+    assert.equal(eligibleWindow.body.marker_count, 1, `Tracking must open one hour before ${pickupAt}.`);
+  }
+
+  // The newly opened 30-to-60-minute interval must retain every status and GPS gate.
+  for (const routeType of ["MNG", "DEP", "TRF", "DSP"]) {
+    for (const scenario of [
+      { name: "OTW", status: "driver_otw", marker: true },
+      { name: "OTS", status: "ots", marker: true },
+      { name: "before OTW", status: null, marker: false },
+      { name: "POB", status: "pob", marker: false },
+      { name: "JC", status: "completed", marker: false },
+      { name: "stopped", status: "driver_otw", position: "none", marker: false },
+      { name: "stale", status: "driver_otw", position: "stale", marker: false },
+    ]) {
+      const windowClient = createQueryClient({
+        accessRows: [{ account_status: "active", auth_user_id: authUserId,
+          customer_account_reference: accountReference }],
+        bookingRows: [{ booking_reference: bookingReference, customer_id: accountReference,
+          pickup_at: "2026-06-25T18:45:00+08:00", route_type: routeType }],
+        latestRows: scenario.position === "none" ? [] : [{ ...safeLatestPosition,
+          stale_after: scenario.position === "stale"
+            ? "2026-06-25T10:00:00.000Z" : "2026-06-25T10:05:00.000Z" }],
+        settingRow: baseSetting({ bookingReference }),
+        statusRows: scenario.status ? [{ booking_reference: bookingReference,
+          status_value: scenario.status, occurred_at: "2026-06-25T09:55:00.000Z" }] : [],
+      });
+      setCustomerLiveLocationMapRuntimeClientForTests(windowClient);
+      const result = await handleCustomerLiveLocationMapRuntimeRequest({
+        boundary,
+        env: baseEnv({ accountReference, authUserId, sessionToken }),
+        nowMs: Date.parse("2026-06-25T10:00:00.000Z"),
+        request: customerRequest({ bookingReference, origin, sessionToken }),
+      });
+      assert.equal(result.body.marker_count, scenario.marker ? 1 : 0,
+        `${routeType} ${scenario.name} at 45 minutes before pickup`);
+      if (!scenario.marker) assert.equal(result.body.active_driver_marker ?? null, null);
+      if (!scenario.status || ["pob", "completed"].includes(scenario.status)) {
+        assert.equal(windowClient.calls.some((call) =>
+          call.table === "driver_live_location_latest_positions"), false,
+        "Blocked Driver status must prevent the position read.");
+      }
+    }
+  }
+
+  // A later pickup amendment closes the same gate again; invalid times fail closed.
+  for (const pickupAt of ["2026-06-25T19:15:00+08:00", "", "invalid-pickup"]) {
+    const amendedClient = createQueryClient({
+      accessRows: [{ account_status: "active", auth_user_id: authUserId,
+        customer_account_reference: accountReference }],
+      bookingRows: [{ booking_reference: bookingReference, customer_id: accountReference,
+        pickup_at: pickupAt, route_type: "DEP" }],
+      latestRows: [safeLatestPosition],
+      settingRow: baseSetting({ bookingReference }),
+    });
+    setCustomerLiveLocationMapRuntimeClientForTests(amendedClient);
+    const result = await handleCustomerLiveLocationMapRuntimeRequest({
+      boundary,
+      env: baseEnv({ accountReference, authUserId, sessionToken }),
+      nowMs: Date.parse("2026-06-25T10:00:00.000Z"),
+      request: customerRequest({ bookingReference, origin, sessionToken }),
+    });
+    assert.equal(result.body.marker_count, 0);
+    assert.equal(result.body.active_driver_marker ?? null, null);
+    assert.equal(amendedClient.calls.some((call) =>
+      ["driver_job_status_events", "driver_live_location_latest_positions"].includes(call.table)), false);
   }
 
   const client = createQueryClient({

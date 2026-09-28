@@ -130,7 +130,7 @@ for (const fragment of [
   ".from(customerAccessAccountsTable)",
   ".from(bookingsTable)",
   "pickup_at",
-  "customerLiveLocationPickupWindowMs = 30 * 60 * 1000",
+  "customerLiveLocationPickupWindowMs = 60 * 60 * 1000",
   "nowMs < pickupAtMs - customerLiveLocationPickupWindowMs",
   'reason: "customer_live_location_map_outside_pickup_window"',
   ".eq(\"booking_reference\", bookingReference)",

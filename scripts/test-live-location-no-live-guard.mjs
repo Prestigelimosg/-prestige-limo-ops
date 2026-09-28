@@ -112,8 +112,8 @@ function assertPolicyWindows(value, label) {
   assert.equal(
     value.customer_window_opens_minutes_before_pickup ??
       value.customer_visible_window_minutes_before_pickup,
-    30,
-    `${label} must keep the customer window at 30 minutes before pickup.`,
+    60,
+    `${label} must keep the customer window at one hour before pickup.`,
   );
   assert.equal(value.auto_stop_minutes_after_pob, 5, `${label} must keep auto-stop at 5 minutes after POB.`);
   assert.equal(value.admin_live_map_planned, true, `${label} must keep admin live map planned.`);

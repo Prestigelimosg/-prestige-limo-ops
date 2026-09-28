@@ -344,6 +344,7 @@ class MockSupabaseQuery {
 class MockSupabaseClient {
   constructor(seed = {}, options = {}) {
     this.operations = [];
+    this.insertAttempts = [];
     this.failures = options.failures || {};
     this.selectFailures = (options.selectFailures || []).map((failure) => ({
       ...failure,
@@ -504,6 +505,7 @@ class MockSupabaseClient {
   }
 
   insertRows(table, payload, resultMode, selectedColumns) {
+    this.insertAttempts.push({ table, payload: clone(payload) });
     const rows = Array.isArray(payload) ? payload : [payload];
     const configuredFailure = this.failureFor("insert", table);
 
@@ -532,7 +534,7 @@ class MockSupabaseClient {
       return {
         data: null,
         error: {
-          code: "mock_schema_contract_rejection",
+          code: this.schemaMode === "current" ? "PGRST204" : "23502",
         },
       };
     }
@@ -1078,7 +1080,7 @@ function assertCreatedClient(mock) {
   });
 }
 
-export { loadHarness, canonicalAdminPayload, canonicalAdminUpdatePayload, installMockClient, adminActor, adminAudit, setEnv, restoreEnv };
+export { loadHarness, canonicalAdminPayload, canonicalCorporateAdminPayload, canonicalAdminUpdatePayload, installMockClient, adminActor, adminAudit, setEnv, restoreEnv };
 
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
 const harness = await loadHarness();

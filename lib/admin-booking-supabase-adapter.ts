@@ -1522,13 +1522,16 @@ async function insertRowsWithFallback(
   currentPayload: UnknownRecord | UnknownRecord[],
   cumulativePayload: UnknownRecord | UnknownRecord[],
 ) {
-  const currentResult = await client.from(table).insert(currentPayload);
+  // The deployed cumulative schema retains required legacy columns on these
+  // four child tables. Use the already-established successful payload first.
+  const cumulativeResult = await client.from(table).insert(cumulativePayload);
 
-  if (!currentResult.error) {
-    return currentResult;
+  if (!cumulativeResult.error || !isColumnMissingFailure(cumulativeResult.error)) {
+    return cumulativeResult;
   }
 
-  return client.from(table).insert(cumulativePayload);
+  // Current-only schemas still work, but unrelated failures must not be retried.
+  return client.from(table).insert(currentPayload);
 }
 
 async function resolveExactBookerCustomerAccount(

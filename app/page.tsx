@@ -19632,6 +19632,13 @@ export default function Home() {
       [
         "Driver Job Link",
         "Greeting boss, thank you for taking the job. Please keep the car interior clean and fresh.",
+        "",
+        "New driver? Install Prestige Driver:",
+        "Android: https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download",
+        "iPhone: https://testflight.apple.com/join/m3sjGfd3",
+        "Install first, then reopen this job link.",
+        "Already installed? Skip installation and open the job link below.",
+        "",
         "Open this driver job link and update your status:",
         oneTimeUrl,
         ...linkSummary,

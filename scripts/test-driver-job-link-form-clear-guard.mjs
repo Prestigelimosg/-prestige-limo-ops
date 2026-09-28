@@ -67,6 +67,23 @@ export function makeHarness(runtime, assigned = true, resultOverrides = {}) {
   return {env,...callbacks};
 }
 
+const driverPage = fs.readFileSync(new URL('../app/driver-job/[token]/page.tsx', import.meta.url), 'utf8');
+const androidDownload = driverPage.match(/const driverBetaApkDownloadUrl = "([^"]+)"/)[1];
+const iphoneDownload = driverPage.match(/const driverBetaTestFlightUrl = "([^"]+)"/)[1];
+function assertInstallCopy(text) {
+  for (const [label, url] of [['Android', androidDownload], ['iPhone', iphoneDownload]]) {
+    assert.ok(text.includes(`${label}: ${url}`), `Copy Link must include the established ${label} download`);
+    assert.equal(text.split(url).length - 1, 1, 'Each public download is included once');
+    assert.ok(text.indexOf(url) < text.indexOf('https://example.invalid/driver-job/QA-ONE'), 'Install links precede the private job link');
+  }
+  assert.ok(text.includes('Install first, then reopen this job link.'));
+  assert.ok(text.includes('iPhone: Install TestFlight if needed, then reopen the iPhone link above. Tap View in TestFlight, Accept, then Install Prestige Driver.'));
+  assert.ok(text.includes('Already installed? Skip installation and open the job link below.'));
+  assert.equal(text.split('https://example.invalid/driver-job/QA-ONE').length - 1, 1, 'Exact private link is unchanged and included once');
+  assert.match(text, /Reference: 99001/);
+  assert.match(text, /OTW \/ OTS \/ POB \/ Job Completed/);
+}
+
 export async function runChecks() {
   assert.match(source,/showDriverJobLinkCopy \|\| \(adminDriverJobLinkState.copySnapshot && adminDriverJobLinkState.oneTimeUrl\)/);
   assert.match(source,/data-driver-job-link-retained-copy=/);
@@ -82,6 +99,7 @@ export async function runChecks() {
     assert.match(h.copyMessage(),/QA FIRST PASSENGER/);
     h.env.edit({name:'QA NEW DRAFT',pickup:'ANOTHER PICKUP'});
     await h.copyDriverJobLink();
+    assertInstallCopy(h.env.copies[0]);
     assert.match(h.env.copies[0],/QA FIRST PASSENGER/);
     assert.doesNotMatch(h.env.copies[0],/QA NEW DRAFT|ANOTHER PICKUP/);
     assert.doesNotMatch(h.env.copies[0],/SECRET_CUSTOMER_PRICE|SECRET_INTERNAL_NOTE|SECRET_PAYOUT/);
@@ -90,6 +108,7 @@ export async function runChecks() {
     h.env.nextBooking();h.syncSelection();
     assert.equal(h.env.adminDriverJobLinkState.oneTimeUrl,'','Loading another booking retires prior copy');
   }
+  assert.equal(makeHarness(runtime).copyMessage(), '', 'No download-only copy without an issued private link');
   const unassigned=makeHarness(runtime,false);await unassigned.createDriverJobLink();
   assert.equal(unassigned.env.resets,0);unassigned.env.copyFails=true;await unassigned.copyDriverJobLink();assert.equal(unassigned.env.resets,0);
   unassigned.env.copyFails=false;await unassigned.copyDriverJobLink();assert.equal(unassigned.env.resets,1);unassigned.syncSelection();
@@ -102,7 +121,7 @@ export async function runChecks() {
     assert.equal(h.env.booking.driverVehicleModel,vehicle==='AVF'?'':vehicle);
     await h.copyDriverJobLink();
     assert.equal(h.env.resets,1,`Unassigned ${vehicle}: successful Copy must clear after real automatic vehicle hydration`);
-    assert.equal(h.env.readCount,1);assert.equal(h.env.copies.length,1);h.syncSelection();assert.match(h.copyMessage(),/QA FIRST PASSENGER/);
+    assert.equal(h.env.readCount,1);assert.equal(h.env.copies.length,1);assertInstallCopy(h.env.copies[0]);h.syncSelection();assert.match(h.copyMessage(),/QA FIRST PASSENGER/);
   }
   for(const patch of [{name:'EDITED'},{pickup:'EDITED'},{time:'1400'},{vehicle:'VVV'},{driverId:'9'},{driverName:'MANUAL DRIVER'},{driverContact:'99990000'},{driverPlate:'MANUAL1'},{driverVehicleModel:'MANUAL MODEL'}]) {
     const h=makeHarness(runtime,false);await h.createDriverJobLink();
@@ -131,7 +150,7 @@ export async function runChecks() {
   const switched=makeHarness(runtime);switched.env.beforeResponse=async()=>{switched.env.nextBooking();switched.env.networkFails=true;};await switched.createDriverJobLink();assert.equal(switched.env.resets,0);assert.equal(switched.env.adminDriverJobLinkState.oneTimeUrl,'');
   const newerRequest=makeHarness(runtime);newerRequest.env.beforeResponse=async()=>{newerRequest.env.driverJobLinkRequestRevisionRef.current++;newerRequest.env.dashboard={linksByReference:{'QA-ONE':{id:'NEWER'}},status:'loaded'};};await newerRequest.createDriverJobLink();assert.equal(newerRequest.env.resets,0);assert.equal(newerRequest.env.dashboard.linksByReference['QA-ONE'].id,'NEWER');
   const invalid=makeHarness(runtime);invalid.env.buildAdminDriverJobLinkCreatePayload=()=>({ok:false,error:'Unsaved amendment'});await invalid.createDriverJobLink();assert.equal(invalid.env.requestCount,0);assert.equal(invalid.env.resets,0);
-  const dsp=makeHarness(runtime,true);dsp.env.isDspItinerary=true;dsp.env.itineraryDisplayStops=[{time:'1300',location:'FIRST STOP'},{time:'1500',location:'SECOND STOP'}];await dsp.createDriverJobLink();dsp.syncSelection();assert.match(dsp.copyMessage(),/1300 - FIRST STOP/);assert.match(dsp.copyMessage(),/1500 - SECOND STOP/);
+  const dsp=makeHarness(runtime,true);dsp.env.isDspItinerary=true;dsp.env.itineraryDisplayStops=[{time:'1300',location:'FIRST STOP'},{time:'1500',location:'SECOND STOP'}];await dsp.createDriverJobLink();dsp.syncSelection();assertInstallCopy(dsp.copyMessage());assert.match(dsp.copyMessage(),/1300 - FIRST STOP/);assert.match(dsp.copyMessage(),/1500 - SECOND STOP/);
   console.log('PASS Driver link form clear: assigned/unassigned, exact retained copy, next booking, failed create/copy, late responses, newer draft, DSP and queue handoff. Synthetic callbacks; no live sends.');
 }
 if(process.argv[1]===new URL(import.meta.url).pathname) await runChecks();

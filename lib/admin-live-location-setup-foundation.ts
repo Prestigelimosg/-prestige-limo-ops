@@ -27,7 +27,7 @@ export type AdminLiveLocationSetupResult = {
   customer_map_status: "disabled";
   admin_map_status: "disabled";
   service_eligibility: "allowed_later" | "disabled_for_customer";
-  future_customer_window_minutes_before_pickup: 30;
+  future_customer_window_minutes_before_pickup: 60;
   future_pob_auto_stop_minutes_after_pob: 5;
   future_otw_trigger: "planned_only";
   notes: string[];
@@ -66,7 +66,7 @@ export function buildAdminLiveLocationSetupFoundation(
     customer_map_status: "disabled",
     admin_map_status: "disabled",
     service_eligibility: serviceEligibility,
-    future_customer_window_minutes_before_pickup: 30,
+    future_customer_window_minutes_before_pickup: 60,
     future_pob_auto_stop_minutes_after_pob: 5,
     future_otw_trigger: "planned_only",
     notes: [

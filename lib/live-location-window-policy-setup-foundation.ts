@@ -17,7 +17,7 @@ export type LiveLocationWindowPolicySetupResult = {
   auto_stop_minutes_after_pob: 5;
   booking_reference: string | null;
   customer_live_map_link_planned: true;
-  customer_visible_window_minutes_before_pickup: 30;
+  customer_visible_window_minutes_before_pickup: 60;
   customerVisible: false;
   gpsCaptureEnabled: false;
   liveAccessEnabled: false;
@@ -29,7 +29,7 @@ export type LiveLocationWindowPolicySetupResult = {
     admin_live_map: "planned_only";
     auto_stop_after_pob_minutes: 5;
     customer_live_map_link: "planned_only";
-    customer_window_before_pickup_minutes: 30;
+    customer_window_before_pickup_minutes: 60;
   };
   status: "setup_only";
   version: typeof liveLocationWindowPolicySetupFoundationVersion;
@@ -57,7 +57,7 @@ export function buildLiveLocationWindowPolicySetup(
     auto_stop_minutes_after_pob: 5,
     booking_reference: safeText(firstValue(input.booking_reference, input.bookingReference)),
     customer_live_map_link_planned: true,
-    customer_visible_window_minutes_before_pickup: 30,
+    customer_visible_window_minutes_before_pickup: 60,
     customerVisible: false,
     gpsCaptureEnabled: false,
     liveAccessEnabled: false,
@@ -69,7 +69,7 @@ export function buildLiveLocationWindowPolicySetup(
       admin_live_map: "planned_only",
       auto_stop_after_pob_minutes: 5,
       customer_live_map_link: "planned_only",
-      customer_window_before_pickup_minutes: 30,
+      customer_window_before_pickup_minutes: 60,
     },
     status: "setup_only",
     version: liveLocationWindowPolicySetupFoundationVersion,

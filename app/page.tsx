@@ -3276,7 +3276,7 @@ const customerLiveLocationEligibleTypes = new Set<ReturnType<typeof normalizeBoo
   "DSP",
 ]);
 
-const customerLiveLocationWindowMs = 30 * 60 * 1000;
+const customerLiveLocationWindowMs = 60 * 60 * 1000;
 
 const dispatchCopyLabels: Record<DispatchCopyTarget, string> = {
   customerCopy: "Customer copy",
@@ -15230,14 +15230,14 @@ function customerLiveLocationState(
       helperText:
         bookingType === "MNG"
           ? "Customer app link can be copied now; arrival live location appears only after manual arrival readiness and driver sharing."
-          : "Customer app link can be copied now; live location appears only when ready around 30 minutes before pickup.",
+          : "Customer app link can be copied now; live location appears only when ready around one hour before pickup.",
     };
   }
 
   if (currentTimeMs > pickupTimeMs) {
     return {
       copyLine: "",
-      helperText: "Customer app link remains available for trip status; live location is only available within 30 minutes before pickup.",
+      helperText: "Customer app link remains available for trip status; live location is only available within one hour before pickup.",
     };
   }
 

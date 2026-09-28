@@ -64,7 +64,7 @@ const forbiddenDriverTrackingFragments = [
 const driverLiveLocationPendingMessage =
   "Live location appears after the driver presses OTW and shares location.";
 const driverLiveLocationPickupWindowMessage =
-  "Live driver tracking becomes available after your driver is on the way and within 30 minutes of pickup.";
+  "Live driver tracking becomes available after your driver is on the way and within one hour of pickup.";
 
 function formatSingaporeDateTime(value: string) {
   const timestamp = Date.parse(value);

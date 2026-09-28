@@ -107,10 +107,10 @@ try {
     }),
     {
       message:
-        "Live driver tracking becomes available after your driver is on the way and within 30 minutes of pickup.",
+        "Live driver tracking becomes available after your driver is on the way and within one hour of pickup.",
       status: "not_ready",
     },
-    "Outside-window reads must explain the complete OTW plus 30-minute customer rule.",
+    "Outside-window reads must explain the complete OTW plus one-hour customer rule.",
   );
 
   assert.deepEqual(

@@ -70,7 +70,7 @@ const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxControlledCustomerRuntimeAllowlistEntries = 5;
-const customerLiveLocationPickupWindowMs = 30 * 60 * 1000;
+const customerLiveLocationPickupWindowMs = 60 * 60 * 1000;
 const supportedCustomerRuntimeSessionMapEntryCounts = new Set([2, 3, 5]);
 const forbiddenSafeTextPattern =
   /api[_ -]?key|billing|cookie|customer[_ -]?email|customer[_ -]?phone|customer[_ -]?price|debug|driver[_ -]?payout|finance|internal|invoice|jwt|parser|password|payment|paynow|payout|pdf|raw[_ -]?token|secret|service[_ -]?role|token[_ -]?hash/i;

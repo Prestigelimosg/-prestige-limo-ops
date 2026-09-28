@@ -66,8 +66,8 @@ function assertPolicyWindows(value, label) {
   assert.equal(
     value.customer_window_opens_minutes_before_pickup ??
       value.customer_visible_window_minutes_before_pickup,
-    30,
-    `${label} must keep the customer window at 30 minutes before pickup.`,
+    60,
+    `${label} must keep the customer window at one hour before pickup.`,
   );
   assert.equal(value.auto_stop_minutes_after_pob, 5, `${label} must keep auto-stop at 5 minutes after POB.`);
   assert.equal(value.admin_live_map_planned, true, `${label} must keep admin live map planned.`);
@@ -227,7 +227,7 @@ try {
     auto_stop_minutes_after_pob: 5,
     booking_reference: "PLO-LIVE-API-001",
     customer_live_map_link_planned: true,
-    customer_visible_window_minutes_before_pickup: 30,
+    customer_visible_window_minutes_before_pickup: 60,
     customerVisible: false,
     gpsCaptureEnabled: false,
     liveAccessEnabled: false,
@@ -239,7 +239,7 @@ try {
       admin_live_map: "planned_only",
       auto_stop_after_pob_minutes: 5,
       customer_live_map_link: "planned_only",
-      customer_window_before_pickup_minutes: 30,
+      customer_window_before_pickup_minutes: 60,
     },
     status: "setup_only",
     version: "live-location-window-policy-setup-foundation-v1",
@@ -248,7 +248,7 @@ try {
     admin_live_map_planned: true,
     auto_stop_minutes_after_pob: 5,
     customer_live_map_link_planned: true,
-    customer_window_opens_minutes_before_pickup: 30,
+    customer_window_opens_minutes_before_pickup: 60,
     customerVisible: false,
     gpsCaptureEnabled: false,
     liveAccessEnabled: false,

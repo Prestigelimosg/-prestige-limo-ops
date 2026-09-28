@@ -124,6 +124,7 @@ async function main() {
   const savedBookingReadQueries = [];
   const trackingReadReferences = [];
   let trackingMarkerVisible = true;
+  let trackingOutsidePickupWindow = false;
   let trackingAccuracy = 18;
 
   try {
@@ -299,15 +300,16 @@ async function main() {
       } else if (requestUrl.pathname === "/api/customer-live-location-map" && method === "GET") {
         trackingReadReferences.push(requestUrl.searchParams.get("booking_reference"));
         responseBody = {
-          active_driver_marker: trackingMarkerVisible ? {
+          active_driver_marker: trackingMarkerVisible && !trackingOutsidePickupWindow ? {
             accuracy_meters: trackingAccuracy,
             latitude: 1.3521,
             longitude: 103.8198,
             updated_at: "2026-08-24T12:00:00.000Z",
           } : null,
           customerVisible: true,
-          marker_count: trackingMarkerVisible ? 1 : 0,
-          reason: trackingMarkerVisible ? null : "customer_live_location_map_no_active_position",
+          marker_count: trackingMarkerVisible && !trackingOutsidePickupWindow ? 1 : 0,
+          reason: trackingOutsidePickupWindow ? "customer_live_location_map_outside_pickup_window"
+            : trackingMarkerVisible ? null : "customer_live_location_map_no_active_position",
           ok: true,
         };
       } else if (requestUrl.pathname === "/api/customer-invoices" && method === "GET") {
@@ -577,11 +579,23 @@ async function main() {
     assert.doesNotMatch(vehicleLabelState.cardText, /\\bAVF\\b/);
     assert.equal(vehicleLabelState.documentWidth, vehicleLabelState.viewportWidth);
 
+    trackingOutsidePickupWindow = true;
     await evaluate(`(() => {
       document
         .querySelector('[data-customer-portal-driver-tracking-toggle="saved-VIEW-001"]')
         ?.click();
     })()`);
+    await waitForCondition(
+      () => evaluate(`(() => {
+        const panel = document.querySelector('[data-customer-portal-driver-tracking-panel]');
+        return Boolean(panel?.innerText.includes("within one hour of pickup") &&
+          panel.innerText.includes("Waiting") &&
+          !panel.querySelector('[data-customer-portal-driver-tracking-map]'));
+      })()`),
+      10000,
+      "one-hour waiting guidance without a customer map",
+    );
+    trackingOutsidePickupWindow = false;
     const liveMapInteractionState = await waitForCondition(
       () =>
         evaluate(`(() => {

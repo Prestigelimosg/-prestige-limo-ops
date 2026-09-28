@@ -77,6 +77,7 @@ function assertInstallCopy(text) {
     assert.ok(text.indexOf(url) < text.indexOf('https://example.invalid/driver-job/QA-ONE'), 'Install links precede the private job link');
   }
   assert.ok(text.includes('Install first, then reopen this job link.'));
+  assert.ok(text.includes('iPhone: Install TestFlight if needed, then reopen the iPhone link above. Tap View in TestFlight, Accept, then Install Prestige Driver.'));
   assert.ok(text.includes('Already installed? Skip installation and open the job link below.'));
   assert.equal(text.split('https://example.invalid/driver-job/QA-ONE').length - 1, 1, 'Exact private link is unchanged and included once');
   assert.match(text, /Reference: 99001/);

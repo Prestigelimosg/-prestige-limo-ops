@@ -19636,6 +19636,7 @@ export default function Home() {
         "New driver? Install Prestige Driver:",
         "Android: https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download",
         "iPhone: https://testflight.apple.com/join/m3sjGfd3",
+        "iPhone: Install TestFlight if needed, then reopen the iPhone link above. Tap View in TestFlight, Accept, then Install Prestige Driver.",
         "Install first, then reopen this job link.",
         "Already installed? Skip installation and open the job link below.",
         "",

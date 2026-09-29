@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { syncAcknowledgedDriverDetailsToOperationsCalendar } from "../../../lib/driver-job-operations-calendar-sync";
 
 import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { verifyDriverAccountSession } from "../../../lib/driver-account-device-lock";
@@ -116,6 +117,8 @@ async function decide(request: Request, action: "accept" | "decline") {
     ) {
       after(async () => {
         await Promise.allSettled([
+          syncAcknowledgedDriverDetailsToOperationsCalendar({ client: account.client, driverPoolOfferKey: parsed.data.offer_key })
+            .catch(() => console.warn("Driver Pool assignment Operations Calendar sync failed safely.")),
           notifyAdminOfDriverPoolAcceptance(
             account.client,
             account.driverId,

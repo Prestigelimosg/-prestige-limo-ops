@@ -406,7 +406,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
 
   async function cancelAssignment(item: AssignedDriverPoolAdminOffer, publicReference: string) {
     if (!item.assignment?.can_cancel || attentionWorkingKey || busy) return;
-    if (!window.confirm(`Cancel ${item.assignment.driver_name}'s assignment for job ${publicReference}? The driver will be notified. The booking stays active and needs another driver. No Job Link will be created.`)) return;
+    if (!window.confirm(`Cancel ${item.assignment.driver_name}'s assignment for job ${publicReference}? The driver will be notified. The booking stays active and needs another driver. ${item.assignment.has_job_link ? "Their existing Job Links will stop working. Any saved Calendar event remains; coordinate with the driver." : "No Job Link will be created."}`)) return;
     setAttentionWorkingKey(item.offer_key);
     setAttentionFeedback("");
     try {

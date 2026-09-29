@@ -60,25 +60,40 @@ try {
  const widenedAdmin=await helper.loadAdminDriverPoolOffer(client,'POOL-QA');
  assert.equal(widenedAdmin.data.offer.selection_mode,'first_accept','historical widened offers must not show Admin winner selection');
 
+ const cancelStart=adminSelector.indexOf('  async function cancelAssignment(');
+ const cancelEnd=adminSelector.indexOf('\n  async function openPendingBooking',cancelStart);
+ const cancelCallback=ts.transpileModule(adminSelector.slice(cancelStart,cancelEnd)+'\nreturn cancelAssignment;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+ for(const ready of [false,true]) for(const confirm of [false,true]) {
+   const effects=[];
+   const bindings={attentionWorkingKey:'',busy:false,window:{confirm:(message)=>{effects.push(message);return confirm;}},
+     setAttentionWorkingKey:()=>{},setAttentionFeedback:()=>{},onCancelAssignment:async(item)=>{effects.push(item.offer_key);return true;},load:async()=>{},loadAttention:async()=>{}};
+   const cancelAction=new Function(...Object.keys(bindings),cancelCallback)(...Object.values(bindings));
+   await cancelAction({offer_key:offer.offer_key,assignment:{can_cancel:ready,driver_name:'Synthetic',has_job_link:true}},'99001');
+   assert.equal(effects.filter(x=>x===offer.offer_key).length,ready&&confirm?1:0);
+   if(ready)assert.match(effects[0],/existing Job Links will stop working.*saved Calendar event remains/);
+ }
  const originalRows=rows;
  const assignedOffer={...offer,offer_status:'assigned'};
  const savedWinner={driver_id:2,driver_name:'Synthetic 2',driver_plate_number:'QA1002',driver_payout_override:100,driver_payout_reason:'Driver Pool accepted fixed offer.',updated_at:offer.updated_at};
- for(const scenario of ['ready','changed','link','report','closed','wrong-winner','bad-payout']) {
-   rows={driver_job_bid_offers:assignedOffer,bookings:{...savedWinner},driver_job_links:[],driver_job_status_events:[],driver_job_bids:[{driver_reference:'2'}]};
+ for(const scenario of ['ready','link','revoked-ack','changed','report','gps','closed','legacy-closed','foreign-link','combo-link','wrong-winner','bad-payout']) {
+   rows={driver_job_bid_offers:assignedOffer,bookings:{...savedWinner},driver_job_links:[],driver_job_status_events:[],driver_live_location_latest_positions:[],driver_job_bids:[{driver_reference:'2'}]};
    if(scenario==='changed')rows.bookings.updated_at='2026-09-14T01:00:00Z';
-   if(scenario==='link')rows.driver_job_links=[{booking_reference:'POOL-QA'}];
+   if(['link','revoked-ack','foreign-link','combo-link'].includes(scenario)) rows.driver_job_links=[{booking_reference:'POOL-QA',driver_id:scenario==='foreign-link'?3:2,link_status:scenario==='revoked-ack'?'revoked':'active',revoked_at:scenario==='revoked-ack'?'2026-09-29T03:21:00Z':null,expires_at:'2099-10-01T00:00:00Z'}];
+   if(scenario==='gps')rows.driver_live_location_latest_positions=[{booking_reference:'POOL-QA'}];
+   if(scenario==='legacy-closed')rows.bookings.status='job_completed';
+   if(scenario==='combo-link')rows.driver_job_bid_offers={...assignedOffer,safe_offer_context:{combo_id:'synthetic-combo'}};
    if(scenario==='report')rows.driver_job_status_events=[{booking_reference:'POOL-QA'}];
    if(scenario==='closed')rows.bookings.admin_internal_status='cancelled';
    if(scenario==='wrong-winner')rows.driver_job_bids=[{driver_reference:'3'}];
    if(scenario==='bad-payout')rows.bookings.driver_payout_override=101;
    const checked=await helper.loadAdminDriverPoolOffer(client,'POOL-QA');
-   assert.equal(checked.ok,true);assert.equal(checked.data.offer.assignment.can_cancel,scenario==='ready',scenario);
+   assert.equal(checked.ok,true);assert.equal(checked.data.offer.assignment.can_cancel,['ready','link','revoked-ack'].includes(scenario),scenario);
    assert.equal(checked.data.offer.assignment.driver_name,'Synthetic 2');
-   assert.equal(checked.data.offer.assignment.blocked_reason===null,scenario==='ready',scenario);
+   assert.equal(checked.data.offer.assignment.blocked_reason===null,['ready','link','revoked-ack'].includes(scenario),scenario);
    assert.doesNotMatch(JSON.stringify(checked.data.offer.assignment),/driver_payout|driver_id|contact|safe_offer_context/);
  }
 
- rows={driver_job_bid_offers:[{...assignedOffer,booking_reference:'POOL-QA',public_booking_reference:'99001',pickup_at:'2099-09-15T12:00:00Z'}],bookings:[{...savedWinner,booking_reference:'POOL-QA',internal_notes:'PRIVATE'}],driver_job_links:[],driver_job_status_events:[],driver_job_bids:[{driver_job_bid_offer_id:offer.id,driver_reference:'2'}]};
+ rows={driver_job_bid_offers:[{...assignedOffer,booking_reference:'POOL-QA',public_booking_reference:'99001',pickup_at:'2099-09-15T12:00:00Z'}],bookings:[{...savedWinner,booking_reference:'POOL-QA',internal_notes:'PRIVATE'}],driver_job_links:[],driver_job_status_events:[],driver_live_location_latest_positions:[],driver_job_bids:[{driver_job_bid_offer_id:offer.id,driver_reference:'2'}]};
  const attention=await helper.loadAdminDriverPoolAttentionOffers(client,1,20);
  assert.equal(attention.ok,true);assert.equal(attention.data.items[0].assignment.can_cancel,true);
  assert.equal(attention.data.items[0].assignment.driver_name,'Synthetic 2');

@@ -935,6 +935,7 @@ async function loadAdminDriverPoolCancelRouteHarness() {
   await writeModule("node_modules/next/server.js", `
     exports.after = (callback) => { globalThis.__driverPoolCancelAfterCallbacks.push(callback); };
   `);
+  await writeModule("lib/driver-account-activity.js", "exports.loadDriverPoolActivity = async () => [];");
   await writeModule("lib/admin-booking-supabase-adapter.js", `
     exports.adminDispatcherBoundaryToPersistenceAdapterActor = () => ({ actorLabel: "Admin", actorRole: "admin" });
   `);

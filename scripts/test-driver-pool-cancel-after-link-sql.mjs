@@ -14,7 +14,7 @@ const connect=async()=>{const c=pg.getPgClient('postgres',directory);await c.con
 const db=await connect();
 const q=async(s,a=[])=> (await db.query(s,a)).rows;
 const val=async(s,a=[])=> (await q(s,a))[0].result;
-const migration=fs.readFileSync('supabase/migrations/20260929033456_driver_pool_cancel_before_trip_after_link.sql','utf8');
+const migration=fs.readFileSync('supabase/migrations/20260929035257_driver_pool_cancel_before_trip_after_link.sql','utf8');
 const cancelSql="select cancel_driver_pool_offer($1,$2,'admin','Synthetic Admin') result";
 let offer;
 const cancel=()=>val(cancelSql,[offer.offer_key,offer.updated_at]);

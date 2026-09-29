@@ -4488,11 +4488,11 @@ function renderAdminActiveJobsBrowserMapTileFallback(
     marker.style.alignItems = "center";
     marker.style.background = isStale ? "#d97706" : index === 0 ? "#dc2626" : "#ea580c";
     marker.style.border = "2px solid #ffffff";
-    marker.style.borderRadius = "999px";
+    marker.style.borderRadius = "6px";
     marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
     marker.style.color = "#ffffff";
     marker.style.display = "flex";
-    marker.style.fontSize = "14px";
+    marker.style.fontSize = "12px";
     marker.style.fontWeight = "800";
     marker.style.height = "28px";
     marker.style.justifyContent = "center";
@@ -4501,9 +4501,11 @@ function renderAdminActiveJobsBrowserMapTileFallback(
     marker.style.position = "absolute";
     marker.style.top = `calc(50% + ${(markerTileY - centerTileYFloat) * tileSize}px)`;
     marker.style.transform = "translate(-50%, -50%)";
-    marker.style.width = "28px";
+    marker.style.width = "max-content";
+    marker.style.padding = "0 6px";
+    marker.style.whiteSpace = "nowrap";
     marker.style.zIndex = "2";
-    marker.textContent = isStale ? "!" : String(index + 1);
+    marker.textContent = adminActiveJobsBrowserMapMarkerLabel(entry).text;
     mapElement.appendChild(marker);
   });
 
@@ -4591,11 +4593,13 @@ function adminActiveJobsBrowserMapDisplayReference(entry: AdminActiveJobsBrowser
 }
 
 function adminActiveJobsBrowserMapMarkerLabel(entry: AdminActiveJobsBrowserMapMarkerEntry) {
+  const plate = clean(entry.job.vehicle_plate_label) || "Plate unavailable";
   return {
-    color: "#ffffff",
-    fontSize: "14px",
+    className: "admin-live-map-plate-label",
+    color: "#111827",
+    fontSize: "12px",
     fontWeight: "700",
-    text: entry.job.is_stale ? "!" : "*",
+    text: entry.job.is_stale ? `! ${plate}` : plate,
   };
 }
 

@@ -28744,6 +28744,7 @@ export default function Home() {
   type BookingStatusPatchResult =
     | {
         ok: true;
+        bookingReference: string;
         updatedAt: string;
       }
     | {
@@ -28815,6 +28816,7 @@ export default function Home() {
 
       return {
         ok: true,
+        bookingReference: responseBookingReference,
         updatedAt: responseUpdatedAt,
       };
     } catch (error) {
@@ -28834,6 +28836,7 @@ export default function Home() {
   ): Promise<boolean> {
     const bookingId = bookingRecordStableKey(bookingRecord);
     const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
+    const originTab = activeTabRef.current;
 
     const loadingMessage = { tone: "info", text: loadingText } satisfies Message;
     setCompletingBookingId(bookingId);
@@ -28850,10 +28853,37 @@ export default function Home() {
         throw new Error(result.errorText);
       }
 
-      const successMessage = { tone: "success", text: successText } satisfies Message;
-      setBookingCompletionMessage(bookingId, successMessage);
+      let resultMessage: Message = { tone: "success", text: successText };
+      if (nextStatus === "cancelled") {
+        try {
+          // Re-read the saved job so Calendar receives its current details and
+          // canonical reference, never the potentially stale Bookings card.
+          const expectedReference = cleanReferenceText(bookingRecord.booking_reference);
+          if (expectedReference && result.bookingReference !== expectedReference) {
+            throw new Error("The saved cancellation reference did not match this booking.");
+          }
+          const cancelledBooking = await loadExactAdminBookingPersistenceRecord(
+            result.bookingReference,
+            "The saved cancellation could not be read for Calendar.",
+          );
+          if (clean(adminBookingPersistencePrimaryStatus(cancelledBooking)).toLowerCase() !== "cancelled") {
+            throw new Error("The booking status changed again; reload it before updating Calendar.");
+          }
+          const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(cancelledBooking);
+          resultMessage = calendarSyncResult.ok
+            ? { tone: "success", text: "Booking cancelled. Calendar updated to CANCELLED." }
+            : { tone: "error", text: "Booking cancelled. Calendar update failed; its entry may still show the old job. Check the Calendar connection before retrying." };
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : "The saved cancellation could not be synced.";
+          resultMessage = { tone: "error", text: `Booking cancelled. Calendar update failed: ${detail}` };
+        }
+      }
+      setBookingCompletionMessage(bookingId, resultMessage);
       await loadBookings("Bookings synced.", { silent: true });
       applyBookingStatusLocally(bookingRecord, [bookingStatusReference], nextStatus, result.updatedAt);
+      if (nextStatus === "cancelled" && activeTabRef.current === originTab) {
+        setMessage(resultMessage);
+      }
       return true;
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown booking status error.";
@@ -30086,7 +30116,10 @@ export default function Home() {
           const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
           const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
-          const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
+          const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage) ||
+            rawBookingCompletionMessage?.text === "Cancelling booking..." ||
+            rawBookingCompletionMessage?.text.startsWith("Cancel booking failed") ||
+            rawBookingCompletionMessage?.text.startsWith("Booking cancelled.")
             ? rawBookingCompletionMessage
             : null;
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);
@@ -30591,7 +30624,8 @@ export default function Home() {
               const bookingCompletionMessage =
                 isUndoCompletionMessage(rawBookingCompletionMessage) ||
                 isDeleteArchivedJobMessage(rawBookingCompletionMessage) ||
-                isCompletedHistoryBillingReadyMessage(rawBookingCompletionMessage)
+                isCompletedHistoryBillingReadyMessage(rawBookingCompletionMessage) ||
+                rawBookingCompletionMessage?.text.startsWith("Booking cancelled.")
                 ? rawBookingCompletionMessage
                 : null;
               const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, savedBooking);

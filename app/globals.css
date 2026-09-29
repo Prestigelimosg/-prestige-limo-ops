@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Only the existing Admin Google map labels; keep full plates readable over tiles. */
+.admin-live-map-plate-label {
+  background: #ffffff;
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
 :root {
   --background: #fafaf9;
   --foreground: #0f172a;

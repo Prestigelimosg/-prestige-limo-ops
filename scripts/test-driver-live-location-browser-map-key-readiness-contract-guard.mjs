@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -12,6 +13,70 @@ const customerPortalPath = "app/my-bookings/page.tsx";
 const browserConfigRoutePath = "app/api/admin-active-jobs-map-browser-config/route.ts";
 const locationSearchHelperPath = "lib/admin-map-location-search.ts";
 const routeEstimateHelperPath = "lib/admin-map-route-estimates.ts";
+
+// Execute the real marker formatter: identity must survive reordering and stale updates.
+const markerPage = await readFile(appPagePath, "utf8");
+const markerAst = ts.createSourceFile(appPagePath, markerPage, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const markerFunction = markerAst.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "adminActiveJobsBrowserMapMarkerLabel");
+assert.ok(markerFunction);
+const markerCode = ts.transpileModule(markerFunction.getText(markerAst), {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const markerLabel = new Function("clean", markerCode + "\nreturn adminActiveJobsBrowserMapMarkerLabel;")(value => typeof value === "string" ? value.trim() : "");
+const markerJobs = ["SNP9124S", "SNX2267S", "SFJ97Y"].map((plate, index) => ({job:{vehicle_plate_label:plate,assigned_job_reference:`JOB-${index}`,is_stale:false}}));
+assert.deepEqual(markerJobs.map(entry => markerLabel(entry).text), ["SNP9124S", "SNX2267S", "SFJ97Y"]);
+assert.deepEqual([...markerJobs].reverse().map(entry => markerLabel(entry).text), ["SFJ97Y", "SNX2267S", "SNP9124S"]);
+assert.equal(markerLabel({job:{vehicle_plate_label:" SFJ97Y ",is_stale:true}}).text, "! SFJ97Y");
+for (const missing of [null, undefined, "", "   "]) {
+  assert.equal(markerLabel({job:{vehicle_plate_label:missing,driver_display_label:"Do not infer 97"}}).text, "Plate unavailable");
+}
+assert.equal(markerLabel(markerJobs[0]).className, "admin-live-map-plate-label");
+assertIncludes(markerPage, "marker.textContent = adminActiveJobsBrowserMapMarkerLabel(entry).text;", "fallback uses same plate label");
+assertIncludes(markerPage, "existingMarker.setLabel?.(adminActiveJobsBrowserMapMarkerLabel(entry));", "refresh uses same plate label");
+assertIncludes(markerPage, "label: adminActiveJobsBrowserMapMarkerLabel(entry),", "new Google marker uses same plate label");
+
+// Exercise the unchanged Google marker update effect with its real label formatter.
+const effectStart = markerPage.indexOf("    const map = mapRef.current;", markerPage.indexOf("function AdminActiveJobsBrowserMap("));
+const effectEnd = markerPage.indexOf("  }, [activeMarkerJobs, renderState]);", effectStart);
+assert.ok(effectStart > 0 && effectEnd > effectStart);
+const effectCode = ts.transpileModule(markerPage.slice(effectStart, effectEnd), {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const registry = new Map();
+let createdMarkers = 0;
+class MockMarker {
+  constructor(options) { Object.assign(this, options); createdMarkers++; }
+  setMap(value) { this.map = value; }
+  setPosition(value) { this.position = value; }
+  setLabel(value) { this.label = value; }
+  setTitle(value) { this.title = value; }
+}
+const mockMap = {fitBounds(){},setCenter(){},setZoom(){}};
+const updateMarkers = new Function("activeMarkerJobs", "mapRef", "mapsRuntimeRef", "mapElementRef", "renderState", "markersRef", "adminActiveJobsBrowserMapReference", "adminActiveJobsBrowserMapDisplayReference", "adminActiveJobsBrowserMapMarkerLabel", "googleMapUserAdjustedRef", "googleMapAutoFitReferenceKeyRef", "singleMarkerCenteredReferenceRef", "adminActiveJobsBrowserMapTileFallbackMarkerKey", effectCode);
+const runMarkerUpdate = entries => updateMarkers(entries, {current:mockMap}, {current:{Marker:MockMarker,LatLngBounds:class {extend(){}}}}, {current:null}, "ready", {current:registry}, entry=>entry.job.assigned_job_reference, entry=>entry.job.assigned_job_reference, markerLabel, {current:false}, {current:""}, {current:""}, entries=>entries.map(entry=>entry.job.assigned_job_reference).join("|"));
+const firstEntries = markerJobs.map((entry,index)=>({...entry,position:{lat:1.3+index/100,lng:103.8}}));
+runMarkerUpdate(firstEntries);
+assert.equal(createdMarkers, 3);
+const originalMarker = registry.get("JOB-2");
+assert.equal(originalMarker.label.text, "SFJ97Y");
+const movedEntries = [...firstEntries].reverse().map(entry=>({...entry,position:{...entry.position,lng:103.81},job:{...entry.job,is_stale:entry.job.assigned_job_reference === "JOB-2"}}));
+runMarkerUpdate(movedEntries);
+assert.equal(createdMarkers, 3, "refresh/reorder must reuse existing exact-job markers");
+assert.equal(registry.get("JOB-2"), originalMarker);
+assert.equal(originalMarker.label.text, "! SFJ97Y");
+assert.equal(originalMarker.position.lng, 103.81);
+runMarkerUpdate(movedEntries.filter(entry=>entry.job.assigned_job_reference !== "JOB-2"));
+assert.equal(registry.size, 2);
+assert.equal(originalMarker.map, null, "normal removal must still detach the exact marker");
+
+// Execute the actual fallback marker loop too, rather than checking only its source wiring.
+const fallbackStart = markerPage.indexOf("  markerEntries.forEach((entry, index) => {", markerPage.indexOf("function renderAdminActiveJobsBrowserMapTileFallback("));
+const fallbackEnd = markerPage.indexOf("  appendAdminActiveJobsBrowserMapTileFallbackControls", fallbackStart);
+assert.ok(fallbackStart > 0 && fallbackEnd > fallbackStart);
+const fallbackCode = ts.transpileModule(markerPage.slice(fallbackStart, fallbackEnd), {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const fallbackNodes = [];
+new Function("markerEntries", "document", "mapElement", "adminActiveJobsBrowserMapTileXFloat", "adminActiveJobsBrowserMapTileYFloat", "zoom", "centerTileXFloat", "centerTileYFloat", "tileSize", "adminActiveJobsBrowserMapReference", "adminActiveJobsBrowserMapDisplayReference", "adminActiveJobsBrowserMapMarkerLabel", fallbackCode)(
+  movedEntries, {createElement:()=>({style:{},setAttribute(){}})}, {appendChild:node=>fallbackNodes.push(node)}, value=>value, value=>value, 13, 103.8, 1.3, 256, entry=>entry.job.assigned_job_reference, entry=>entry.job.assigned_job_reference, markerLabel,
+);
+assert.deepEqual(fallbackNodes.map(node=>node.textContent), ["! SFJ97Y", "SNX2267S", "SNP9124S"]);
+assert.ok(fallbackNodes.every(node=>node.style.width === "max-content" && node.style.whiteSpace === "nowrap"), "plate labels must not be clipped inside the old 28px number circle");
+assert.ok(fallbackNodes.every(node=>node.style.left.startsWith("calc(50% + ") && node.style.top.startsWith("calc(50% + ")), "geographic anchoring remains in place");
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);

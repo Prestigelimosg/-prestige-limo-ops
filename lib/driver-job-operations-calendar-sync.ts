@@ -165,16 +165,40 @@ function calendarPayload(booking: UnknownRecord, pickupAtOverride: string) {
 
 export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   bookingReference,
+  driverPoolOfferKey,
   client,
   pickupAt,
   syncer = syncVerifiedDriverDetailsToAdminBookingCalendar,
 }: {
-  bookingReference: string;
+  bookingReference?: string;
+  driverPoolOfferKey?: string;
   client: DriverJobOperationsCalendarClient;
   pickupAt?: string;
   syncer?: typeof syncVerifiedDriverDetailsToAdminBookingCalendar;
 }) {
-  const exactBookingReference = cleanText(bookingReference, 120);
+  let exactBookingReference = cleanText(bookingReference, 120);
+  if (driverPoolOfferKey !== undefined) {
+    if (bookingReference !== undefined || !/^[0-9a-f]{64}$/.test(driverPoolOfferKey)) return false;
+    // Only the server-verified successful Pool decision supplies this key.
+    // Resolve its canonical booking and reread current data, never old driver details.
+    const offer = await client.from("driver_job_bid_offers")
+      .select("booking_reference").eq("offer_key", driverPoolOfferKey).maybeSingle();
+    if (offer.error || !offer.data) {
+      console.warn("Driver Pool Operations Calendar offer read failed safely.");
+      return false;
+    }
+    // This repair is limited to single-job Pool assignments; preserve combo behavior.
+    if (process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+      const combo = await client.from("driver_job_combos")
+        .select("id").eq("offer_key", driverPoolOfferKey).maybeSingle();
+      if (combo.error) {
+        console.warn("Driver Pool Operations Calendar scope read failed safely.");
+        return false;
+      }
+      if (combo.data) return false;
+    }
+    exactBookingReference = cleanText(asRecord(offer.data).booking_reference, 120);
+  }
 
   if (
     !exactBookingReference ||
@@ -190,6 +214,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
     .maybeSingle();
 
   if (error || !data) {
+    if (driverPoolOfferKey !== undefined) console.warn("Driver Pool Operations Calendar booking read failed safely.");
     return false;
   }
 

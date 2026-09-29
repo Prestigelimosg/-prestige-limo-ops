@@ -768,6 +768,7 @@ async function loadDriverPoolDecisionRouteHarness() {
     await writeFile(target, source);
   };
 
+  await writeModule("lib/driver-job-operations-calendar-sync.js", "exports.syncAcknowledgedDriverDetailsToOperationsCalendar = async () => true;");
   await writeModule("node_modules/next/server.js", `
     exports.after = (callback) => { globalThis.__driverPoolAfterCallbacks.push(callback); };
   `);
@@ -932,6 +933,7 @@ async function loadAdminDriverPoolCancelRouteHarness() {
     await writeFile(target, source);
   };
 
+  await writeModule("lib/driver-job-operations-calendar-sync.js", "exports.syncAcknowledgedDriverDetailsToOperationsCalendar = async () => true;");
   await writeModule("node_modules/next/server.js", `
     exports.after = (callback) => { globalThis.__driverPoolCancelAfterCallbacks.push(callback); };
   `);

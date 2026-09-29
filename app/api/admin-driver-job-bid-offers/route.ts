@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { syncAcknowledgedDriverDetailsToOperationsCalendar } from "../../../lib/driver-job-operations-calendar-sync";
 import { loadDriverPoolActivity } from "../../../lib/driver-account-activity";
 
 import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notification";
@@ -139,6 +140,8 @@ export async function PATCH(request: Request) {
       if (result.ok && result.data.reason === "accepted" && result.data.public_booking_reference) {
         after(async () => {
           await Promise.allSettled([
+            syncAcknowledgedDriverDetailsToOperationsCalendar({ client: database.client, driverPoolOfferKey: input.offer_key })
+              .catch(() => console.warn("Driver Pool assignment Operations Calendar sync failed safely.")),
             (async () => {
               const vehiclePlate = await loadDriverPoolWinnerPlate(database.client, input.driver_id!);
               if (vehiclePlate) await sendAdminDevicePushAlert("driver_pool_accepted", {
@@ -167,6 +170,10 @@ export async function PATCH(request: Request) {
       after(async () => {
         await Promise.allSettled([
           refreshCancelledDriverPoolRecipients(database.client, result.data.offer.offer_key),
+          ...(result.data.assignment_cancelled ? [
+            syncAcknowledgedDriverDetailsToOperationsCalendar({ client: database.client, driverPoolOfferKey: result.data.offer.offer_key })
+              .catch(() => console.warn("Driver Pool cancellation Operations Calendar sync failed safely.")),
+          ] : []),
           ...(result.data.assignment_cancelled && result.data.cancelled_driver_id && result.data.public_booking_reference ? [
             sendDriverDevicePushAlertForDriverPoolOffer(database.client, {
               driver_id: result.data.cancelled_driver_id, notification_kind: "assignment_cancelled",

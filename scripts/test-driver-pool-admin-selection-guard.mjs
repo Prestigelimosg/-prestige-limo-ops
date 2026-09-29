@@ -112,6 +112,7 @@ try {
  assert.equal('p_actor_role' in calls.at(-1).input,false);
  for(const reason of ['not_eligible','schedule_conflict','vehicle_mismatch','response_required','no_longer_available']) {rpcResult={ok:false,reason};assert.equal((await helper.decideDriverPoolOffer(client,2,award,'accept')).ok,false);}
  const route=load('app/api/admin-driver-job-bid-offers/route.ts',{
+  '../../../lib/driver-job-operations-calendar-sync':{syncAcknowledgedDriverDetailsToOperationsCalendar:async()=>true},
   'next/server':{after:(cb)=>after.push(cb)},
   '../../../lib/driver-account-activity':{loadDriverPoolActivity:async()=>[]},
   '../../../lib/admin-device-push-notification':{sendAdminDevicePushAlert:async(kind,input)=>sends.push({kind,...input})},
@@ -161,6 +162,7 @@ try {
  }
  // Actual Driver route: availability, decline and denied business outcomes never schedule winner sends.
  const driverRoute=load('app/api/driver-job-bids/route.ts',{
+  '../../../lib/driver-job-operations-calendar-sync':{syncAcknowledgedDriverDetailsToOperationsCalendar:async()=>true},
   'next/server':{after:cb=>after.push(cb)},
   '../../../lib/admin-device-push-notification':{sendAdminDevicePushAlert:async(kind,input)=>sends.push({kind,...input})},
   '../../../lib/driver-account-device-lock':{verifyDriverAccountSession:async()=>verified},

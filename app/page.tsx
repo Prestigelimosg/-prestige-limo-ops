@@ -9944,14 +9944,20 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     clean(bookingRecord.dropoff_address) ||
     routePoints[routePoints.length - 1] ||
     "";
-  const extraStopLocations = routePoints.slice(1, -1);
-  const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count) || extraStopLocations.length;
-  const childSeatRequired = Boolean(bookingRecord.child_seat_required);
   const serviceType =
     clean(bookingRecord.service_type) ||
     clean(bookingRecord.route_type) ||
     clean(bookingRecord.booking_type) ||
     "MNG";
+  // A saved DSP drop-off may already contain the remaining itinerary. Only
+  // suppress inferred stops when the saved endpoints account for the whole
+  // route, preserving genuine repeated visits and separately stored stops.
+  const dspRouteAlreadyInEndpoints = serviceType.toUpperCase() === "DSP" &&
+    adminDriverJobLinkCanonicalOperationalRoute([pickup, dropoff].filter(Boolean).join(" > ")) ===
+      adminDriverJobLinkCanonicalOperationalRoute(routePoints.join(" > "));
+  const extraStopLocations = dspRouteAlreadyInEndpoints ? [] : routePoints.slice(1, -1);
+  const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count) || extraStopLocations.length;
+  const childSeatRequired = Boolean(bookingRecord.child_seat_required);
   const pickupTime =
     normalizePickupTimeForStorage(formatPickupTimeFromRecord(bookingRecord));
   const dspEndParts = singaporePickupDateTimePartsFromTimestamp(bookingRecord.dropoff_datetime);
@@ -45910,12 +45916,12 @@ export default function Home() {
             >
               <div className="mb-2">
                 <h3 className="text-sm font-semibold text-slate-900">Route Extras & Child Seat</h3>
-                <p className="text-xs text-slate-600">Review extra stops and child seat requirements together.</p>
+                <p className="text-xs text-slate-600">{booking.bookingType === "DSP" ? "Review itinerary and child seat requirements together." : "Review extra stops and child seat requirements together."}</p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="sm:col-span-2 lg:col-span-2">
                   <label className="block">
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra stop location</span>
+                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">{booking.bookingType === "DSP" ? "Itinerary stops" : "Extra stop location"}</span>
                     <input
                       className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                       onChange={(event) => update("extraStopLocation", event.target.value)}
@@ -45924,7 +45930,7 @@ export default function Home() {
                     />
                   </label>
                 </div>
-                <label>
+                {booking.bookingType !== "DSP" ? <label>
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra Stops</span>
                   <input
                     className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -45936,7 +45942,7 @@ export default function Home() {
                     type="number"
                     value={booking.extraStopCount}
                   />
-                </label>
+                </label> : null}
                 <label>
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra Charges</span>
                   <input

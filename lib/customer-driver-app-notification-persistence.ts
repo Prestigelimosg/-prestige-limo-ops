@@ -125,7 +125,10 @@ export type CustomerDriverAppNotificationSafeRecord = Omit<
 
 export type AdminCustomerDriverAppNotificationSafeRecord =
   CustomerDriverAppNotificationSafeRecord &
-    Pick<CustomerDriverAppNotificationRecord, "actor_role">;
+    Pick<CustomerDriverAppNotificationRecord, "actor_role"> & {
+      sender_driver_name?: string | null;
+      sender_driver_plate?: string | null;
+    };
 
 export type CustomerDriverQuickReplyTemplateKey =
   | "customer_at_lobby"
@@ -4312,9 +4315,41 @@ export async function loadCustomerDriverAppNotifications(
       .order("id", { ascending: false })
       .range((params.page - 1) * params.limit, params.page * params.limit - 1);
     if (error) return safeAdapterFailure(safeNotificationLoadError, 500, error);
+    const records = asArray(data).map(normalizeRecord);
+    const driverMessages = records.filter((record) =>
+      record.actor_role === "driver" && record.source_surface === "driver_api" &&
+      record.workflow_area === "admin_driver_job_messages" && record.delivery_surface === "driver_app" &&
+      record.safe_context.direction === "driver_to_admin" && record.driver_job_link_id,
+    );
+    const linkIds = [...new Set(driverMessages.map((record) => record.driver_job_link_id!))];
+    let senderLinks: UnknownRecord[] = [];
+    if (linkIds.length > 0) {
+      try {
+        // Only the message's own acknowledged link identifies its sender. An expired/revoked
+        // link still supplies historical evidence; the current booking assignment does not.
+        const linkRead = await clientResult.data.from("driver_job_links")
+          .select("id, booking_reference, driver_id, acknowledged_at:safe_link_context->>driver_acknowledged_at, sender_name:safe_link_context->driver_job_payload->>driver_name, sender_plate:safe_link_context->driver_job_payload->>driver_plate_number")
+          .in("id", linkIds);
+        if (!linkRead.error) senderLinks = asArray(linkRead.data).map(asRecord);
+      } catch { /* Keep the message and its controls available when sender evidence cannot load. */ }
+    }
     return {
       data: {
-        notifications: asArray(data).map(normalizeRecord).map(toAdminSafeRecord),
+        notifications: records.map((record) => {
+          const safeRecord = toAdminSafeRecord(record);
+          if (!driverMessages.includes(record)) return safeRecord;
+          const matches = senderLinks.filter((link) => link.id === record.driver_job_link_id);
+          const link = matches.length === 1 ? matches[0] : null;
+          const acknowledgedAt = typeof link?.acknowledged_at === "string" ? Date.parse(link.acknowledged_at) : NaN;
+          const messageAt = record.created_at ? Date.parse(record.created_at) : NaN;
+          const verified = link && link.booking_reference === record.booking_reference &&
+            Number.isSafeInteger(link.driver_id) && Number(link.driver_id) > 0 &&
+            Number.isFinite(acknowledgedAt) && Number.isFinite(messageAt) && acknowledgedAt <= messageAt;
+          const name = verified ? safeText(link.sender_name, 120) : null;
+          const plate = verified ? safeText(link.sender_plate, 80) : null;
+          return { ...safeRecord, sender_driver_name: name && plate ? name : null,
+            sender_driver_plate: name && plate ? plate : null };
+        }),
         pagination: buildCountedPagination(count || 0, params.limit, params.page),
         version: customerDriverAppNotificationPersistenceVersion,
       },

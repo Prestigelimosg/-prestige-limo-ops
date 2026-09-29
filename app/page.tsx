@@ -1177,6 +1177,8 @@ type AdminTodayJobDriverMessageState = {
 };
 
 type AdminTodayJobMessageRecord = {
+  sender_driver_name?: string | null;
+  sender_driver_plate?: string | null;
   actor_role?: string | null;
   booking_reference?: string | null;
   created_at?: string | null;
@@ -11884,7 +11886,7 @@ function adminAppNotificationUpdateStatusLabel(status: AdminAppNotificationUpdat
   return "marked read";
 }
 
-function adminAppNotificationTimeLabel(value: string | null | undefined) {
+function adminAppNotificationTimeLabel(value: string | null | undefined, incomingMessage = false) {
   const cleaned = clean(value);
 
   if (!cleaned) {
@@ -11896,6 +11898,8 @@ function adminAppNotificationTimeLabel(value: string | null | undefined) {
   if (Number.isNaN(parsedDate.getTime())) {
     return cleaned.slice(0, 80);
   }
+
+  if (incomingMessage) return formatBookingTimestampSgt(cleaned);
 
 	  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
 	    parsedDate.getUTCDate(),
@@ -12558,7 +12562,9 @@ async function loadAdminAppNotificationsRead() {
           safe_title: direction === "driver_to_admin" ? "Driver → Admin" : "Customer → Driver",
           safe_message: record.safe_message,
           safe_context: { incoming_message_id: id, direction,
-            sender_label: direction === "customer_to_driver" ? clean(record.safe_title) : "" },
+            sender_label: direction === "customer_to_driver" ? clean(record.safe_title)
+              : clean(record.sender_driver_name) && clean(record.sender_driver_plate)
+                ? `${clean(record.sender_driver_name)} · ${clean(record.sender_driver_plate)}` : "Sender unavailable" },
         });
       }
       if (!result.pagination?.has_next_page) break;
@@ -52553,7 +52559,7 @@ export default function Home() {
 	                  const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
 	                  const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
 	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
-	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
+	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at, notification.workflow_area === "admin_incoming_job_message");
 	                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
                   const isNewBookingRequestNotification =
                     clean(notification.workflow_area) === "new_booking_request" ||

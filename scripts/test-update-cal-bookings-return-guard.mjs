@@ -86,6 +86,9 @@ export async function checks() {
   assert.equal(success.env.requests[0].method, 'PATCH');
   assert.equal(JSON.parse(success.env.requests[0].body).expected_updated_at, 'expected-version');
   assert.equal(success.env.calendarCalls.length, 1);
+  assert.equal(JSON.parse(success.env.requests[0].body).target_booking_reference, 'QA-UPDATE');
+  assert.equal(success.env.calendarCalls[0], success.env.record, 'Calendar must receive the exact persisted amendment');
+  assert.equal(success.env.calendarCalls[0].booking_reference, 'QA-UPDATE', 'Amendment must retain event identity');
   assert.equal(success.env.activeTab, 'bookings', 'Update + Cal must return a Bookings-origin amendment to the saved job');
   assert.equal(success.env.date, '2030-10-02', 'Use returned Singapore date, not UTC date');
   assert.equal(success.env.focus, 'QA-UPDATE'); assert.equal(success.env.search, '');
@@ -93,6 +96,19 @@ export async function checks() {
   assert.equal(success.env.saved[0], success.env.record);
   assert.equal(success.env.notifications.length, 0);
   assert.match(success.env.message.text, /auto-synced/);
+
+  const amended = makeHarness();
+  Object.assign(amended.env.record, {
+    pickup_at: '2030-10-03T08:30:00Z', pickup_location: 'AMENDED PICKUP',
+    dropoff_location: 'AMENDED DROPOFF', flight_no: 'QA231', passenger_name: 'AMENDED PASSENGER',
+    vehicle_type_or_category: 'AVF', pax_count: 4,
+    route_points: [{ point_type: 'pickup', location: 'AMENDED PICKUP' },
+      { point_type: 'stop', location: 'AMENDED STOP' }, { point_type: 'dropoff', location: 'AMENDED DROPOFF' }],
+  });
+  await amended.update();
+  assert.equal(amended.env.requests.length, 1);
+  assert.deepEqual(amended.env.calendarCalls, [amended.env.record], 'Forward all saved amended details without a new booking');
+  assert.equal(amended.env.calendarCalls[0].booking_reference, 'QA-UPDATE');
 
   for (const failure of ['saveFailure', 'calendarFailure', 'versionFailure']) {
     const h = makeHarness({ [failure]: true }); await h.update();

@@ -1367,6 +1367,29 @@ try {
     const amended = { ...input, bookings: [{ ...input.bookings[0], driver_plate_number: "NEW5678", traveler_name: "Amended Passenger", pickup_time: "1800hrs" }] };
     assert.equal((await read(amended)).data.statuses[0].status, "update_calendar");
     assert.equal((await sync(amended)).ok, true);
+    const stableEventId = stored.id;
+    const amendedTrip = { ...input, bookings: [{ ...amended.bookings[0],
+      date: "2026-06-17", pickup_time: "1640hrs", pickup_address: "Amended pickup",
+      dropoff_address: "Amended airport", route: "Amended pickup > Amended stop > Amended airport",
+      flight_no: "QA231", vehicle: "AVF", pax: 4, booker_name: "Amended Booker",
+    }] };
+    assert.equal((await sync(amendedTrip)).ok, true);
+    assert.equal(stored.id, stableEventId, "Every trip amendment updates the same booking event");
+    assert.equal(stored.start.dateTime, "2026-06-17T16:40:00");
+    for (const detail of ["Amended pickup", "Amended stop", "Amended airport", "QA231", "AVF", "Amended Booker"]) {
+      assert.ok(stored.description.includes(detail), `Calendar includes amended ${detail}`);
+    }
+    const cancelledTrip = { ...amendedTrip, bookings: [{ ...amendedTrip.bookings[0], status: "cancelled" }] };
+    assert.equal((await sync(cancelledTrip)).ok, true);
+    assert.equal(stored.id, stableEventId, "Cancellation marks the existing event; no duplicate or delete");
+    assert.match(stored.summary, /CANCELLED/);
+    assert.match(stored.description, /Status: cancelled/);
+    assert.equal(stored.start.dateTime, "2026-06-17T16:40:00");
+    assert.equal((await sync(cancelledTrip)).ok, true, "Cancellation retry is idempotent");
+    assert.equal(stored.id, stableEventId);
+    assert.equal((stored.summary.match(/CANCELLED/g) || []).length, 1);
+    assert.ok(requests.every(r => ["GET", "POST", "PUT"].includes(r.method)), "No event deletion");
+    assert.equal((await sync(amended)).ok, true);
     assert.match(stored.summary, /^NEW5678 \$75.25 > Amended Passenger/);
     assert.equal(stored.id, original.id, "same event after plate, passenger and schedule change");
     assert.deepEqual(stored.reminders, original.reminders);
@@ -1484,7 +1507,7 @@ try {
   {
     // Execute the actual React effect callback with controlled read responses.
     const effectSource = sourceBetween(appSource,
-      '  useEffect(() => {\n    if (activeTab !== "bookings" && activeTab !== "completed")',
+      '  useEffect(() => {\n    if (activeTab !== "bookings" && activeTab !== "completed") {\n      return;\n    }\n\n    setBookingGoogleCalendarPayouts({});',
       '  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);') +
       '  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);';
     const execute = async ({ tab = "completed", payout = "$75.25", fail = false } = {}) => {

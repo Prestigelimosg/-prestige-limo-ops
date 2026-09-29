@@ -429,17 +429,17 @@ export async function publishDriverPoolOffer(
 
 // Read-only explanation of the existing cancellation RPC preconditions.
 // The RPC still rechecks every condition under lock when Admin confirms.
-function assignmentState(offer: DriverPoolOfferState, booking: UnknownRecord, hasLink: boolean, hasReport: boolean, winningDriver: unknown): DriverPoolAssignmentState {
+function assignmentState(offer: DriverPoolOfferState, booking: UnknownRecord, hasLink: boolean, hasReport: boolean, winningDriver: unknown, hasLocation: boolean, blockedLink: boolean): DriverPoolAssignmentState {
   let blockedReason: string | null = null;
   if (!booking.driver_id || String(booking.driver_id) !== String(winningDriver)) {
     blockedReason = "The saved driver no longer matches this offer. Review the booking's Assigned Driver details.";
-  } else if (["cancelled", "completed", "archived", "deleted"].includes(String(booking.admin_internal_status || "").trim().toLowerCase()) ||
-    ["cancelled", "completed"].includes(String(booking.customer_facing_status || "").trim().toLowerCase())) {
+  } else if ([booking.status, booking.admin_internal_status, booking.customer_facing_status].some((status) =>
+    ["cancelled", "canceled", "completed", "complete", "archived", "deleted", "declined", "declined_internal", "history", "job completed", "job_completed"].includes(String(status || "").trim().toLowerCase()))) {
     blockedReason = "This booking is already closed. Review it in Bookings; this Pool assignment cannot be cancelled here.";
-  } else if (hasLink || hasReport) {
-    blockedReason = hasReport
-      ? "The driver has reported on this job. Review Driver Reports and coordinate with the driver before changing the assignment."
-      : "A Job Link has already been created. Review the existing Driver Job Link and coordinate with the driver before changing the assignment. Revoking a link alone does not cancel the assignment.";
+  } else if (hasReport || hasLocation) {
+    blockedReason = "Trip reporting or location sharing has started. Review Driver Reports and coordinate with the driver before changing the assignment.";
+  } else if (blockedLink) {
+    blockedReason = "This assignment has a conflicting Driver Job Link or belongs to a linked combo. Review the existing Job Links before changing the assignment.";
   } else if (booking.updated_at !== offer.updated_at || Number(booking.driver_payout_override) !== offer.offer_payout_sgd ||
     String(booking.driver_payout_reason || "").trim() !== "Driver Pool accepted fixed offer.") {
     blockedReason = "This booking changed after acceptance. Review the saved Assigned Driver details; automatic Pool cancellation is blocked.";
@@ -457,7 +457,7 @@ export async function loadAdminDriverPoolOffer(client: DriverPoolClient, referen
       .select("id,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,closes_at,updated_at,safe_vehicle_label,safe_offer_context")
       .eq("booking_reference", exact).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("bookings")
-      .select("driver_id,public_booking_reference,pickup_at,admin_internal_status,customer_facing_status,driver_name,driver_plate_number,driver_payout_override,driver_payout_reason,updated_at")
+      .select("driver_id,public_booking_reference,pickup_at,status,admin_internal_status,customer_facing_status,driver_name,driver_plate_number,driver_payout_override,driver_payout_reason,updated_at")
       .eq("booking_reference", exact).maybeSingle(),
   ]);
   if (error || bookingError) { const failure = classify(error || bookingError); return { ...failure, ok: false } as const; }
@@ -494,14 +494,22 @@ export async function loadAdminDriverPoolOffer(client: DriverPoolClient, referen
   }
   const booking = asRecord(bookingData);
   if (offer?.offer_status === "assigned") {
-    const [links, reports, bids] = await Promise.all([
-      client.from("driver_job_links").select("booking_reference").eq("booking_reference", exact).limit(1),
+    const [links, reports, bids, locations] = await Promise.all([
+      client.from("driver_job_links").select("driver_id,link_status,revoked_at,expires_at").eq("booking_reference", exact).limit(1000),
       client.from("driver_job_status_events").select("booking_reference").eq("booking_reference", exact).limit(1),
       client.from("driver_job_bids").select("driver_reference").eq("driver_job_bid_offer_id", asRecord(data).id).eq("bid_status", "accepted").limit(2),
+      client.from("driver_live_location_latest_positions").select("booking_reference").eq("booking_reference", exact).limit(1),
     ]);
-    if (links.error || reports.error || bids.error) return { ...classify(links.error || reports.error || bids.error), ok: false } as const;
+    if (links.error || reports.error || bids.error || locations.error) return { ...classify(links.error || reports.error || bids.error || locations.error), ok: false } as const;
+    const linkRows = asRows(links.data);
+    if (linkRows.length >= 1000) return { error: "Driver Pool assignment evidence needs review.", ok: false, status: 503 } as const;
+    const hasLink = linkRows.length > 0;
+    const blockedLink = (hasLink && Boolean(asRecord(asRecord(data).safe_offer_context).combo_id)) || linkRows.some((link) =>
+      link.driver_id != null && String(link.driver_id) !== String(booking.driver_id) &&
+      link.link_status === "active" && !link.revoked_at &&
+      (link.expires_at == null || !Number.isFinite(Date.parse(String(link.expires_at))) || Date.parse(String(link.expires_at)) > Date.now()));
     const winners = asRows(bids.data);
-    offer.assignment = assignmentState(offer, booking, asRows(links.data).length > 0, asRows(reports.data).length > 0, winners.length === 1 ? winners[0].driver_reference : null);
+    offer.assignment = assignmentState(offer, booking, hasLink, asRows(reports.data).length > 0, winners.length === 1 ? winners[0].driver_reference : null, asRows(locations.data).length > 0, blockedLink);
   }
   const adminStatus = String(booking.admin_internal_status || "").trim().toLowerCase();
   const customerStatus = String(booking.customer_facing_status || "").trim().toLowerCase();
@@ -560,24 +568,27 @@ export async function loadAdminDriverPoolAttentionOffers(
       .filter((reference): reference is string => Boolean(reference)))];
     const linkedReferences = new Set<string>();
     const reportReferences = new Set<string>();
+    const locationReferences = new Set<string>();
     const assignedBookings = new Map<string, UnknownRecord>();
     const winningDrivers = new Map<string, unknown>();
 
     if (assignedReferences.length > 0) {
-      const [links, reports, bookings, bids] = await Promise.all([
+      const [links, reports, bookings, bids, locations] = await Promise.all([
         client.from("driver_job_links").select("booking_reference").in("booking_reference", assignedReferences).limit(scanChunkSize * 10),
         client.from("driver_job_status_events").select("booking_reference").in("booking_reference", assignedReferences).limit(scanChunkSize * 10),
-        client.from("bookings").select("booking_reference,driver_id,driver_name,driver_plate_number,driver_payout_override,driver_payout_reason,updated_at,admin_internal_status,customer_facing_status").in("booking_reference", assignedReferences).limit(scanChunkSize),
+        client.from("bookings").select("booking_reference,driver_id,driver_name,driver_plate_number,driver_payout_override,driver_payout_reason,updated_at,status,admin_internal_status,customer_facing_status").in("booking_reference", assignedReferences).limit(scanChunkSize),
         client.from("driver_job_bids").select("driver_job_bid_offer_id,driver_reference").in("driver_job_bid_offer_id", rows.filter((row) => row.offer_status === "assigned").map((row) => row.id)).eq("bid_status", "accepted").limit(scanChunkSize * 2),
+        client.from("driver_live_location_latest_positions").select("booking_reference").in("booking_reference", assignedReferences).limit(scanChunkSize * 10),
       ]);
-      const readError = links.error || reports.error || bookings.error || bids.error;
+      const readError = links.error || reports.error || bookings.error || bids.error || locations.error;
       if (readError) return { ...classify(readError), ok: false } as const;
       // Bounded reads must not accidentally label incomplete evidence cancellable.
-      if (asRows(links.data).length >= scanChunkSize * 10 || asRows(reports.data).length >= scanChunkSize * 10 || asRows(bids.data).length >= scanChunkSize * 2) {
+      if (asRows(links.data).length >= scanChunkSize * 10 || asRows(reports.data).length >= scanChunkSize * 10 || asRows(bids.data).length >= scanChunkSize * 2 || asRows(locations.data).length >= scanChunkSize * 10) {
         return { error: "Driver Pool assignment evidence needs review. Open the exact booking.", ok: false, status: 503 } as const;
       }
       for (const link of asRows(links.data)) linkedReferences.add(String(link.booking_reference));
       for (const report of asRows(reports.data)) reportReferences.add(String(report.booking_reference));
+      for (const location of asRows(locations.data)) locationReferences.add(String(location.booking_reference));
       for (const booking of asRows(bookings.data)) assignedBookings.set(String(booking.booking_reference), booking);
       for (const bid of asRows(bids.data)) {
         const id = String(bid.driver_job_bid_offer_id);
@@ -606,7 +617,7 @@ export async function loadAdminDriverPoolAttentionOffers(
       ) {
         attentionItems.push({
           ...offer,
-          assignment: assignmentState(offer, assignedBookings.get(exactBookingReference) || {}, false, reportReferences.has(exactBookingReference), winningDrivers.get(String(row.id))),
+          assignment: assignmentState(offer, assignedBookings.get(exactBookingReference) || {}, false, reportReferences.has(exactBookingReference), winningDrivers.get(String(row.id)), locationReferences.has(exactBookingReference), false),
           attention_status: "accepted_link_pending",
           booking_reference: exactBookingReference,
           pickup_at: pickupAt,

@@ -5,7 +5,7 @@ import http from 'node:http';
 const now=Date.now();const done=new Set();let writes=0;
 const booking=(ref,pub)=>({id:ref,booking_reference:ref,public_booking_reference:pub,booking_type:'TRF',vehicle:'AVF',pickup_at:new Date(now-3600000).toISOString(),pickup_datetime:new Date(now-3600000).toISOString(),pickup_address:'Example pickup',dropoff_address:'Example destination',passenger_name:'QA Customer',driver_name:'QA Driver',driver_id:71,status:'assigned',pax:1,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()});
 const bookings=[booking('EXACT-A','99001'),booking('EXACT-B','99002')];
-const messages=[{id:'11111111-1111-4111-8111-111111111111',booking_reference:'EXACT-A',safe_title:'Driver reply',safe_message:'Please confirm pickup point.',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',actor_role:'driver',safe_context:{direction:'driver_to_admin'},created_at:new Date(now).toISOString()},
+const messages=[{id:'11111111-1111-4111-8111-111111111111',booking_reference:'EXACT-A',safe_title:'Driver reply',sender_driver_name:'QA Original Driver',sender_driver_plate:'QA1234Z',safe_message:'Please confirm pickup point.',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',actor_role:'driver',safe_context:{direction:'driver_to_admin'},created_at:'2026-09-29T09:25:50.909Z'},
 {id:'22222222-2222-4222-8222-222222222222',booking_reference:'EXACT-B',safe_title:'QA Customer B',safe_message:'We are at the lobby.',workflow_area:'customer_driver_quick_replies',delivery_surface:'driver_app',actor_role:'customer',safe_context:{direction:'customer_to_driver'},created_at:new Date(now).toISOString()}];
 const server=http.createServer(async(req,res)=>{try{
  const u=new URL(req.url,'http://127.0.0.1:3198');

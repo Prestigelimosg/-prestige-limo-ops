@@ -22,10 +22,10 @@ const db = {from(table) {
   q.then = resolve => Promise.resolve({data:[{id:'row'}],count:1201,error:dbError}).then(resolve);
   return q;
 }};
-const serverRead = new Function('parseCustomerDriverAppNotificationLoadParams','getAdminNotificationClient','notificationTable','notificationSelect','safeAdapterFailure','safeNotificationLoadError','asArray','normalizeRecord','toAdminSafeRecord','buildCountedPagination','customerDriverAppNotificationPersistenceVersion', readCode + '\nreturn loadCustomerDriverAppNotifications;')(
+const serverRead = new Function('parseCustomerDriverAppNotificationLoadParams','getAdminNotificationClient','notificationTable','notificationSelect','safeAdapterFailure','safeNotificationLoadError','asArray','normalizeRecord','toAdminSafeRecord','buildCountedPagination','customerDriverAppNotificationPersistenceVersion','asRecord','safeText', readCode + '\nreturn loadCustomerDriverAppNotifications;')(
   input=>({page:Number(input.get('page')||1),limit:100}), ()=>allowed?{ok:true,data:db}:{ok:false,status:403},
   'customer_driver_app_notification_outbox','safe-columns',()=>({ok:false,status:500}),'Read failed',v=>v,v=>v,v=>v,
-  (count,limit,page)=>({total_notification_count:count,page_count:Math.ceil(count/limit),has_next_page:page<Math.ceil(count/limit)}),'test',
+  (count,limit,page)=>({total_notification_count:count,page_count:Math.ceil(count/limit),has_next_page:page<Math.ceil(count/limit)}),'test',v=>v && typeof v==='object'?v:{},(v,n)=>typeof v==='string'&&v.length<=n?v:null,
 );
 calls=[];
 let result=await serverRead(new URLSearchParams({scope:'admin_incoming_messages',page:'8'}),{});
@@ -47,7 +47,7 @@ const start=page.indexOf('async function loadAdminAppNotificationsRead()');
 const end=page.indexOf('async function loadAdminEmailAiIntakeRead()',start);
 const readRequests=[];const storage=new Map();const serverDone=new Set();let dismissError=false;
 const sharedDismiss=async ids=>{if(dismissError)throw Error('offline');ids.forEach(id=>serverDone.add(id));return ids;};let failedMessages=false;let failPage=0;
-const driver={id:'driver-a',booking_reference:'EXACT-A',safe_message:'Driver needs help',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',safe_context:{direction:'driver_to_admin'}};
+const driver={id:'driver-a',booking_reference:'EXACT-A',safe_message:'Driver needs help',sender_driver_name:'Original Driver',sender_driver_plate:'OLD123',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',safe_context:{direction:'driver_to_admin'}};
 const customer={id:'customer-b',booking_reference:'EXACT-B',safe_message:'Customer asks about pickup',workflow_area:'customer_driver_quick_replies',delivery_surface:'driver_app',safe_context:{direction:'customer_to_driver'}};
 const ack={id:'ack-b',booking_reference:'EXACT-B',safe_message:'Driver details acknowledged.',workflow_area:'customer_driver_details_acknowledgements',delivery_surface:'customer_app',safe_context:{direction:'customer_to_admin'}};
 const original=JSON.stringify([driver,customer,ack]);
@@ -77,6 +77,8 @@ assert.deepEqual(result.notifications.map(n=>n.id),['ordinary-alert','message:dr
 assert.deepEqual(result.notifications.slice(1).map(n=>n.safe_title),['Driver → Admin','Customer → Driver']);
 assert.equal(JSON.stringify([driver,customer,ack]),original);
 assert.equal(result.incomingMessageError,'');
+assert.equal(result.notifications[1].safe_context.sender_label,'Original Driver · OLD123');
+assert.equal(result.notifications[2].safe_context.sender_label,'');
 failPage=2;result=await load();assert.deepEqual(result.notifications,[ordinary],'Partial message pages must fail visibly without hiding the existing alerts');assert.ok(result.incomingMessageError);
 failPage=0;failedMessages=true;result=await load();assert.deepEqual(result.notifications,[ordinary]);assert.ok(result.incomingMessageError);
 
@@ -97,3 +99,52 @@ assert.ok(page.includes('data-admin-incoming-message-open={notificationId}'));
 assert.ok(page.includes('candidate.dataset.adminMultiDriverActiveJob === notificationId'));
 assert.ok(page.includes('updateAdminTodayJobMessageAudience(reference, notification.safe_context?.direction === "driver_to_admin" ? "driver" : "customer")'));
 console.log('Incoming alerts passed: paginated read-only projection, exact directions, no duplicates, isolated read failure, shared Done, independent-device refresh, legacy marker migration, failed-write preservation and exact-job reply wiring.');
+
+// Message-only display: the database remains UTC and unrelated alerts retain their format.
+const timeStart=page.indexOf('function adminAppNotificationTimeLabel(');
+const timeEnd=page.indexOf('function adminAppNotificationContextValue(',timeStart);
+const ast=ts.createSourceFile('page.tsx',page,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const formatterNames=new Set(['formatBookingTimestampSgt','singaporePickupDateTimePartsFromTimestamp','formatDate','formatPickupTime']);
+const formatters=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&formatterNames.has(n.name?.text)).map(n=>n.getText(ast)).join('\n');
+const timeLabel=new Function('clean',compile(formatters+'\n'+page.slice(timeStart,timeEnd))+'\nreturn adminAppNotificationTimeLabel;')(clean);
+assert.match(timeLabel('2026-09-29T09:25:50.909Z',true),/29 Sept? 2026, 1725hrs SGT/);
+assert.match(timeLabel('2026-09-29T17:25:50+08:00',true),/29 Sept? 2026, 1725hrs SGT/);
+assert.match(timeLabel('2026-09-30T18:05:00Z',true),/01 Oct 2026, 0205hrs SGT/);
+assert.equal(timeLabel('2026-09-29T09:25:50.909Z'),'2026-09-29 09:25 UTC');
+assert.equal(timeLabel(null,true),'Created time not recorded');
+assert.equal(timeLabel('bad timestamp',true),'bad timestamp');
+assert.ok(page.includes('adminAppNotificationTimeLabel(notification.created_at, notification.workflow_area === "admin_incoming_job_message")'));
+assert.ok(page.includes('record.sender_driver_name') && page.includes('record.sender_driver_plate'));
+console.log('Message-only Singapore display and sender projection passed.');
+
+// Execute the actual scoped server reader with exact historical links, not current assignments.
+const linkId='11111111-1111-4111-8111-111111111111';
+const notification={id:'reply',driver_job_link_id:linkId,booking_reference:'EXACT-A',actor_role:'driver',source_surface:'driver_api',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',safe_context:{direction:'driver_to_admin'},created_at:'2026-09-29T09:25:50Z'};
+const oldLink={id:linkId,booking_reference:'EXACT-A',driver_id:15,sender_name:'Original Driver',sender_plate:'OLD123',acknowledged_at:'2026-09-28T07:45:00Z'};
+let linkRows=[oldLink],linkFailure=false,linkThrow=false,sourceRows=[notification];
+const senderReads=[];
+const senderClient={from(table){
+  assert.ok(['customer_driver_app_notification_outbox','driver_job_links'].includes(table),'Never use current booking or driver profile as sender');
+  senderReads.push(table);
+  const q={};for(const op of ['select','is','or','order','range','in'])q[op]=(...args)=>{
+    if(table==='driver_job_links'&&op==='select'){assert.ok(!args[0].includes('ciphertext'));assert.ok(!args[0].includes('token'));assert.ok(!args[0].includes('contact'));assert.ok(args[0].includes('sender_name:'));}
+    if(op==='in')assert.deepEqual(args,['id',[linkId]]);
+    return q;
+  };
+  q.then=(resolve,reject)=>{if(table==='driver_job_links'&&linkThrow)return Promise.reject(Error('transport')).then(resolve,reject);
+    return Promise.resolve({data:table==='driver_job_links'?linkRows:sourceRows,error:table==='driver_job_links'&&linkFailure?{}:null,count:sourceRows.length}).then(resolve,reject);};return q;
+}};
+const readSenders=new Function('parseCustomerDriverAppNotificationLoadParams','getAdminNotificationClient','notificationTable','notificationSelect','safeAdapterFailure','safeNotificationLoadError','asArray','normalizeRecord','toAdminSafeRecord','buildCountedPagination','customerDriverAppNotificationPersistenceVersion','asRecord','safeText',readCode+'\nreturn loadCustomerDriverAppNotifications;')(
+ ()=>({page:1,limit:100}),()=>({ok:true,data:senderClient}),'customer_driver_app_notification_outbox','safe-columns',()=>({ok:false}), 'unavailable',v=>v,v=>v,
+ r=>({id:r.id,booking_reference:r.booking_reference,safe_context:r.safe_context}),()=>({}),'test',v=>v&&typeof v==='object'?v:{},(v,n)=>typeof v==='string'&&v.length<=n?v.trim():null);
+const incomingParams=new URLSearchParams({scope:'admin_incoming_messages'});
+const getSender=async()=> (await readSenders(incomingParams,{})).data.notifications[0];
+let sender=await getSender();assert.equal(sender.sender_driver_name,'Original Driver');assert.equal(sender.sender_driver_plate,'OLD123');
+assert.deepEqual(Object.keys(sender).sort(),['id','booking_reference','safe_context','sender_driver_name','sender_driver_plate'].sort(),'No link ID, driver ID, token or context returned');
+for(const rows of [[],[oldLink,oldLink],[{...oldLink,booking_reference:'OTHER'}],[{...oldLink,driver_id:null}],[{...oldLink,acknowledged_at:null}],[{...oldLink,acknowledged_at:'2026-09-30T00:00:00Z'}],[{...oldLink,sender_name:' '}],[{...oldLink,sender_plate:'X'.repeat(81)}]]) {linkRows=rows;sender=await getSender();assert.equal(sender.sender_driver_name,null);assert.equal(sender.sender_driver_plate,null);}
+linkRows=[oldLink];linkFailure=true;assert.equal((await getSender()).sender_driver_name,null);linkFailure=false;linkThrow=true;assert.equal((await getSender()).sender_driver_name,null);linkThrow=false;
+sourceRows=[{...notification,created_at:'invalid'}];assert.equal((await getSender()).sender_driver_name,null);
+for(const override of [{actor_role:'customer'},{source_surface:'admin_api'},{workflow_area:'customer_driver_quick_replies'},{delivery_surface:'customer_app'},{safe_context:{direction:'customer_to_driver'}}]) {sourceRows=[{...notification,...override}];senderReads.length=0;await getSender();assert.ok(!senderReads.includes('driver_job_links'));}
+sourceRows=[notification,{...notification,id:'second'}];senderReads.length=0;await getSender();assert.equal(senderReads.filter(t=>t==='driver_job_links').length,1,'Batch unique links per bounded page');
+assert.equal(JSON.stringify(notification),JSON.stringify(sourceRows[0]),'Read must not rewrite history');
+console.log('Exact-link sender isolation, reassignment safety, failed/missing/ambiguous evidence, bounded read and private-field exclusion passed.');

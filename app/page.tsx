@@ -20535,20 +20535,20 @@ export default function Home() {
       }).finally(() => { reading = false; });
     };
     refreshCalendarRead();
-    // Re-read on returning from Calendar; no new timer or writer.
+    // Recover status reads on return to either list or network restoration; no timer or writer.
     const refreshVisibleCalendarRead = () => {
       if (document.visibilityState === "visible") refreshCalendarRead();
     };
-    if (activeTab === "completed") {
-      window.addEventListener("focus", refreshVisibleCalendarRead);
-      window.addEventListener("pageshow", refreshVisibleCalendarRead);
-      document.addEventListener("visibilitychange", refreshVisibleCalendarRead);
-    }
+    window.addEventListener("focus", refreshVisibleCalendarRead);
+    window.addEventListener("pageshow", refreshVisibleCalendarRead);
+    window.addEventListener("online", refreshVisibleCalendarRead);
+    document.addEventListener("visibilitychange", refreshVisibleCalendarRead);
 
     return () => {
       cancelled = true;
       window.removeEventListener("focus", refreshVisibleCalendarRead);
       window.removeEventListener("pageshow", refreshVisibleCalendarRead);
+      window.removeEventListener("online", refreshVisibleCalendarRead);
       document.removeEventListener("visibilitychange", refreshVisibleCalendarRead);
     };
   }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);

@@ -1510,7 +1510,7 @@ try {
       '  useEffect(() => {\n    if (activeTab !== "bookings" && activeTab !== "completed") {\n      return;\n    }\n\n    setBookingGoogleCalendarPayouts({});',
       '  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);') +
       '  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);';
-    const execute = async ({ tab = "completed", payout = "$75.25", fail = false } = {}) => {
+    const execute = async ({ tab = "completed", payout = "$75.25", fail = false, transportFailure = false } = {}) => {
       const state = { payouts: {}, statuses: {}, message: null, calls: [], cleanup: null, listeners: new Map() };
       const bindings = {
         activeTab: tab, bookingGoogleCalendarStatusPayloadSignature: "fixture",
@@ -1529,6 +1529,7 @@ try {
         fetch: async (url, init) => {
           state.calls.push({ url, init });
           assert.equal(url, "/api/admin-booking-calendar-google-sync?mode=status");
+          if (transportFailure && state.calls.length === 1) throw new TypeError("Load failed");
           return Response.json(fail ? { ok: false, error: "unavailable" } : {
             ok: true, statuses: [{ booking_reference: "EXACT-REF", status: "cal_saved", calendar_payout: payout }],
           }, { status: fail ? 503 : 200 });
@@ -1537,6 +1538,7 @@ try {
       const code = transpileTypescript(effectSource, "completed-calendar-effect.ts");
       new Function(...Object.keys(bindings), code)(...Object.values(bindings));
       await new Promise((resolve) => setTimeout(resolve, 0));
+      state.bindings = bindings;
       return state;
     };
     const state = await execute();
@@ -1557,8 +1559,33 @@ try {
     failed.cleanup();
     const bookings = await execute({ tab: "bookings" });
     assert.deepEqual(bookings.statuses, { "exact-ref": "cal_saved" });
-    assert.equal(bookings.listeners.size, 0, "Bookings gains no focus polling");
+    assert.ok(bookings.listeners.has("focus"), "Bookings must recover status reads when returning to the app");
     bookings.cleanup();
+    for (const tab of ["bookings", "completed"]) {
+      for (const trigger of ["focus", "pageshow", "visibilitychange", "online"]) {
+        const recovered = await execute({ tab, transportFailure: true });
+        assert.equal(recovered.message.text, "Calendar status unavailable: Load failed");
+        assert.deepEqual(recovered.statuses, {});
+        assert.ok(recovered.listeners.has(trigger), `${tab} must recover on ${trigger}`);
+        recovered.bindings.document.visibilityState = "hidden";
+        recovered.listeners.get(trigger)();
+        assert.equal(recovered.calls.length, 1, "hidden app must not re-read");
+        recovered.bindings.document.visibilityState = "visible";
+        recovered.listeners.get(trigger)();
+        recovered.listeners.get("focus")();
+        assert.equal(recovered.calls.length, 2, "overlapping foreground events share the in-flight read");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(recovered.message, null);
+        assert.deepEqual(recovered.statuses, { "exact-ref": "cal_saved" });
+        assert.deepEqual(recovered.payouts, { "exact-ref": "$75.25" });
+        assert.ok(recovered.calls.every(call => call.url.endsWith("?mode=status")));
+        const lateRead = recovered.listeners.get(trigger);
+        recovered.cleanup();
+        assert.equal(recovered.listeners.size, 0);
+        lateRead();
+        assert.equal(recovered.calls.length, 2, "unmounted screen never reads again");
+      }
+    }
     const other = await execute({ tab: "dispatch" });
     assert.equal(other.calls.length, 0);
     assert.doesNotMatch(effectSource, /setInterval|syncAdminBooking|Update \+ Cal|payout_override/);

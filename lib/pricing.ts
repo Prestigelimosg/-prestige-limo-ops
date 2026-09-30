@@ -299,6 +299,14 @@ export function resolvePricing(
     bookingValue.vehicleType ?? bookingValue.vehicle,
   );
   const isMidnight = isMidnightPickup(bookingValue.time);
+  // Driver payout has its own 23:30–05:59 window; customer midnight stays unchanged.
+  const driverPickupTime = normalizePickupTimeForStorage(bookingValue.time);
+  const driverPickupHour = Number(driverPickupTime.slice(0, 2));
+  const driverPickupMinute = Number(driverPickupTime.slice(2, 4));
+  const driverPickupMinutes = driverPickupHour * 60 + driverPickupMinute;
+  const isDriverMidnight = driverPickupTime.length === 4 &&
+    driverPickupHour < 24 && driverPickupMinute < 60 &&
+    (driverPickupMinutes >= 23 * 60 + 30 || driverPickupMinutes < 6 * 60);
   const extraStopCount = normalizeExtraStopCount(bookingValue.extraStopCount);
   const extraStopSurcharge = bookingType === "DSP" ? 0 : settings.extraStopSurcharge;
   const extraStopPayout = bookingType === "DSP" ? 0 : settings.extraStopPayout;
@@ -347,7 +355,7 @@ export function resolvePricing(
     driverPayoutUnit: unit,
     driverPayoutSource,
     midnightSurcharge: isMidnight ? settings.midnightSurcharge : 0,
-    midnightPayout: isMidnight ? settings.midnightPayout : 0,
+    midnightPayout: isDriverMidnight ? settings.midnightPayout : 0,
     extraStopCount,
     extraStopSurcharge,
     extraStopCustomerAmount: extraStopCount * extraStopSurcharge,

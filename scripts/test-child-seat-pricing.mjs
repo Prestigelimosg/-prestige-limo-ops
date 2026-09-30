@@ -54,6 +54,41 @@ assert.equal(isMidnightPickup("7am"), false);
 assert.equal(isMidnightPickup("7:00am"), false);
 assert.equal(isMidnightPickup("7.00am"), false);
 
+// Driver midnight is separate from customer midnight. Exercise every pickup
+// minute and service through the existing resolver and total calculator.
+for (const bookingType of ["MNG", "DEP", "TRF", "DSP"]) {
+  const input = { bookingType, vehicle: "AVF", extraStopCount: 2, childSeatRequired: true, childSeatCount: 1 };
+  const day = resolvePricing({ ...input, time: "1200" }, {}, null, initialRateSettings);
+  const dayTotals = calculateProfit(day);
+  for (let minute = 0; minute < 1440; minute += 1) {
+    const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}${String(minute % 60).padStart(2, "0")}`;
+    const pricing = resolvePricing({ ...input, time }, {}, null, initialRateSettings);
+    const customerMidnight = minute >= 1380 || minute < 420 ? 15 : 0;
+    const driverMidnight = minute >= 1410 || minute < 360 ? 10 : 0;
+    assert.equal(pricing.midnightPayout, driverMidnight, `${bookingType} ${time}: driver midnight must be 2330 through 0559`);
+    assert.equal(pricing.midnightSurcharge, customerMidnight, `${bookingType} ${time}: customer midnight stays 2300 through 0659`);
+    assert.deepEqual({ ...pricing, midnightPayout: 0, midnightSurcharge: 0 }, day, "Base rates, units, sources, stops and seats remain unchanged");
+    const totals = calculateProfit(pricing);
+    assert.equal(totals.customerPrice, dayTotals.customerPrice + customerMidnight);
+    assert.equal(totals.driverPayout, dayTotals.driverPayout + driverMidnight);
+    assert.equal(totals.profit, totals.customerPrice - totals.driverPayout);
+    for (const override of ["0", "99.50"]) {
+      assert.equal(calculateProfit(pricing, "", override).driverPayout, Number(override), "Saved/fixed/manual payout totals must not receive an additional midnight fee");
+    }
+  }
+}
+
+for (const [time, expected] of [
+  ["2329hrs", 0], ["11:29pm", 0], ["2330hrs", 10], ["11:30pm", 10],
+  ["11.30pm", 10], ["0000hrs", 10], ["12am", 10], ["0559hrs", 10],
+  ["5:59am", 10], ["5.59am", 10], ["0600hrs", 0], ["6am", 0],
+  ["0659hrs", 0], ["6:59am", 0], ["0700hrs", 0], ["", 0], ["invalid", 0],
+  ["2400", 0], ["2360", 0],
+]) {
+  assert.equal(resolvePricing({ bookingType: "DEP", time }, {}, null, initialRateSettings).midnightPayout, expected, `Driver midnight input ${time}`);
+}
+assert.equal(resolvePricing({ bookingType: "DEP", time: "2330" }, {}, null, { ...initialRateSettings, midnightPayout: 17 }).midnightPayout, 17, "Use the saved rate setting rather than hardcoding the amount");
+
 const defaultPricing = resolvePricing(
   {
     bookingType: "DEP",

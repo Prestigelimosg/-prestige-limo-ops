@@ -16,10 +16,12 @@ try {
   const errors=[];client.on('Runtime.exceptionThrown',e=>errors.push(e.exceptionDetails.text));
   const evaluate=async expression=>{const result=await client.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});assert.ok(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));return result.result.value;};
   await client.send('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.qaStatusReads=[];window.qaQueued=[];window.qaReplyLinkId="upcoming-link";window.qaJobCompleted=false;window.qaStatusFailure=false;
     window.qaWrites=[];window.qaMessagesFailed=false;window.qaServerDone=new Set(JSON.parse(sessionStorage.getItem("qa-server-done")||"[]"));
     const now=Date.now();
     const booking=(ref,pub,driver)=>({id:ref,booking_reference:ref,public_booking_reference:pub,booking_type:'TRF',vehicle:'AVF',pickup_at:new Date(now-3600000).toISOString(),pickup_datetime:new Date(now-3600000).toISOString(),pickup_address:'Example pickup',dropoff_address:'Example destination',passenger_name:'Example customer',driver_name:driver,driver_id:71,status:'assigned',pax:1,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()});
     window.qaBookings=[booking('EXACT-A','11001','Example Driver A'),booking('EXACT-B','11002','Example Driver B')];
+    window.qaBookings.push({...booking('UPCOMING','11080','Upcoming Driver'),pickup_at:new Date(now+18*3600000).toISOString(),pickup_datetime:new Date(now+18*3600000).toISOString()});
     window.qaMessages=[{id:'driver-a',booking_reference:'EXACT-A',safe_title:'Driver reply',safe_message:'Please confirm pickup point.',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',actor_role:'driver',safe_context:{direction:'driver_to_admin'},created_at:new Date(now).toISOString()},
       {id:'customer-b',booking_reference:'EXACT-B',safe_title:'Example Customer B',safe_message:'We are at the lobby.',workflow_area:'customer_driver_quick_replies',delivery_surface:'driver_app',actor_role:'customer',safe_context:{direction:'customer_to_driver'},created_at:new Date(now).toISOString()}];
     const original=window.fetch.bind(window);
@@ -34,8 +36,14 @@ try {
           body.message_ids.forEach(id=>window.qaServerDone.add(id));sessionStorage.setItem('qa-server-done',JSON.stringify([...window.qaServerDone]));
           return Response.json({ok:true,message_ids:body.message_ids});
         }
+        if(method==='POST'&&u.pathname==='/api/admin-customer-driver-app-notifications'&&body.booking_reference==='UPCOMING'&&body.delivery_surface==='driver_app'&&body.workflow_area==='admin_driver_job_messages'){
+          window.qaQueued.push(body);return Response.json({ok:true,notification:body});
+        }
         window.qaWrites.push(method+' '+u.pathname);return Response.json({ok:false},{status:403});
       }
+      if(u.pathname==='/api/admin-driver-job-statuses')window.qaStatusReads.push(u.searchParams.get('booking_reference'));
+      if(u.pathname==='/api/admin-driver-job-links'&&u.searchParams.get('booking_reference')==='UPCOMING')return Response.json({ok:true,links:[{id:window.qaReplyLinkId,booking_reference:'UPCOMING',link_status:'active',revoked_at:null,expires_at:new Date(now+86400000).toISOString(),safe_summary:{acknowledged:true}}]});
+      if(u.pathname==='/api/admin-driver-job-statuses'&&u.searchParams.get('booking_reference')==='UPCOMING')return window.qaStatusFailure?Response.json({ok:false},{status:503}):Response.json({ok:true,statuses:window.qaJobCompleted?[{booking_reference:'UPCOMING',status_value:'completed'}]:[]});
       if(u.pathname==='/api/admin-saved-bookings')return Response.json({ok:true,bookings:window.qaBookings});
       if(u.pathname==='/api/admin-load-bookings-typed-read')return Response.json({ok:true,bookings:[],read_gate_open:true,status:'ready'});
       if(u.pathname==='/api/admin-customer-driver-app-notifications'){
@@ -54,7 +62,42 @@ try {
   const wait=async(expr,label)=>waitForCondition(()=>evaluate(`Boolean(${expr})`),30000,label);
   await wait(`document.querySelector('[data-admin-incoming-message-open="message:driver-a"]') && document.querySelectorAll('[data-admin-multi-driver-active-job]').length===2`,'message alerts and existing job cards');
   assert.equal(await evaluate(`document.querySelectorAll('[data-admin-app-notification-feed="true"]').length`),1);
+  await evaluate(`window.qaMessages.push({...window.qaMessages[0],id:'upcoming',booking_reference:'UPCOMING',reply_driver_job_link_id:'upcoming-link',sender_driver_id:71,safe_message:'Please confirm tomorrow pickup.'});document.querySelector('[data-admin-app-notification-feed-refresh="true"]').click()`);
+  await wait(`document.querySelector('[data-admin-incoming-message-open="message:upcoming"]')`,'upcoming incoming alert');
+  await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:upcoming"]').click()`);
+  await wait(`document.querySelector('[data-admin-app-notification-feed-row-id="message:upcoming"] [data-admin-active-job-driver-message-input]')`,'upcoming exact-booking reply composer');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-admin-multi-driver-active-job]').length`),2,'Upcoming reply must not enter Active Assigned Jobs');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-admin-app-notification-feed] [data-admin-active-job-driver-message-input]').length`),1,'Reuse one selected reply composer');
+  assert.deepEqual(await evaluate('window.qaWrites'),[],'Opening Reply must not send or write');
   const evidence=process.env.EVIDENCE_DIR||'/tmp/prestige-admin-incoming-alerts-evidence';await mkdir(evidence,{recursive:true});
+  const upcomingBox='[data-admin-app-notification-feed-row-id="message:upcoming"]';
+  await wait(`document.activeElement?.closest('[data-admin-incoming-message-reply-reference]')?.dataset.adminIncomingMessageReplyReference==='UPCOMING'`,'upcoming conversation focus');
+  assert.equal(await evaluate(`document.querySelector('${upcomingBox} [data-admin-active-job-driver-message-send]').disabled`),true,'Blank draft cannot send');
+  assert.equal(await evaluate(`document.querySelectorAll('${upcomingBox} [data-admin-active-job-message-audience-option="customer"]').length`),0,'Upcoming repair is Driver-only');
+  assert.ok(await evaluate(`document.body.innerText.includes('Your reply is sent only when you select Send to Driver.')`));
+  const typeReply=async()=>evaluate(`(()=>{const input=document.querySelector('${upcomingBox} textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Meet at the main lobby.');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  await wait(`!document.querySelector('${upcomingBox} textarea').disabled`,'verified report read enables draft');
+  await typeReply();
+  await evaluate(`document.querySelector('${upcomingBox} [data-admin-active-job-driver-message-send]').click()`);
+  await wait(`window.qaQueued.length===1 && document.querySelector('${upcomingBox}').innerText.includes('Queued to Driver Job page')`,'existing sender saves exact upcoming reply');
+  const queued=await evaluate('window.qaQueued[0]');assert.equal(queued.driver_job_link_id,'upcoming-link');assert.equal(queued.booking_reference,'UPCOMING');assert.equal(queued.safe_context.audience,'admin_driver');
+  await client.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await evaluate(`document.querySelector('${upcomingBox} [data-admin-active-job-driver-message]').scrollIntoView()`);
+  assert.equal(await evaluate(`document.querySelector('${upcomingBox} textarea').getBoundingClientRect().right<=innerWidth`),true);
+  const upcomingScreenshot=await client.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(path.join(evidence,'upcoming-driver-reply-mobile.png'),Buffer.from(upcomingScreenshot.data,'base64'));
+  await client.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  await evaluate(`window.qaReplyLinkId='replacement-link'`);await typeReply();
+  await evaluate(`document.querySelector('${upcomingBox} [data-admin-active-job-driver-message-send]').click()`);
+  await wait(`document.querySelector('${upcomingBox}').innerText.includes('no longer current')`,'replacement link blocks stale reply');
+  assert.equal(await evaluate('window.qaQueued.length'),1);
+  await evaluate(`window.qaReplyLinkId='upcoming-link';window.qaJobCompleted=true;document.querySelector('${upcomingBox} [data-admin-active-job-message-history-refresh]').click()`);
+  await wait(`document.querySelector('${upcomingBox} textarea').disabled && document.querySelector('${upcomingBox}').innerText.includes('Driver messaging closed after Job Completed')`,'persisted JC blocks upcoming composer');
+  await evaluate(`window.qaJobCompleted=false;window.qaStatusFailure=true;document.querySelector('${upcomingBox} [data-admin-active-job-message-history-refresh]').click()`);
+  await wait(`document.querySelector('${upcomingBox} textarea').disabled`,'failed status read remains closed');
+  await evaluate(`window.qaStatusFailure=false;document.querySelector('${upcomingBox} [data-admin-active-job-message-history-refresh]').click()`);
+  await wait(`!document.querySelector('${upcomingBox} textarea').disabled`,'status recovery');
+
+
   await evaluate(`window.scrollTo(0,Math.max(0,document.querySelector('[data-admin-app-notification-feed="true"]').getBoundingClientRect().top+scrollY-75))`);
   const desktopScreenshot=await client.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
   await writeFile(path.join(evidence,'admin-incoming-message-alerts-desktop.png'),Buffer.from(desktopScreenshot.data,'base64'));
@@ -64,9 +107,11 @@ try {
   await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:customer-b"]').click()`);
   await wait(`document.activeElement?.closest('[data-admin-multi-driver-active-job]')?.getAttribute('data-admin-multi-driver-active-job')==='EXACT-B'`,'exact customer message card focused');
   assert.equal(await evaluate(`Array.from(document.querySelector('[data-admin-multi-driver-active-job="EXACT-B"]').querySelectorAll('button')).find(e=>e.textContent==='Customer').getAttribute('aria-pressed')`),'true');
+  const activeStatusReads=await evaluate(`window.qaStatusReads.filter(ref=>ref==='EXACT-A').length`);
   await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:driver-a"]').click()`);
   await wait(`document.activeElement?.closest('[data-admin-multi-driver-active-job]')?.getAttribute('data-admin-multi-driver-active-job')==='EXACT-A'`,'exact driver message card focused');
   assert.equal(await evaluate(`Array.from(document.querySelector('[data-admin-multi-driver-active-job="EXACT-A"]').querySelectorAll('button')).find(e=>e.textContent==='Driver').getAttribute('aria-pressed')`),'true');
+  assert.equal(await evaluate(`window.qaStatusReads.filter(ref=>ref==='EXACT-A').length`),activeStatusReads,'Active Reply must not reset existing Driver Reports/JC state');
   await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:driver-a"] [data-admin-app-notification-action="read"]').click()`);
   await wait(`!document.querySelector('[data-admin-app-notification-feed-row-id="message:driver-a"]')`,'Done hides attention only');
   assert.ok(await evaluate(`document.querySelector('[data-admin-multi-driver-active-job="EXACT-A"] [data-admin-active-job-message-history]').innerText.includes('Please confirm pickup point.')`));
@@ -88,5 +133,5 @@ try {
   await wait(`document.body.innerText.includes('Incoming messages could not be loaded')`,'read failure visible');
   assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="existing"]')!==null`),true);
   assert.deepEqual(await evaluate('window.qaWrites'),[]);assert.deepEqual(errors,[]);
-  console.log('Browser passed: one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, no sends or source-history/status writes.');
+  console.log('Browser passed: one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, one isolated synthetic send, replacement/JC/read-failure gates, no external sends or source-history/status writes.');
 }finally{if(client)await client.close();await terminateChildProcess(chrome);await rm(profile,{recursive:true,force:true});}

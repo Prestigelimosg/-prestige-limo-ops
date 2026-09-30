@@ -140,7 +140,8 @@ const readSenders=new Function('parseCustomerDriverAppNotificationLoadParams','g
 const incomingParams=new URLSearchParams({scope:'admin_incoming_messages'});
 const getSender=async()=> (await readSenders(incomingParams,{})).data.notifications[0];
 let sender=await getSender();assert.equal(sender.sender_driver_name,'Original Driver');assert.equal(sender.sender_driver_plate,'OLD123');
-assert.deepEqual(Object.keys(sender).sort(),['id','booking_reference','safe_context','sender_driver_name','sender_driver_plate'].sort(),'No link ID, driver ID, token or context returned');
+assert.deepEqual(Object.keys(sender).sort(),['id','booking_reference','safe_context','sender_driver_name','sender_driver_plate','reply_driver_job_link_id','sender_driver_id'].sort(),'Only bounded Admin reply identity added; no token or raw context returned');
+assert.equal(sender.reply_driver_job_link_id,linkId);assert.equal(sender.sender_driver_id,15);
 for(const rows of [[],[oldLink,oldLink],[{...oldLink,booking_reference:'OTHER'}],[{...oldLink,driver_id:null}],[{...oldLink,acknowledged_at:null}],[{...oldLink,acknowledged_at:'2026-09-30T00:00:00Z'}],[{...oldLink,sender_name:' '}],[{...oldLink,sender_plate:'X'.repeat(81)}]]) {linkRows=rows;sender=await getSender();assert.equal(sender.sender_driver_name,null);assert.equal(sender.sender_driver_plate,null);}
 linkRows=[oldLink];linkFailure=true;assert.equal((await getSender()).sender_driver_name,null);linkFailure=false;linkThrow=true;assert.equal((await getSender()).sender_driver_name,null);linkThrow=false;
 sourceRows=[{...notification,created_at:'invalid'}];assert.equal((await getSender()).sender_driver_name,null);
@@ -148,3 +149,47 @@ for(const override of [{actor_role:'customer'},{source_surface:'admin_api'},{wor
 sourceRows=[notification,{...notification,id:'second'}];senderReads.length=0;await getSender();assert.equal(senderReads.filter(t=>t==='driver_job_links').length,1,'Batch unique links per bounded page');
 assert.equal(JSON.stringify(notification),JSON.stringify(sourceRows[0]),'Read must not rewrite history');
 console.log('Exact-link sender isolation, reassignment safety, failed/missing/ambiguous evidence, bounded read and private-field exclusion passed.');
+
+// Upcoming replies reuse the one composer without broadening active-job/map eligibility.
+const replyStart=page.indexOf('  const adminIncomingReplyNotification =');
+const replyEnd=page.indexOf('  const liveDispatchMapEligibleBookings =',replyStart);
+assert.ok(replyStart>0 && replyEnd>replyStart);
+const selectReply=new Function('adminAppNotificationReadState','adminIncomingReplyNotificationId','cleanReferenceText','operationalBookings','getActiveJobBookingReference','bookingRecordIsDispatchActiveJobsMonitorEligible','bookingRecordIsCompletedStatus','bookingRecordIsCancelledStatus','bookingRecordPickupDateTimeMs','currentTimeMs','bookingRecordIsInsideActiveJobMonitorWindow','bookingRecordStatusValues',compile(page.slice(replyStart,replyEnd))+';return adminIncomingReplyBooking;');
+const now=Date.now();
+const upcoming={booking_reference:'UPCOMING',pickup:now+18*3600000,driver_id:7};
+const notice={id:'message:future',booking_reference:'UPCOMING',workflow_area:'admin_incoming_job_message',safe_context:{direction:'driver_to_admin',driver_job_link_id:'link-future',sender_driver_id:7}};
+const choose=(jobs=[upcoming],alert=notice)=>selectReply({notifications:[alert]},'message:future',clean,jobs,b=>b.booking_reference,b=>Boolean(b.driver_id),b=>b.status==='completed',b=>['cancelled','archived','declined'].includes(b.status),b=>b.pickup,now,b=>now>=b.pickup-3600000&&now<=b.pickup+86400000,b=>[b.status]);
+assert.equal(choose(),upcoming);
+for(const jobs of [[],[upcoming,upcoming],[{...upcoming,driver_id:null}],[{...upcoming,driver_id:8}],[{...upcoming,status:"archived"}],[{...upcoming,status:"declined"}],[{...upcoming,status:'completed'}],[{...upcoming,status:'cancelled'}],[{...upcoming,pickup:now+1800000}],[{...upcoming,pickup:now-3600000}]]) assert.equal(choose(jobs),null);
+assert.equal(choose([upcoming],{...notice,safe_context:{direction:'customer_to_driver'}}),null,'Upcoming Customer reply scope remains unchanged');
+assert.equal(choose([upcoming],{...notice,safe_context:{direction:'driver_to_admin'}}),null,'Missing exact sender link fails closed');
+assert.equal((page.match(/data-admin-active-job-driver-message-input="true"/g)||[]).length,1);
+assert.ok(page.includes('renderAdminJobMessages(activeJobBooking, activeJobDriverMessagingClosed)'));
+assert.ok(page.includes('.filter((bookingRecord) => bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs))'));
+
+// Execute the actual established sender with the optional upcoming-reply boundary.
+const sendStart=page.indexOf('  async function sendAdminTodayJobMessage(');
+const sendEnd=page.indexOf('  function renderAdminJobMessages(',sendStart);
+let sendState, posts, link, reports, candidate;
+const send=new Function('cleanReferenceText','clean','adminTodayJobDriverMessageStates','setAdminTodayJobDriverMessageStates','fetch','adminDriverJobLinksApiPath','adminLegacyDataPurpose','adminCustomerDriverAppNotificationsApiPath','adminIncomingReplyBooking','adminIncomingReplyReference','loadAdminDriverJobStatusRead','adminDriverJobStatusTimeLabel','refreshAdminTodayJobMessageHistory',compile(page.slice(sendStart,sendEnd))+';return sendAdminTodayJobMessage;');
+async function tryReply(overrides={}) {
+ sendState={UPCOMING:{audience:'driver',draft:'Please meet at the main lobby.',status:'idle'}};posts=[];
+ link={id:'link-future',booking_reference:'UPCOMING',link_status:'active',revoked_at:null,expires_at:new Date(now+86400000).toISOString(),safe_summary:{acknowledged:true},...overrides.link};
+ reports=overrides.reports||{statuses:[]};candidate=overrides.noBooking?null:upcoming;
+ const action=send(clean,clean,sendState,fn=>sendState=fn(sendState),async(url,init)=>{
+  if(init.method==='GET')return Response.json({ok:true,links:[link]});
+  posts.push(JSON.parse(init.body));return Response.json({ok:true,notification:{delivery_surface:'driver_app',booking_reference:'UPCOMING'}});
+ },'/links','admin-booking-persistence','/messages',candidate,'UPCOMING',async()=>{if(overrides.readFailed)throw Error('Report read unavailable');return reports;},()=> '1200hrs SGT',()=>{});
+ await action('UPCOMING','link-future');return posts;
+}
+assert.equal((await tryReply()).length,1);
+assert.equal(posts[0].driver_job_link_id,'link-future');assert.equal(posts[0].booking_reference,'UPCOMING');
+assert.equal(posts[0].delivery_surface,'driver_app');assert.equal(posts[0].workflow_area,'admin_driver_job_messages');
+for(const input of [{link:{id:'replacement-link'}},{link:{booking_reference:'OTHER'}},{link:{link_status:'revoked'}},{link:{revoked_at:new Date().toISOString()}},{link:{expires_at:'bad'}},{link:{expires_at:new Date(now-1).toISOString()}},{link:{safe_summary:{acknowledged:false}}},{reports:{statuses:[{status_value:'completed'}]}},{readFailed:true},{noBooking:true}]) {
+ assert.equal((await tryReply(input)).length,0,JSON.stringify(input));assert.equal(sendState.UPCOMING.status,'error');
+}
+console.log('Upcoming reply passed: exact unique booking, one reused composer, unchanged active window, current acknowledged link, expiry/replacement/JC/read-failure protection, same private sender.');
+
+const safeProjection=persistence.slice(persistence.indexOf('function toSafeRecord('),persistence.indexOf('function toAdminSafeRecord('));
+assert.ok(!safeProjection.includes('reply_driver_job_link_id') && !safeProjection.includes('sender_driver_id'), 'Public projections never gain Admin reply identity');
+linkRows=[];sourceRows=[notification];sender=await getSender();assert.equal(sender.reply_driver_job_link_id,null);assert.equal(sender.sender_driver_id,null);

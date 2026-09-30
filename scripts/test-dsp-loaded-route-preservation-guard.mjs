@@ -67,6 +67,24 @@ builderBindings.booking.dropoff = 'Changed destination';
 assert.equal(build().ok, false);
 builderBindings.booking.dropoff = base.dropoff_location;
 
+// Driver-only Remark must follow the exact saved form into the existing posting action.
+loaded.form.manualExtraChargesNote = "  Wait   at the lobby  ";
+assert.equal(build().ok, false, "Unsaved remark must not be posted");
+base.driver_remark = "Wait at the lobby";
+assert.equal(api.bookingRecordToOperationalFormFields(base).manualExtraChargesNote, base.driver_remark);
+assert.equal(build().data.driver_job_payload.driver_remark, base.driver_remark, "Posting normalizes the saved remark consistently");
+loaded.form.manualExtraChargesNote = "Use the side entrance";
+assert.equal(build().ok, false, "An unpersisted amendment must remain blocked");
+base.driver_remark = "Use the side entrance";
+assert.equal(build().data.driver_job_payload.driver_remark, base.driver_remark);
+loaded.form.manualExtraChargesNote = " ";
+assert.equal(build().ok, false, "Clearing must be saved before posting");
+base.driver_remark = null;
+assert.equal(build().ok, true);
+assert.equal(Object.hasOwn(build().data.driver_job_payload, "driver_remark"), false);
+assert.equal(api.bookingRecordToOperationalFormFields({...base, driver_remark: undefined}).manualExtraChargesNote, "", "Another booking without a remark loads blank");
+
+
 // Render the actual existing route-extras JSX, including its service conditions.
 let section;
 function visit(node) {

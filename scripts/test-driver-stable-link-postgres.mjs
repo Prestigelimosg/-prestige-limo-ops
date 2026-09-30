@@ -199,7 +199,7 @@ for (const role of ['anon','authenticated']) {
 await db.exec("alter table bookings add column remarks text; delete from driver_job_links; delete from customer_driver_app_notification_outbox;");
 const remarkPayload={...payload,driver_remark:'Wait at the hotel lobby'};
 await assert.rejects(call(remarkPayload),/safe job fields/i);
-await db.exec(await readFile('supabase/migrations/20260930021353_driver_job_remark_payload.sql','utf8'));
+await db.exec(await readFile('supabase/migrations/20260930024457_driver_job_remark_payload.sql','utf8'));
 await assert.rejects(call(remarkPayload),/Save the Driver Remark/i);
 await db.query("update bookings set remarks=$1",['prestige_driver_remark_v1:Wait at the hotel lobby']);
 const remarkFirst=await call(remarkPayload,displayHash(remarkPayload));

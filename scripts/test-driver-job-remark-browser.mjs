@@ -7,7 +7,7 @@ import path from 'node:path';
 import {mapBookingToSafeDriverJobPayload} from '../lib/driver-job-link.ts';
 import {createChromeClient,waitForChromeDebugPort,waitForChromePageTarget,waitForCondition,terminateChildProcess} from './browser-test-helpers.mjs';
 const origin=process.env.APP_URL||'http://127.0.0.1:3198';
-assert.ok(['127.0.0.1','localhost'].includes(new URL(origin).hostname),'Local server only');
+assert.ok(['127.0.0.1','localhost'].includes(new URL(origin).hostname) || (process.env.PRESTIGE_REMARK_DEPLOYED_UI_CHECK === '1' && origin === 'https://app.prestigelimo.sg'), 'Local or explicitly selected deployed UI only; APIs remain intercepted');
 const profile=await mkdtemp(path.join(os.tmpdir(),'remark-browser-'));
 const port=Number(process.env.CHROME_DEBUG_PORT||9438);
 const chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--disable-gpu','--disable-background-networking','--no-first-run',`--user-data-dir=${profile}`,`--remote-debugging-port=${port}`,'about:blank'],{stdio:'ignore'});

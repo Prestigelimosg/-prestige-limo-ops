@@ -17,6 +17,7 @@ const safeApiLeakPattern =
 const unsafeInvoiceDraftLeakPattern =
   /contact_phone|contact_email|passenger|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice_number|final_invoice|issued_invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-app-notification-events.ts",
   "lib/admin-app-notification-persistence.ts",
   "lib/admin-monthly-invoice-draft-lock-enforcement.ts",

@@ -15,6 +15,7 @@ const unsafeSavedBookingsLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_SAVED_BOOKINGS_SENTINEL|mock-admin-customer-saved-bookings-session-token|customer-saved-bookings-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-customer-saved-bookings-read.ts",
   "lib/admin-saved-booking-read.ts",
   "lib/admin-booking-persistence.ts",

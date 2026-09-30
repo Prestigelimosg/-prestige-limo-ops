@@ -18,6 +18,7 @@ const safeApiLeakPattern =
 const unsafeTripCandidateLeakPattern =
   /contact_phone|contact_email|passenger|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice_number|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-monthly-invoice-draft-trip-candidates.ts",
   "lib/admin-monthly-billing-grouping-read.ts",
   "lib/admin-booking-supabase-adapter.ts",

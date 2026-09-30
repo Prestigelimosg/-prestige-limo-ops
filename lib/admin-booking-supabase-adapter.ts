@@ -1,4 +1,5 @@
 import "server-only";
+import { encodeDriverRemark, decodeDriverRemark } from "./driver-job-remark";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -144,15 +145,15 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, customer_special_request, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, parser_source_reference, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, remarks, customer_special_request, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, parser_source_reference, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingCurrentLoadSelectWithoutPublicReference =
   adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, remarks, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutPublicReference =
   adminBookingFoundationLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelectWithoutDriver =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, remarks, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutDriverOrPublicReference =
   adminBookingFoundationLoadSelectWithoutDriver.replace("public_booking_reference, ", "");
 
@@ -1108,6 +1109,7 @@ function bookingToDbRow(
     driver_plate_number: textOrNull(booking.driver_plate_number),
     pax_count: integerOrNull(booking.pax_count),
     luggage_count: luggageCountOrNull(booking.luggage_count),
+    ...(Object.prototype.hasOwnProperty.call(booking, "driver_remark") ? { remarks: encodeDriverRemark(booking.driver_remark) } : {}),
     ...(customerSpecialRequest
       ? { customer_special_request: customerSpecialRequest }
       : {}),
@@ -1173,6 +1175,7 @@ function bookingToFoundationDbRow(
     driver_plate_number: currentRow.driver_plate_number,
     pax_count: integerOrNull(booking.pax_count),
     luggage_count: currentRow.luggage_count,
+    ...(Object.prototype.hasOwnProperty.call(currentRow, "remarks") ? { remarks: currentRow.remarks } : {}),
     ...(currentRow.customer_special_request
       ? { customer_special_request: currentRow.customer_special_request }
       : {}),
@@ -1350,6 +1353,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     driver_plate_number: textOrNull(row.driver_plate_number),
     pax_count: integerOrNull(row.pax_count),
     luggage_count: luggageCountOrNull(row.luggage_count),
+    ...(decodeDriverRemark(row.remarks) ? { driver_remark: decodeDriverRemark(row.remarks) } : {}),
     customer_special_request: customerSpecialRequestOrNull(
       row.customer_special_request,
     ),

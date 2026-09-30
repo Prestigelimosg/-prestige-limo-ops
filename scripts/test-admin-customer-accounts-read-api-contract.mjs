@@ -15,6 +15,7 @@ const unsafeAccountsLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_ACCOUNTS_SENTINEL|mock-admin-customer-accounts-session-token|customer-accounts-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-customer-account-title.ts",
   "lib/admin-customer-accounts-read.ts",
   "lib/admin-customer-company-booker-profile.ts",

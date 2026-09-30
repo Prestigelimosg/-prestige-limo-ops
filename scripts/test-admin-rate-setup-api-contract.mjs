@@ -15,6 +15,7 @@ const unsafeSuccessFieldPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_ADMIN_RATE_SETUP_SENTINEL|mock-admin-rate-setup-session-token|admin-rate-setup-contract\.supabase\.co|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/hourly-billing.ts",
   "lib/pricing.ts",
   "lib/admin-rate-setup-read.ts",

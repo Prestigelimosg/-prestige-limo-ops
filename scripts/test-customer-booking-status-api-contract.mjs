@@ -17,6 +17,7 @@ const safeApiLeakPattern =
 const unsafeCustomerStatusLeakPattern =
   /admin_internal_status|contact_phone|contact_email|passenger_phone|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|session_token|raw_token|token_hash|driver_token/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/customer-booking-status-read.ts",
   "lib/admin-booking-persistence.ts",
   "app/api/customer-booking-statuses/route.ts",

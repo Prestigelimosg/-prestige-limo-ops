@@ -3187,7 +3187,7 @@ async function runChromeTest() {
       assert.equal(
         state.sectionText.includes("Route Extras & Child Seat") &&
           state.amountLabel.includes("Extra Charges") &&
-          state.noteLabel.includes("Extra Charges note / reason"),
+          state.noteLabel.includes("Remark"),
         true,
         `${viewport.label}: expected manual Extra Charges amount and note in Route Extras & Child Seat`,
       );

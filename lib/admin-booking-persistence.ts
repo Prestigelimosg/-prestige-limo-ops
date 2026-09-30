@@ -1,3 +1,4 @@
+import { normalizeDriverRemark } from "./driver-job-remark";
 import {
   createAdminBookingThroughSupabaseAdapter,
   loadAdminBookingByReferenceThroughSupabaseAdapter,
@@ -36,6 +37,7 @@ export type AdminBookingRecordInput = {
   driver_plate_number?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
+  driver_remark?: string | null;
   customer_special_request?: string | null;
   vehicle_type_or_category?: string | null;
   customer_facing_status?: string | null;
@@ -268,6 +270,7 @@ const bookingFields = new Set([
   "driver_plate_number",
   "pax_count",
   "luggage_count",
+  "driver_remark",
   "customer_special_request",
   "vehicle_type_or_category",
   "customer_facing_status",
@@ -611,6 +614,7 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     driver_plate_number: textOrNull(record.driver_plate_number),
     pax_count: integerOrNull(record.pax_count),
     luggage_count: integerOrNull(record.luggage_count),
+    ...(hasOwn(record, "driver_remark") ? { driver_remark: normalizeDriverRemark(record.driver_remark) || null } : {}),
     customer_special_request:
       customerBookingSpecialRequest(record.customer_special_request) ?? null,
     vehicle_type_or_category: textOrNull(record.vehicle_type_or_category),
@@ -937,6 +941,10 @@ function parseAdminBookingOperationalPayload(
       status: 400,
       error: "Malformed admin booking service_items rejected.",
     };
+  }
+
+  if (hasOwn(bookingRecord, "driver_remark") && normalizeDriverRemark(bookingRecord.driver_remark) === null) {
+    return { ok: false, status: 400, error: "Remark must contain only driver instructions, up to 500 characters." };
   }
 
   if (

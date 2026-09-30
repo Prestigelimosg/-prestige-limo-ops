@@ -13,6 +13,7 @@ const supabaseUrlSentinel = "https://admin-saved-booking-read-contract.supabase.
 const unsafeResponsePattern =
   /SUPABASE_SERVICE_ROLE_KEY_ADMIN_SAVED_BOOKING_READ_SENTINEL|mock-admin-saved-booking-read-session-token|admin-saved-booking-read-contract\.supabase\.co|SHOULD_NOT_LEAK|parser_debug|raw_ai|parser_prompt|internal_admin_note|admin_finance|mock_archive|mock_qa|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-saved-booking-create.ts",
   "lib/admin-saved-booking-delete.ts",
   "lib/admin-saved-booking-read.ts",
@@ -92,7 +93,7 @@ function transpileTypescript(source, filename) {
       target: ts.ScriptTarget.ES2022,
     },
     fileName: filename,
-  }).outputText;
+  }).outputText.replace(/require\("([^\"]+)\.ts"\)/g, 'require("$1.js")');
 }
 
 async function writeHarnessFile(tempDir, relativePath) {

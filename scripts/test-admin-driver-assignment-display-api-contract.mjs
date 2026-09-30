@@ -16,6 +16,7 @@ const unsafeLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_DRIVER_ASSIGNMENT_DISPLAY_SENTINEL|mock-admin-driver-assignment-display-session-token|driver-assignment-display-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-driver-assignment-display.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",

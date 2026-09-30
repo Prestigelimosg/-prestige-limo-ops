@@ -15,6 +15,7 @@ const supabaseUrlSentinel =
 const unsafeResponsePattern =
   /SUPABASE_SERVICE_ROLE_KEY_ADMIN_SAVED_BOOKING_DRIVER_ASSIGNMENT_SENTINEL|mock-admin-saved-booking-driver-assignment-session-token|admin-saved-booking-driver-assignment-contract\.supabase\.co|customer_price|customer_rate|paynow|invoice|payment|pdf|billing|finance|parser_debug|raw_ai|parser_prompt|internal_admin_note|admin_finance|mock_archive|mock_qa|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-saved-booking-driver-assignment.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-dispatcher-auth-boundary.ts",

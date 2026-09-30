@@ -15,6 +15,7 @@ const unsafeLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_COMPANIES_IDENTITY_SENTINEL|mock-admin-companies-crm-identity-session-token|companies-identity-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-companies-crm-identity.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",

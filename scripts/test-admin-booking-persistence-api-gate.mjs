@@ -19,6 +19,7 @@ const unsafeFieldLeakPattern =
 const safeResponseLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_GATE_SENTINEL|mock-admin-dispatcher-session-token|gate-sentinel\.supabase\.co|service_role|server-only|server_only|stack|sql|supabase internals|createClient|secret|key/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",

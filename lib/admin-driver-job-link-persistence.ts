@@ -1,4 +1,5 @@
 import "server-only";
+import { decodeDriverRemark, normalizeDriverRemark } from "./driver-job-remark";
 
 import { createHash, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -47,6 +48,7 @@ export type AdminDriverJobLinkSafePayload = {
   route?: string;
   status?: string;
   waypoints?: string[];
+  driver_remark?: string;
 };
 
 export type AdminDriverJobLinkRecord = {
@@ -173,6 +175,7 @@ const allowedSafePayloadFields = new Set([
   "route",
   "status",
   "waypoints",
+  "driver_remark",
 ]);
 const allowedRevokeFields = new Set(["driver_job_link_id"]);
 const allowedActionFields = new Set(["action", "booking_reference", "driver_job_link_id"]);
@@ -424,7 +427,9 @@ function safeDriverJobPayload(value: unknown): AdminDriverJobLinkSafePayload | n
     return null;
   }
 
-  const payload: AdminDriverJobLinkSafePayload = {};
+  const remark = normalizeDriverRemark(record.driver_remark);
+  if (remark === null) return null;
+  const payload: AdminDriverJobLinkSafePayload = remark ? { driver_remark: remark } : {};
   const textFields: Array<keyof AdminDriverJobLinkSafePayload> = [
     "assigned_driver_contact",
     "assigned_driver_name",
@@ -552,6 +557,7 @@ function savedBookingMatchesDriverJobPayload(
 
   return (
     Object.keys(bookingRecord).length > 0 &&
+    decodeDriverRemark(bookingRecord.remarks) === (normalizeDriverRemark(payload.driver_remark) || "") &&
     comparisons.every(
       ([savedValue, linkValue]) =>
         canonicalOperationalText(savedValue) === canonicalOperationalText(linkValue),
@@ -1097,7 +1103,7 @@ export async function loadAdminDriverJobLinks(
 
 async function prepareComboLinkInputs(client: SupabaseClient, refs: string[]) {
   const read = await client.from("bookings").select(
-    "booking_reference,driver_id,updated_at,service_type,pickup_at,pickup_location,dropoff_location,route_summary,passenger_name,flight_no,driver_name,driver_contact,driver_plate_number,vehicle_type_or_category,booking_route_points(point_type,sequence,location)",
+    "booking_reference,remarks,driver_id,updated_at,service_type,pickup_at,pickup_location,dropoff_location,route_summary,passenger_name,flight_no,driver_name,driver_contact,driver_plate_number,vehicle_type_or_category,booking_route_points(point_type,sequence,location)",
   ).in("booking_reference",refs);
   if (read.error || asArray(read.data).length !== refs.length) throw new Error("Combo trips could not be loaded.");
   const inputs = [];
@@ -1107,6 +1113,7 @@ async function prepareComboLinkInputs(client: SupabaseClient, refs: string[]) {
     if (!pickup) throw new Error("A saved combo pickup time is unavailable.");
     const routePoints = asArray(row.booking_route_points).map(asRecord).sort((a,b)=>Number(a.sequence)-Number(b.sequence));
     const payload = safeDriverJobPayload({
+      driver_remark: decodeDriverRemark(row.remarks),
       assigned_driver_name: row.driver_name || "", assigned_driver_contact: row.driver_contact || "",
       assigned_driver_plate: row.driver_plate_number || "", assigned_driver_vehicle_model: row.vehicle_type_or_category || "",
       booking_type: row.service_type || "", pickup_date: pickup.slice(0,10),pickup_time:pickup.slice(11),
@@ -1162,7 +1169,7 @@ export async function createAdminDriverJobLink(
   const { data: operationalBookingData, error: operationalBookingError } = await clientResult.data
     .from("bookings")
     .select(
-      "driver_id, updated_at, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status",
+      "driver_id, updated_at, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, remarks",
     )
     .eq("booking_reference", input.booking_reference)
     .maybeSingle();

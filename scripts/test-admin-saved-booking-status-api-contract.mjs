@@ -13,6 +13,7 @@ const supabaseUrlSentinel = "https://admin-saved-booking-status-contract.supabas
 const unsafeResponsePattern =
   /SUPABASE_SERVICE_ROLE_KEY_ADMIN_SAVED_BOOKING_STATUS_SENTINEL|mock-admin-saved-booking-status-session-token|admin-saved-booking-status-contract\.supabase\.co|customer_price|customer_rate|driver_payout|paynow|invoice|payment|pdf|billing|payout|finance|parser_debug|raw_ai|parser_prompt|internal_admin_note|admin_finance|mock_archive|mock_qa|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/customer-portal-saved-bookings-adapter.ts",
   "lib/admin-saved-booking-status-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",

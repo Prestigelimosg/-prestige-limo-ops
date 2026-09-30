@@ -3529,7 +3529,7 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   extraStopCount: "Extra stops",
   extraStopLocation: "Extra stop location",
   manualExtraCharges: "Extra Charges",
-  manualExtraChargesNote: "Extra Charges note / reason",
+  manualExtraChargesNote: "Remark",
   driverId: "Driver",
   driverName: "Driver Name",
   driverContact: "Driver Contact",
@@ -46020,12 +46020,12 @@ export default function Home() {
                   </select>
                 </label>
                 <label className="sm:col-span-2 lg:col-span-3">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Extra Charges note / reason</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Remark</span>
                   <input
                     className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     data-manual-extra-charges-note="true"
                     onChange={(event) => update("manualExtraChargesNote", event.target.value)}
-                    placeholder="Add manual extra charge reason, if any"
+                    placeholder="Admin remark — not saved or sent to driver"
                     value={booking.manualExtraChargesNote}
                   />
                 </label>
@@ -49815,7 +49815,7 @@ export default function Home() {
                     </p>
                   </div>
                   <div className="rounded-md border border-amber-100 bg-white/65 px-2.5 py-2">
-                    <p className="text-[11px] font-semibold uppercase text-amber-800">Manual Extra Charges note</p>
+                    <p className="text-[11px] font-semibold uppercase text-amber-800">Remark</p>
                     <p className="mt-1 break-words text-slate-950" data-manual-extra-charges-review-note="true">
                       {manualExtraChargesNotePreview}
                     </p>

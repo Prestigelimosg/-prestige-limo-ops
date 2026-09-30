@@ -1859,7 +1859,7 @@ function assertBookingUiState(state) {
   assert.match(state.visibleText, /Manual staff entry only/);
   assert.equal(state.manualExtraChargesReviewPreview.visible, true);
   assert.match(state.manualExtraChargesReviewPreview.text, /Manual Extra Charges/i);
-  assert.match(state.manualExtraChargesReviewPreview.text, /Manual Extra Charges note/i);
+  assert.match(state.manualExtraChargesReviewPreview.text, /Remark/i);
   assert.equal(state.manualExtraChargesReviewPreview.amount, "$0.00");
   assert.equal(state.manualExtraChargesReviewPreview.note, "Blank");
   assert.deepEqual(state.manualExtraChargesReviewPreview.buttons, []);
@@ -4264,7 +4264,7 @@ async function runChromeTest() {
         extraStopLocation: fieldValue("Extra stop location"),
         extraStopCount: fieldValue("Extra Stops"),
         manualExtraCharges: fieldValue("Extra Charges"),
-        manualExtraChargesNote: fieldValue("Extra Charges note / reason"),
+        manualExtraChargesNote: fieldValue("Remark"),
         dropoff:
           fieldValue("Drop-off (optional for DSP)") ||
           fieldValue("Drop-off"),
@@ -5492,7 +5492,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(manualExtraChargePreviewDefaultState.visible, true);
     assert.match(manualExtraChargePreviewDefaultState.text, /Manual Extra Charges/i);
-    assert.match(manualExtraChargePreviewDefaultState.text, /Manual Extra Charges note/i);
+    assert.match(manualExtraChargePreviewDefaultState.text, /Remark/i);
     assert.equal(manualExtraChargePreviewDefaultState.amount, "$0.00");
     assert.equal(manualExtraChargePreviewDefaultState.note, "Blank");
     assert.deepEqual(
@@ -5624,7 +5624,7 @@ async function runChromeTest() {
     const manualExtraChargeReason = "Airport parking fee test only";
     await setFieldValueByLabel("Extra Charges", manualExtraChargeAmount, "manual Extra Charges amount");
     await setFieldValueByLabel(
-      "Extra Charges note / reason",
+      "Remark",
       manualExtraChargeReason,
       "manual Extra Charges note",
     );
@@ -5684,7 +5684,7 @@ async function runChromeTest() {
     assert.equal(manualExtraChargeEditedState.previewAmount, "$47.25");
     assert.equal(manualExtraChargeEditedState.previewNote, manualExtraChargeReason);
     assert.match(manualExtraChargeEditedState.previewText, /Manual Extra Charges/i);
-    assert.match(manualExtraChargeEditedState.previewText, /Manual Extra Charges note/i);
+    assert.match(manualExtraChargeEditedState.previewText, /Remark/i);
     assert.deepEqual(
       manualExtraChargeEditedState.previewButtons,
       [],
@@ -5745,7 +5745,7 @@ async function runChromeTest() {
 
     await resetManualExtraChargesCalls();
     await setFieldValueByLabel("Extra Charges", "", "manual Extra Charges amount reset");
-    await setFieldValueByLabel("Extra Charges note / reason", "", "manual Extra Charges note reset");
+    await setFieldValueByLabel("Remark", "", "manual Extra Charges note reset");
     await waitForManualExtraChargesNetworkQuiet("after clearing manual Extra Charges");
 
     const manualExtraChargeResetState = await evaluate(`(() => {

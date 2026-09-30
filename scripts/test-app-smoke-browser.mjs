@@ -3602,7 +3602,7 @@ async function runChromeTest() {
               extraStopLocation: getField("Extra stop location"),
               flight: getField("Flight number"),
               manualExtraCharges: getField("Extra Charges"),
-              manualExtraChargesNote: getField("Extra Charges note / reason"),
+              manualExtraChargesNote: getField("Remark"),
               name: getField("Passenger name"),
               pax: getField("Pax"),
               pickup: getField("Pickup"),

@@ -126,6 +126,8 @@ export type CustomerDriverAppNotificationSafeRecord = Omit<
 export type AdminCustomerDriverAppNotificationSafeRecord =
   CustomerDriverAppNotificationSafeRecord &
     Pick<CustomerDriverAppNotificationRecord, "actor_role"> & {
+      reply_driver_job_link_id?: string | null;
+      sender_driver_id?: number | null;
       sender_driver_name?: string | null;
       sender_driver_plate?: string | null;
     };
@@ -4351,7 +4353,9 @@ export async function loadCustomerDriverAppNotifications(
             Number.isFinite(acknowledgedAt) && Number.isFinite(messageAt) && acknowledgedAt <= messageAt;
           const name = verified ? safeText(link.sender_name, 120) : null;
           const plate = verified ? safeText(link.sender_plate, 80) : null;
-          return { ...safeRecord, sender_driver_name: name && plate ? name : null,
+          return { ...safeRecord, reply_driver_job_link_id: verified ? record.driver_job_link_id : null,
+            sender_driver_id: verified ? Number(link.driver_id) : null,
+            sender_driver_name: name && plate ? name : null,
             sender_driver_plate: name && plate ? plate : null };
         }),
         pagination: buildCountedPagination(count || 0, params.limit, params.page),

@@ -12,7 +12,13 @@ const [app, persistence, adminRoute, customerRoute, driverRoute, ledger] = await
 
 const monitorStart = app.indexOf('aria-label="Active Assigned Jobs"');
 const monitorEnd = app.indexOf('data-dispatch-live-driver-map="true"', monitorStart);
-const monitor = app.slice(monitorStart, monitorEnd);
+const messageRendererStart = app.indexOf("  function renderAdminJobMessages(");
+const messageRendererEnd = app.indexOf("\n  const ", messageRendererStart);
+assert.ok(messageRendererStart > 0 && messageRendererEnd > messageRendererStart);
+const renderer = app.slice(messageRendererStart, messageRendererEnd);
+const monitor = app.slice(monitorStart, monitorEnd) + renderer;
+assert.ok(app.slice(monitorStart, monitorEnd).includes("renderAdminJobMessages(activeJobBooking, activeJobDriverMessagingClosed)"), "Active jobs must reuse the same guarded composer");
+assert.equal((app.match(/data-admin-active-job-driver-message-input="true"/g) || []).length, 1, "No second composer implementation");
 
 assert.notEqual(monitorStart, -1, "Missing Active Assigned Jobs reporting center.");
 assert.notEqual(monitorEnd, -1, "Missing Active Assigned Jobs map boundary.");

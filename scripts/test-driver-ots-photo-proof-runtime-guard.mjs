@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import ts from "typescript";
 
 const files = Object.fromEntries(
   await Promise.all(
@@ -230,4 +232,167 @@ assertExcludes(
   "migration unsafe fields",
 );
 
-console.log("driver OTS photo proof runtime guard passed");
+// Execute the real upload persistence and POST handler with every database,
+// storage and provider boundary intercepted. Never use live data or sends.
+function compile(source, imports) {
+  const exports = {};
+  const js = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function("require", "exports", js)((name) => {
+    assert.ok(Object.hasOwn(imports, name), `Unexpected dependency ${name}`);
+    return imports[name];
+  }, exports);
+  return exports;
+}
+
+const token = "synthetic-photo-link-token";
+const linkId = "11111111-1111-4111-8111-111111111111";
+const proofId = "22222222-2222-4222-8222-222222222222";
+const reference = "SYNTHETIC-PHOTO-A";
+const ackAt = new Date(Date.now() - 60_000).toISOString();
+const proof = {
+  id: proofId, booking_reference: reference, storage_bucket: "ots-photo-proofs",
+  storage_path: `bookings/${reference}/ots/synthetic.jpg`, content_type: "image/jpeg",
+  file_size_bytes: 4, photo_type: "ots", proof_status: "uploaded", uploaded_at: new Date().toISOString(),
+};
+const safeProof = {
+  booking_reference: reference, content_type: "image/jpeg", customerVisible: false,
+  external_send: false, file_size_bytes: 4, photo_type: "ots", proof_status: "uploaded",
+  uploaded_at: proof.uploaded_at,
+};
+let link, otsPresent, storageFails, insertFails, pushFails, calls;
+const reset = (context = {}) => {
+  link = {
+    id: linkId, booking_reference: reference, link_status: "active", revoked_at: null,
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    safe_link_context: {
+      driver_acknowledged_at: ackAt,
+      driver_job_payload: { driver_plate_number: " snp 9124s ", ...context },
+    },
+  };
+  otsPresent = true; storageFails = insertFails = pushFails = false; calls = [];
+};
+const client = {
+  from(table) {
+    assert.ok(["driver_job_links", "driver_job_status_events", "driver_ots_photo_proofs"].includes(table), "No new database read/writer for plate copy");
+    const filters = {};
+    const q = {
+      select() { return q; }, eq(key, value) { filters[key] = value; return q; },
+      order() { return q; }, limit() { return q; },
+      insert(row) {
+        assert.equal(table, "driver_ots_photo_proofs");
+        assert.equal(row.booking_reference, reference);
+        assert.equal(row.driver_job_link_id, linkId);
+        assert.equal(row.ots_status_event_id, "ots-event-a");
+        assert.ok(!JSON.stringify(row).includes("adminNotificationVehiclePlate"), "No notification metadata persisted in photo rows");
+        calls.push("proof-insert"); return q;
+      },
+      async maybeSingle() {
+        if (table === "driver_job_links") {
+          assert.equal(filters.token_hash, createHash("sha256").update(token).digest("hex"));
+          calls.push("link-read"); return { data: link, error: null };
+        }
+        assert.equal(table, "driver_job_status_events");
+        assert.equal(filters.booking_reference, reference);
+        assert.equal(filters.driver_job_link_id, linkId);
+        assert.equal(filters.status_value, "ots");
+        calls.push("ots-read"); return { data: otsPresent ? { id: "ots-event-a", status_value: "ots" } : null, error: null };
+      },
+      async single() {
+        assert.equal(table, "driver_ots_photo_proofs");
+        return { data: insertFails ? null : proof, error: insertFails ? { message: "synthetic failure" } : null };
+      },
+    };
+    return q;
+  },
+  storage: { from(bucket) {
+    assert.equal(bucket, "ots-photo-proofs");
+    return {
+      async upload(storagePath) {
+        assert.ok(storagePath.startsWith(`bookings/${reference}/ots/`));
+        calls.push("storage-upload"); return { error: storageFails ? {} : null };
+      },
+      async remove() { calls.push("failed-proof-storage-cleanup"); return { error: null }; },
+    };
+  } },
+};
+const savedEnv = { ...process.env };
+try {
+  process.env.SUPABASE_URL = "https://synthetic.invalid";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "synthetic-only";
+  const uploadHelper = compile(persistence, {
+    "server-only": {}, "@supabase/supabase-js": { createClient: () => client },
+    "./driver-job-link.ts": {
+      hashDriverJobLinkToken: (value) => createHash("sha256").update(value).digest("hex"),
+      isDriverJobLinkExpired: (value) => Date.parse(value) <= Date.now(),
+      isDriverJobLinkExpiryOutsideAllowedWindow: () => false,
+    },
+    "./driver-job-link-mode.ts": { productionDriverJobLinksConfigured: () => true },
+  });
+  const route = compile(driverRoute, {
+    "../../../../../lib/driver-job-link-contract.ts": {},
+    "../../../../../lib/driver-job-link-mode.ts": { isProductionDriverJobLinkMode: () => true },
+    "../../../../../lib/driver-job-link-mock-store.ts": {},
+    "../../../../../lib/driver-ots-photo-proof-persistence.ts": uploadHelper,
+    "../../../../../lib/admin-device-push-notification.ts": {
+      async sendAdminDevicePushAlert(event, options) {
+        assert.equal(event, "driver_ots_photo");
+        assert.ok(calls.includes("proof-insert"), "Push must follow saved proof");
+        calls.push({ event, options });
+        if (pushFails) throw Error("synthetic provider failure");
+      },
+    },
+  });
+  const request = () => {
+    const form = new FormData();
+    form.append("photo", new File([new Uint8Array([1, 2, 3, 4])], "synthetic.jpg", { type: "image/jpeg" }));
+    form.append("vehiclePlate", "FORGED999");
+    form.append("booking_reference", "OTHER-JOB");
+    return new Request("https://local.invalid/api/driver-job/synthetic/ots-photo", { method: "POST", body: form });
+  };
+  const post = () => route.POST(request(), { params: Promise.resolve({ token }) });
+  for (const plate of [" snp 9124s ", "SNL321U"]) {
+    reset({ driver_plate_number: plate });
+    const response = await post();
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, mode: "production", proof: safeProof, version: uploadHelper.driverOtsPhotoProofPersistenceVersion });
+    const pushes = calls.filter((call) => typeof call === "object");
+    assert.deepEqual(pushes, [{ event: "driver_ots_photo", options: { vehiclePlate: plate } }], "Photo alert must use only this acknowledged token's saved plate");
+    assert.deepEqual(calls.slice(0, 4), ["link-read", "ots-read", "storage-upload", "proof-insert"]);
+  }
+  for (const change of [
+    () => { delete link.safe_link_context.driver_acknowledged_at; },
+    () => { link.safe_link_context.driver_acknowledged_at = "invalid"; },
+    () => { link.safe_link_context.driver_acknowledged_at = new Date(Date.now() + 120_000).toISOString(); },
+    () => { delete link.safe_link_context.driver_job_payload.driver_plate_number; },
+    () => { link.safe_link_context.driver_job_payload.driver_plate_number = { plate: "SNP9124S" }; },
+  ]) {
+    reset(); change();
+    const response = await post();
+    assert.equal(response.status, 200, "Missing copy evidence cannot fail a saved photo");
+    assert.deepEqual(calls.filter((call) => typeof call === "object"), [{ event: "driver_ots_photo", options: { vehiclePlate: null } }]);
+    assert.deepEqual((await response.json()).proof, safeProof);
+  }
+  for (const [change, status] of [
+    [() => { link = null; }, 401],
+    [() => { link.revoked_at = ackAt; }, 403],
+    [() => { link.expires_at = ackAt; }, 410],
+    [() => { otsPresent = false; }, 409],
+    [() => { storageFails = true; }, 500],
+    [() => { insertFails = true; }, 503],
+  ]) {
+    reset(); change(); const response = await post();
+    assert.equal(response.status, status);
+    assert.equal(calls.filter((call) => typeof call === "object").length, 0, "No photo alert on rejected or unsaved uploads");
+  }
+  reset(); pushFails = true;
+  const response = await post();
+  assert.equal(response.status, 200, "Provider failure cannot roll back or fail a saved photo");
+  assert.deepEqual((await response.json()).proof, safeProof);
+} finally {
+  for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key];
+  Object.assign(process.env, savedEnv);
+}
+
+console.log("driver OTS photo proof runtime guard passed: exact saved plate, private response, upload-first and failure isolation");

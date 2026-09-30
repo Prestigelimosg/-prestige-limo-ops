@@ -210,7 +210,7 @@ assertExcludes(
 
 assertIncludes(
   driverOtsPhotoRouteSource,
-  ['sendAdminDevicePushAlert("driver_ots_photo")'],
+  ['sendAdminDevicePushAlert("driver_ots_photo", {', 'vehiclePlate: result.adminNotificationVehiclePlate'],
   "existing OTS photo success path",
 );
 
@@ -680,6 +680,41 @@ try {
     driver_otw: "OTW",
     driver_pob: "POB",
   };
+
+  for (const vehiclePlate of [" snp 9124s ", "SNL321U", undefined, "", "NO-PLATE", "<script>", "A".repeat(21) + "1", { plate: "SNP9124S" }]) {
+    let webPayload, nativePayload;
+    const valid = vehiclePlate === " snp 9124s " || vehiclePlate === "SNL321U";
+    const plate = vehiclePlate === "SNL321U" ? "SNL321U" : "SNP 9124S";
+    const photoAlert = await helper.sendAdminDevicePushAlert("driver_ots_photo", {
+      env: configuredEnv, vehiclePlate,
+      // Photo alerts must never become arbitrary message previews.
+      safeMessage: "Do not put this text in the photo alert",
+      loadedSubscriptionLoader: async () => [
+        { channel: "web", endpoint: "https://push.example.test/ots-photo", webSubscription: {
+          endpoint: "https://push.example.test/ots-photo", keys: { auth: "fake-auth", p256dh: "fake-key" },
+        } },
+        { channel: "native_ios", endpoint: "ExponentPushToken[ots-photo]", webSubscription: null },
+      ],
+      pushSender: async (_subscription, payload) => { webPayload = payload; },
+      nativePushSender: async (_token, payload) => { nativePayload = payload; },
+    });
+    assert.equal(photoAlert.ok, true);
+    assert.equal(photoAlert.provider_request_count, 2);
+    assert.equal(webPayload.title, "OTS photo received", "Browser/PWA photo title must remain unchanged even with a plate");
+    assert.equal(webPayload.body, approvedOperationalEvents.driver_ots_photo[1], "Browser/PWA photo body must remain unchanged even with a plate");
+    assert.equal(webPayload.url, "/");
+    assert.equal(webPayload.tag, "prestige-admin-driver-ots-photo");
+    assert.deepEqual(nativePayload, {
+      body: valid ? `${plate} sent an OTS photo.` : approvedOperationalEvents.driver_ots_photo[1],
+      data: { open_target: "/", type: "driver_ots_photo" },
+      priority: "high", sound: "default", title: "Prestige Limo Ops",
+    });
+    assertExcludes(JSON.stringify({ webPayload, nativePayload }), [
+      "passenger", "contact", "route", "private", "token", "photo_url", "storage_path",
+      "customer", "payout", "paynow", "billing", "payment", "invoice", "price", "internal note",
+      "Do not put this text",
+    ], "OTS-photo plate-only notification");
+  }
 
   for (const [eventType, statusLabel] of Object.entries(plateStatusEvents)) {
     let platePayload = null;

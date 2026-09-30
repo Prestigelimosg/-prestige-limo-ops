@@ -970,6 +970,8 @@ function safeNativePayload(
       ? `${plate} won Job ${publicReference}.`
       : plate && eventType === "driver_acknowledged"
       ? `Driver ${plate} acknowledged the job.`
+      : plate && eventType === "driver_ots_photo"
+      ? `${plate} sent an OTS photo.`
       : plate && statusLabel
         ? `${plate} reported ${statusLabel}.`
         : eventType === "driver_acknowledged"

@@ -106,7 +106,9 @@ export async function POST(request: Request, context: DriverJobOtsPhotoRouteCont
     }
 
     try {
-      await sendAdminDevicePushAlert("driver_ots_photo");
+      await sendAdminDevicePushAlert("driver_ots_photo", {
+        vehiclePlate: result.adminNotificationVehiclePlate,
+      });
     } catch {
       // A saved proof must not fail because Admin device push is unavailable.
     }

@@ -28,6 +28,7 @@ export type DriverOtsPhotoProofUploadResult =
   | {
       ok: true;
       proof: DriverOtsPhotoProofSafeRecord;
+      adminNotificationVehiclePlate: string | null;
       version: typeof driverOtsPhotoProofPersistenceVersion;
     }
   | {
@@ -542,9 +543,22 @@ export async function uploadDriverOtsPhotoProofForToken({
     return uploadBlockedResult("not_configured");
   }
 
+  // Server-only notification context from this upload's acknowledged Job Link.
+  // Keep it outside the public proof and never take it from request form fields.
+  const context = resolvedLink.link.safe_link_context;
+  const acknowledgedAt = safeDateText(context.driver_acknowledged_at);
+  const savedPayload = asRecord(context.driver_job_payload);
+  const adminNotificationVehiclePlate =
+    acknowledgedAt &&
+    new Date(acknowledgedAt).getTime() <= new Date(proofRow.uploaded_at).getTime() &&
+    typeof savedPayload.driver_plate_number === "string"
+      ? savedPayload.driver_plate_number
+      : null;
+
   return {
     ok: true,
     proof: safeDriverProofRecord(proofRow),
+    adminNotificationVehiclePlate,
     version: driverOtsPhotoProofPersistenceVersion,
   };
 }

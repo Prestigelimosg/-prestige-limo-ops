@@ -363,7 +363,7 @@ try {
     driver_completed: "SNP 9124S reported Job Completed.",
     driver_issue: "Driver reported an issue. Open Dashboard to review.",
     driver_ots: "SNP 9124S reported OTS.",
-    driver_ots_photo: "Driver sent an OTS photo. Open Dashboard to review.",
+    driver_ots_photo: "SNP 9124S sent an OTS photo.",
     driver_otw: "SNP 9124S reported OTW.",
     driver_pob: "SNP 9124S reported POB.",
     driver_to_customer_reply: "Driver sent a customer app reply. Open Dashboard to review.",

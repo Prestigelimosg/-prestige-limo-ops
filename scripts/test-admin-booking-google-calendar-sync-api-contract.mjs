@@ -1351,6 +1351,31 @@ try {
     const options = { env, fetcher, payoutClient };
     const sync = (payload = input, extra = {}) => googleSync.syncAdminBookingCalendarAgendaToGoogle(payload, actor, { ...options, ...extra });
     const read = (payload = input) => googleSync.readAdminBookingCalendarStatusesFromGoogle(payload, actor, options);
+    const originalPickup = tables.bookings.pickup_at;
+    for (const [pickupTime, pickupAt, amount] of [
+      ["2329", "2026-06-15T15:29:00Z", 50],
+      ["2330", "2026-06-15T15:30:00Z", 60],
+      ["0559", "2026-06-14T21:59:00Z", 60],
+      ["0600", "2026-06-14T22:00:00Z", 50],
+      ["0659", "2026-06-14T22:59:00Z", 50],
+      ["0700", "2026-06-14T23:00:00Z", 50],
+    ]) {
+      stored = null;
+      tables.bookings.pickup_at = pickupAt;
+      const boundaryInput = { ...input, bookings: [{ ...input.bookings[0], date: "2026-06-15", pickup_time: pickupTime }] };
+      assert.equal((await sync(boundaryInput)).ok, true);
+      assert.ok(stored.summary.startsWith(`SLV1234 $${amount} > `), `New Calendar default uses driver 2330-0559 at ${pickupTime} SGT`);
+      assert.equal(stored.start.dateTime, `2026-06-15T${pickupTime.slice(0, 2)}:${pickupTime.slice(2)}:00`);
+      const before = structuredClone(stored);
+      stored.summary = stored.summary.replace(`$${amount}`, "$91");
+      assert.equal((await sync(boundaryInput)).ok, true);
+      assert.ok(stored.summary.startsWith("SLV1234 $91 > "), "Existing Calendar amount must survive the midnight calculation");
+      for (const key of ["id", "start", "end", "description", "reminders"]) {
+        assert.deepEqual(stored[key], before[key], `Calendar ${key} stays unchanged`);
+      }
+    }
+    tables.bookings.pickup_at = originalPickup;
+    stored = null;
     assert.equal((await sync()).ok, true);
     assert.match(stored.summary, /^SLV1234 \$50 > /, "existing Driver default wins; override 999 never used");
     stored = null;

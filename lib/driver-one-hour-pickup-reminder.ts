@@ -403,7 +403,7 @@ async function readLocationFollowupEvidence(
     const key = cleanText(row.booking_reference, 120);
     if (key && !latest.has(key)) latest.set(key, String(row.status_value).toLowerCase());
   }
-  const closedStatuses = new Set(["ots", "pob", "completed", "job_completed"]);
+  const closedStatuses = new Set(["pob", "completed", "job_completed"]);
   if (closedStatuses.has(latest.get(reference) || "")) return null;
   const verifiedFresh = positions.filter(position => {
     const key = cleanText(position.booking_reference, 120);
@@ -437,13 +437,24 @@ async function runLocationFollowups(
     .gte("created_at", new Date(now.getTime() - 65 * minuteMs).toISOString())
     .is("safe_context->>location_followup_checked_at", null)
     .order("created_at", { ascending: false }).limit(locationReadLimit + 1);
+  // Continue only cycles explicitly claimed by this worker, including after pickup.
+  // Old completed one-shot checks are never reopened by the new repeat policy.
+  const repeatingRead = await client.from("customer_driver_app_notification_outbox")
+    .select("id, booking_reference, driver_job_link_id, event_key, created_at, safe_context")
+    .eq("workflow_area", "driver_pickup_reminder").eq("delivery_surface", "driver_app")
+    .eq("safe_context->>location_followup_repeat", "v1")
+    .is("safe_context->>location_followup_checked_at", null)
+    .order("created_at", { ascending: false }).limit(locationReadLimit + 1);
   const warningsRead = await client.from("admin_app_notification_outbox")
     .select("id, booking_reference, event_key, notification_status, safe_context")
     .eq("workflow_area", locationFollowupWorkflow).in("notification_status", ["queued", "read"])
     .limit(locationReadLimit + 1);
-  const initials = asRows(initialRead.data);
+  const recentInitials = asRows(initialRead.data);
+  const repeatingInitials = asRows(repeatingRead.data);
+  const initials = [...new Map([...recentInitials, ...repeatingInitials].map(row => [row.id, row])).values()];
   const warnings = asRows(warningsRead.data);
-  if (initialRead.error || warningsRead.error || initials.length > locationReadLimit ||
+  if (initialRead.error || repeatingRead.error || warningsRead.error ||
+    recentInitials.length > locationReadLimit || repeatingInitials.length > locationReadLimit || initials.length > locationReadLimit ||
     warnings.length > locationReadLimit) throw new Error("Location follow-up queue read unavailable");
   if (initials.length === 0 && warnings.length === 0) return;
   if (!driverLiveLocationRuntimeGateOpen()) return;
@@ -485,28 +496,54 @@ async function runLocationFollowups(
     const reference = cleanText(initial.booking_reference, 120);
     const linkId = cleanText(initial.driver_job_link_id, 80);
     const created = validDate(initial.created_at);
-    if (!reference || !linkId || !uuidPattern.test(linkId) || !created ||
-      now.getTime() - created.getTime() < 5 * minuteMs ||
+    if (!reference || !linkId || !uuidPattern.test(linkId) || !created || created > now ||
       asRecord(initial.safe_context).source !== "scheduled_pickup_reminder") continue;
-    if (!allowedReferences.includes(reference)) continue;
-    const evidence = await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds);
-    const pickupAt = validDate(evidence?.booking.pickup_at);
-    if (!evidence || !pickupAt || pickupAt <= now ||
-      initial.event_key !== pickupReminderEventKey(reference, pickupAt.toISOString())) continue;
-    const markChecked = () => client.from("customer_driver_app_notification_outbox")
-        .update({ safe_context: { ...asRecord(initial.safe_context), location_followup_checked_at: now.toISOString() } })
+
+    let context = asRecord(initial.safe_context);
+    // Compare-and-set the next-at value: concurrent cron ticks can claim only one
+    // attempt, and a completed check cannot be overwritten by an older reader.
+    const updateContext = async (next: UnknownRecord) => {
+      let query = client.from("customer_driver_app_notification_outbox")
+        .update({ safe_context: next })
         .eq("id", initial.id).eq("event_key", initial.event_key)
         .eq("workflow_area", "driver_pickup_reminder")
         .is("safe_context->>location_followup_checked_at", null);
-    // Fresh GPS completes the check. Later staleness is not another reminder.
-    if (evidence.fresh) {
-      const checked = await markChecked();
-      if (checked.error) throw new Error("Location follow-up check write failed");
+      query = context.location_followup_next_at == null
+        ? query.is("safe_context->>location_followup_next_at", null)
+        : query.eq("safe_context->>location_followup_next_at", String(context.location_followup_next_at));
+      const changed = await query.select("id");
+      if (changed.error) throw new Error("Location follow-up check write failed");
+      if (asRows(changed.data).length !== 1) return false;
+      context = next;
+      return true;
+    };
+    const markChecked = () => updateContext({ ...context, location_followup_checked_at: now.toISOString() });
+    let evidence = allowedReferences.includes(reference)
+      ? await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds) : null;
+    const pickupAt = validDate(evidence?.booking.pickup_at);
+    if (!evidence || !pickupAt ||
+      initial.event_key !== pickupReminderEventKey(reference, pickupAt.toISOString()) || evidence.fresh) {
+      await markChecked();
+      continue;
+    }
+    const nextAt = context.location_followup_next_at == null
+      ? new Date(created.getTime() + 5 * minuteMs) : validDate(context.location_followup_next_at);
+    if (!nextAt) throw new Error("Location follow-up schedule read unavailable");
+    if (now < nextAt) continue;
+    // Schedule from this attempt, not from missed slots: never burst catch-up sends.
+    if (!await updateContext({ ...context, location_followup_repeat: "v1",
+      location_followup_next_at: new Date(now.getTime() + 5 * minuteMs).toISOString() })) continue;
+    // Recheck after claiming so GPS recovery or assignment changes while reserving
+    // the attempt do not send a reminder based only on the earlier snapshot.
+    evidence = await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds);
+    if (!evidence || evidence.fresh || validDate(evidence.booking.pickup_at)?.toISOString() !== pickupAt.toISOString()) {
+      await markChecked();
       continue;
     }
     const eventKey = `driver_gps_followup:${initial.id}`;
-    // The existing unique outbox event key reserves one attempt across cron retries.
-    // Claim before either provider call; never retry a send after an uncertain result.
+    // Keep one Admin warning and one Driver notice for the entire cycle.
+    // The guarded initial context reserves repeat attempts; the unique event key
+    // retains the established one-time Admin push across repeated/concurrent runs.
     const adminInsert = await client.from("admin_app_notification_outbox").insert({
       booking_reference: reference, event_key: eventKey,
       notification_status: "queued", notification_type: "driver_status", priority: "high",
@@ -518,25 +555,27 @@ async function runLocationFollowups(
       safe_context: { driver_job_link_id: linkId, pickup_at: evidence.booking.pickup_at, overlap: evidence.overlap },
       updated_at: now.toISOString(),
     }).select("id").single();
-    if (adminInsert.error) {
-      if (asRecord(adminInsert.error).code === "23505") {
-        const checked = await markChecked();
-        if (checked.error) throw new Error("Location follow-up check write failed");
-        continue;
-      }
+    if (adminInsert.error && asRecord(adminInsert.error).code !== "23505") {
       throw new Error("Location follow-up claim failed");
     }
-    result.admin_warning_count = (result.admin_warning_count ?? 0) + 1;
-    const checked = await markChecked();
+    const newAdminWarning = !adminInsert.error;
+    if (newAdminWarning) result.admin_warning_count = (result.admin_warning_count ?? 0) + 1;
     let driverWriteFailed = false;
     if (!evidence.overlap) {
-      const driverInsert = await client.from("customer_driver_app_notification_outbox").insert({
+      let driverInsert = await client.from("customer_driver_app_notification_outbox").insert({
         booking_reference: reference, driver_job_link_id: linkId, event_key: eventKey,
         notification_status: "queued", notification_type: "trip_update", priority: "high",
         delivery_surface: "driver_app", source_surface: "system", actor_role: "system",
-        workflow_area: locationFollowupWorkflow, safe_title: "Share location before pickup",
+        workflow_area: locationFollowupWorkflow, safe_title: "Share location",
         safe_message: locationFollowupCopy, safe_context: {}, updated_at: now.toISOString(),
       }).select("id").single();
+      if (driverInsert.error && asRecord(driverInsert.error).code === "23505") {
+        driverInsert = await client.from("customer_driver_app_notification_outbox")
+          .update({ notification_status: "queued", safe_title: "Share location", updated_at: now.toISOString() })
+          .eq("event_key", eventKey).eq("booking_reference", reference)
+          .eq("driver_job_link_id", linkId).eq("workflow_area", locationFollowupWorkflow)
+          .select("id").single();
+      }
       if (!driverInsert.error) {
         result.notification_count += 1;
         const push = await (options.sendPush ?? sendDriverDevicePushAlertForPickupReminder)(client, {
@@ -549,11 +588,12 @@ async function runLocationFollowups(
         driverWriteFailed = true;
       }
     }
-    await (options.sendAdminPush ?? sendAdminDevicePushAlert)(
-      "driver_issue", { pickupLocationState: evidence.overlap ? "overlap" : "missing" },
-    ).catch(() => null);
+    if (newAdminWarning) {
+      await (options.sendAdminPush ?? sendAdminDevicePushAlert)(
+        "driver_issue", { pickupLocationState: evidence.overlap ? "overlap" : "missing" },
+      ).catch(() => null);
+    }
     if (driverWriteFailed) throw new Error("Location follow-up driver notice write failed");
-    if (checked.error) throw new Error("Location follow-up check write failed");
   }
 }
 

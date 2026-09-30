@@ -4067,6 +4067,10 @@ function normalizeRecord(value: unknown): CustomerDriverAppNotificationRecord {
 function toSafeRecord(
   record: CustomerDriverAppNotificationRecord,
 ): CustomerDriverAppNotificationSafeRecord {
+  const safeContext = record.delivery_surface === "driver_app" && record.workflow_area === "driver_pickup_reminder"
+    ? Object.fromEntries(Object.entries(record.safe_context).filter(([key]) =>
+      key !== "location_followup_repeat" && key !== "location_followup_next_at"))
+    : record.safe_context;
   return {
     booking_reference: record.booking_reference,
     created_at: record.created_at,
@@ -4075,7 +4079,7 @@ function toSafeRecord(
     notification_status: record.notification_status,
     notification_type: record.notification_type,
     priority: record.priority,
-    safe_context: record.safe_context,
+    safe_context: safeContext,
     safe_message: record.safe_message,
     safe_title: record.safe_title,
     updated_at: record.updated_at,

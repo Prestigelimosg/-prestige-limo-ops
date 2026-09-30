@@ -761,6 +761,7 @@ function detailRows(job: SafeDriverJobPayload) {
     { label: "Waypoints", value: job.waypoints.join(" > ") },
     { label: "Flight", value: job.flightNumber },
     { label: "Passenger", value: job.passengerName },
+    { label: "Remark", value: job.driverRemark?.trim() || "" },
   ].filter((row) => row.value);
 }
 

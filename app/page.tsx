@@ -524,6 +524,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "driverVehicleModel"
   | "dropoff"
   | "extraStopCount"
+  | "manualExtraChargesNote"
   | "extraStopLocation"
   | "flight"
   | "name"
@@ -792,6 +793,7 @@ type BookingRecord = {
   driver_payout_override?: number | null;
   driver_payout_reason?: string | null;
   driver_payout_unit?: string | null;
+  driver_remark?: string | null;
   driver_notes?: string | null;
   driver_dispatch_include_payout?: boolean | null;
   midnight_surcharge?: number | null;
@@ -989,6 +991,7 @@ type AdminDriverJobLinkRecord = {
 };
 
 type AdminDriverJobLinkSafeOperationalPayload = {
+  driver_remark?: string;
   assigned_driver_contact?: string;
   assigned_driver_name?: string;
   assigned_driver_plate?: string;
@@ -2357,6 +2360,7 @@ type AdminBookingPersistenceRecord = {
   driver_plate_number?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
+  driver_remark?: string | null;
   customer_special_request?: string | null;
   vehicle_type_or_category?: string | null;
   customer_facing_status?: string | null;
@@ -2421,6 +2425,7 @@ type AdminBookingPersistenceRequestBody = {
     driver_plate_number: string | null;
     pax_count: number | null;
     luggage_count: number | null;
+    driver_remark?: string | null;
     customer_special_request?: string | null;
     vehicle_type_or_category: string | null;
     customer_facing_status: string;
@@ -5873,7 +5878,6 @@ function buildServiceChangePriceReview(
     clean(bookingValue.customerPriceOverride),
     clean(bookingValue.customerPriceOverrideReason),
     clean(bookingValue.manualExtraCharges),
-    clean(bookingValue.manualExtraChargesNote),
   ].join("::");
 
   return {
@@ -8564,6 +8568,7 @@ function savedBookingMatchesDriverJobLinkOperationalPayload(
   ];
 
   return (
+    clean(record.driver_remark) === clean(payload.driver_remark) &&
     comparisons.every(
       ([savedValue, linkValue]) =>
         adminDriverJobLinkCanonicalOperationalText(savedValue) ===
@@ -10013,6 +10018,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     childSeatCount: childSeatRequired ? String(normalizeChildSeatCount(true, bookingRecord.child_seat_count)) : "",
     childSeatType: childSeatRequired ? clean(bookingRecord.child_seat_type) : "",
     extraStopCount: extraStopCount ? String(extraStopCount) : "",
+    manualExtraChargesNote: clean(bookingRecord.driver_remark),
   };
 }
 
@@ -10109,6 +10115,7 @@ function bookingRecordToAdminBookingPersistenceRecord(
     driver_contact: clean(bookingRecord.driver_contact) || null,
     driver_name: clean(bookingRecord.driver_name) || null,
     driver_plate_number: clean(bookingRecord.driver_plate_number) || null,
+    driver_remark: clean(bookingRecord.driver_remark) || null,
     dropoff_location: dropoffLocation || null,
     dropoff_datetime: clean(bookingRecord.dropoff_datetime) || null,
     flight_no: clean(bookingRecord.flight_no) || null,
@@ -10476,6 +10483,7 @@ function buildAdminBookingPersistencePayload(
             : null
           : options.luggageCountOverride,
       ),
+      driver_remark: clean(bookingValue.manualExtraChargesNote).replace(/\s+/g, " ") || null,
       customer_special_request: clean(options.customerSpecialRequestOverride) || null,
       vehicle_type_or_category: clean(bookingValue.vehicle) || null,
       customer_facing_status: "Received",
@@ -10558,6 +10566,7 @@ function adminBookingMatchesResponseLossRecovery(
     [record.driver_contact, booking.driver_contact],
     [record.driver_name, booking.driver_name],
     [record.driver_plate_number, booking.driver_plate_number],
+    [record.driver_remark, booking.driver_remark],
     [record.vehicle_type_or_category, booking.vehicle_type_or_category],
     [record.customer_special_request, booking.customer_special_request],
   ];
@@ -11218,6 +11227,7 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     driver_contact: clean(record.driver_contact) || null,
     driver_name: clean(record.driver_name) || null,
     driver_plate_number: clean(record.driver_plate_number) || null,
+    driver_remark: clean(record.driver_remark) || null,
     flight_no: clean(record.flight_no) || adminSnapshotFlightReference(record) || null,
     id: bookingReference || "saved-booking",
     job_card: null,
@@ -15191,6 +15201,7 @@ function adminOperationalSnapshotToBookingForm(
       driverPlate: clean(record.driver_plate_number),
       extraStopCount: extraStopCount > 0 ? String(extraStopCount) : "",
       extraStopLocation: stopLocations.join(" > "),
+      manualExtraChargesNote: clean(record.driver_remark),
       flight: clean(record.flight_no) || adminSnapshotFlightReference(record),
       luggageCount:
         safeAdminBookingPersistenceCount(record.luggage_count) === null
@@ -20915,6 +20926,7 @@ export default function Home() {
         childSeatRequired: clean(safePreview.childSeatRequired),
         childSeatCount: clean(safePreview.childSeatCount),
         childSeatType: clean(safePreview.childSeatType),
+        manualExtraChargesNote: "",
       }),
     );
     setMessage({
@@ -28122,7 +28134,9 @@ export default function Home() {
       route: string;
       status: string;
       waypoints: string[];
+      driver_remark?: string;
     } = {
+      ...(clean(booking.manualExtraChargesNote) ? { driver_remark: clean(booking.manualExtraChargesNote).replace(/\s+/g, " ") } : {}),
       assigned_driver_vehicle_model: vehicleModel || "Vehicle TBC",
       booking_type: clean(booking.bookingType),
       dropoff_location: dropoffLocation,
@@ -46025,7 +46039,8 @@ export default function Home() {
                     className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     data-manual-extra-charges-note="true"
                     onChange={(event) => update("manualExtraChargesNote", event.target.value)}
-                    placeholder="Admin remark — not saved or sent to driver"
+                    placeholder="Instructions for the assigned driver only"
+                    maxLength={500}
                     value={booking.manualExtraChargesNote}
                   />
                 </label>
@@ -46034,8 +46049,9 @@ export default function Home() {
                 className="mt-2 text-xs text-slate-600"
                 data-manual-extra-charges-boundary="true"
               >
-                Manual staff entry only. This local UI field is not included in totals, save behavior,
-                invoice, payment, payout, PDF, accounting, storage, API, Supabase, or notification workflows.
+                Extra Charges amount is for local review only and is not saved or billed.
+                Save the booking, then use Create Link to post or update the Remark on the Driver Job Card.
+                Leave blank to hide it. Do not enter prices or internal notes. Customers and invoices do not show this Remark.
               </p>
               {isDspItinerary ? (
                 <div className="mt-3 border-t border-stone-200 pt-3 text-sm text-slate-800">
@@ -49825,9 +49841,9 @@ export default function Home() {
                   className="mt-2 border-t border-amber-200 pt-2 text-xs leading-5 text-amber-900"
                   data-manual-extra-charges-review-boundary="true"
                 >
-                  Manual staff entry only. Not billed, not saved, no total calculated. No invoice,
-                  statement, payment, PDF, payout, accounting, finance export, storage, API, Supabase,
-                  or notification behavior.
+                  Extra Charges amount: Not billed, not saved, no total calculated.
+                  Remark is for the driver. Save the booking, then use Create Link to post or update it.
+                  Customers and invoices do not show this Remark.
                 </p>
               </details>
               {jobCardCopyEditState.isEditing ? (

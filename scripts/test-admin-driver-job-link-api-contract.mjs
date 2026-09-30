@@ -19,6 +19,7 @@ const safeApiLeakPattern =
 const unsafeDriverJobLinkLeakPattern =
   /token_hash|raw_token|driver_job_token|safe_link_context|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-driver-ack-reminder.ts",
   "lib/admin-driver-job-link-persistence.ts",
   "lib/admin-live-location-runtime-control.ts",

@@ -6,6 +6,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/driver-job-status-workflow.ts",
   "lib/driver-job-link.ts",
   "lib/driver-job-link-contract.ts",
@@ -456,6 +457,7 @@ function createSeededClient({
             assigned_driver_plate: "SLA1234X",
             assigned_driver_vehicle_model: "Mercedes V Class",
             booking_type: bookingType,
+            driver_remark: "Wait at the hotel lobby",
             dropoff_location: "Changi Airport Terminal 3",
             flight_no: "SQ001",
             internal_admin_note: "SECRET_INTERNAL_NOTE",
@@ -1189,6 +1191,7 @@ try {
     assert.equal(result.ok, true);
     assert.equal(result.reason, "ok");
     assert.equal(result.payload.reference, "DRV-JOB-API-001");
+    assert.equal(result.payload.driverRemark, "Wait at the hotel lobby");
     assert.equal(result.payload.pickupLocation, "Raffles Hotel Singapore");
     assert.equal(result.payload.dropoffLocation, "Changi Airport Terminal 3");
     assert.equal(result.payload.status, "ots");
@@ -1654,14 +1657,16 @@ try {
   }
 
   {
-    const client = createSeededClient();
+    const client = createSeededClient({bookings: [{booking_reference: "DRV-JOB-API-001", driver_id: null, remarks: "prestige_driver_remark_v1:UNPOSTED REMARK", driver_notes: "SECRET_INTERNAL_NOTE"}]});
     setDriverJobProductionSupabaseClientForTests(client);
 
     const result = await getDriverJob(validToken);
 
+    assert.doesNotMatch(JSON.stringify(result.body), /UNPOSTED REMARK/);
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
     assert.equal(result.body.mode, "production");
+    assert.equal(result.body.payload.driverRemark, "Wait at the hotel lobby");
     assert.equal(result.body.payload.reference, "DRV-JOB-API-001");
     assert.equal(result.body.payload.status, "ots");
     assertNoDriverJobLeaks(result);

@@ -17,6 +17,7 @@ const safeApiLeakPattern =
 const unsafeNotificationLeakPattern =
   /contact_phone|contact_email|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-app-notification-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",

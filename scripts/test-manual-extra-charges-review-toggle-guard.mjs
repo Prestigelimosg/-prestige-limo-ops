@@ -26,7 +26,7 @@ const noteMarker = appPage.indexOf('data-manual-extra-charges-note="true"');
 const noteField = appPage.slice(appPage.lastIndexOf("<label", noteMarker), appPage.indexOf("</label>", noteMarker));
 assert.match(noteField, />Remark<\/span>/, "Existing note input must use the requested Remark label.");
 assert.match(noteField, /value=\{booking.manualExtraChargesNote\}/, "Keep the existing local field binding.");
-assert.match(noteField, /placeholder="Admin remark — not saved or sent to driver"/);
+assert.match(noteField, /placeholder="Instructions for the assigned driver only"/);
 assert.match(preview, />Remark<\/p>/, "The existing review must use the same label.");
 assert.match(appPage, /manualExtraChargesNote: "Remark"/);
 assert.ok(!appPage.includes("Extra Charges note / reason"));

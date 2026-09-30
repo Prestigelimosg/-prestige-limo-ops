@@ -195,5 +195,31 @@ for (const role of ['anon','authenticated']) {
   await assert.rejects(acknowledge(),/permission denied/i);
   await db.exec('reset role');
 }
+// Remark payload requires the bounded migration; old SQL must reject it first.
+await db.exec("alter table bookings add column remarks text; delete from driver_job_links; delete from customer_driver_app_notification_outbox;");
+const remarkPayload={...payload,driver_remark:'Wait at the hotel lobby'};
+await assert.rejects(call(remarkPayload),/safe job fields/i);
+await db.exec(await readFile('supabase/migrations/20260930021353_driver_job_remark_payload.sql','utf8'));
+await assert.rejects(call(remarkPayload),/Save the Driver Remark/i);
+await db.query("update bookings set remarks=$1",['prestige_driver_remark_v1:Wait at the hotel lobby']);
+const remarkFirst=await call(remarkPayload,displayHash(remarkPayload));
+assert.equal(remarkFirst.link.safe_link_context.driver_job_payload.driver_remark,'Wait at the hotel lobby');
+assert.equal((await call(remarkPayload,displayHash(remarkPayload))).disposition,'reused');
+const firstReservation=await displayReserve(remarkFirst);assert.equal(firstReservation.claimed,true);
+assert.equal((await displayReserve(remarkFirst)).claimed,false,'No duplicate initial alert');
+await db.query("update bookings set remarks=$1",['prestige_driver_remark_v1:Use the side entrance']);
+const remarkChanged={...payload,driver_remark:'Use the side entrance'};
+const remarkSecond=await call(remarkChanged,displayHash(remarkChanged));
+assert.equal(remarkSecond.disposition,'amended');assert.equal(remarkSecond.link.id,remarkFirst.link.id);
+assert.equal((await displayReserve(remarkSecond)).claimed,true,'Existing amendment alert recognizes Remark revision');
+assert.equal((await displayReserve(remarkSecond)).claimed,false,'No duplicate amendment alert');
+await db.exec('update bookings set remarks=null');
+const remarkCleared=await call(payload,displayHash(payload));
+assert.equal(remarkCleared.disposition,'amended');assert.equal(remarkCleared.link.id,remarkFirst.link.id);
+assert.equal(remarkCleared.link.safe_link_context.driver_job_payload.driver_remark,undefined,'Blank removes posted text');
+await db.query("update bookings set remarks='legacy internal charge reason'");
+assert.equal((await call(payload,displayHash(payload))).disposition,'reused','Never expose legacy notes');
+await assert.rejects(call({...payload,driver_remark:'PayNow $99'}),/Invalid Driver Remark/i);
+for(const role of ['anon','authenticated']) {await db.exec(`set role ${role}`);await assert.rejects(call(),/permission denied/i);await db.exec('reset role');}
 await db.close();
 console.log("Stable link and repeat reminder SQL contracts passed (serialized disposable Postgres execution).");

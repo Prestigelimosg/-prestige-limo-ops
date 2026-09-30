@@ -17,6 +17,7 @@ const safeApiLeakPattern =
 const unsafeDspActualTimeLeakPattern =
   /token_hash|raw_token|driver_job_link_id|safe_link_context|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-driver-job-dsp-actual-time-read.ts",
   "lib/hourly-billing.ts",
   "lib/admin-booking-supabase-adapter.ts",

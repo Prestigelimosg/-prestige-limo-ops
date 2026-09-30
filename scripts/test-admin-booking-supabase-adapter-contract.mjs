@@ -35,6 +35,7 @@ const safeApiLeakPattern =
 const forbiddenResponseLeakPattern =
   /customer_charge|customer_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_qa|archive|service_role|server_only|secret/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",

@@ -22,6 +22,7 @@ const unsafeFieldLeakPattern =
 const safeResponseLeakPattern =
   /SUPABASE_SERVICE_ROLE_CONTROLLED_WRITE_SENTINEL|mock-controlled-real-write-admin-session-token|controlled-write\.supabase\.co|public-only-controlled-write\.supabase\.co|PRESTIGE_ADMIN|service_role|server-only|server_only|stack|sql|supabase internals|createClient|secret|key|token/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",

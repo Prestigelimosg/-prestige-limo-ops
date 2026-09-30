@@ -6,6 +6,7 @@ import * as crypto from 'node:crypto';
 import {registerHooks} from 'node:module';
 registerHooks({resolve(specifier,context,next){return specifier==='server-only'?{url:'data:text/javascript,export {}',shortCircuit:true}:next(specifier,context)}});
 const links=await import('../lib/driver-job-link.ts');
+const remark=await import('../lib/driver-job-remark.ts');
 const handoff=await import('../lib/driver-native-job-handoff.ts');
 const combos=await import('../lib/driver-job-combo.ts');
 Object.assign(process.env,{PRESTIGE_DRIVER_COMBO_ENABLED:'true',PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:'true',
@@ -18,6 +19,7 @@ const data={
  bookings:refs.map((ref,i)=>({booking_reference:ref,public_booking_reference:String(99101+i),customer_id:192,company_id:10,booker_id:20,driver_id:45,updated_at:now,
    pickup_at:`2026-10-0${i+1}T05:00:00.000Z`,service_type:'TRF',pickup_location:'QA Hotel '+i,dropoff_location:'QA Terminal '+i,route_summary:'QA Hotel '+i+' > QA Terminal '+i,
    passenger_name:'QA Passenger',flight_no:'',driver_name:'QA Driver',driver_contact:'00000001',driver_plate_number:'QA1234A',vehicle_type_or_category:'AVF',
+   remarks:i===2?'NEVER EXPOSE':remark.encodeDriverRemark('Entrance '+i),
    booking_route_points:[],customer_price:999,internal_admin_notes:'NEVER EXPOSE'})),driver_job_links:[],
 };
 const calls=[],sends=[];let reserveClaimed=false,rpcFailure=false;
@@ -28,6 +30,7 @@ const client={from(table){const filters=[];let single=false,limit=Infinity,updat
    if(name==='apply_admin_driver_job_combo_links'){
      if(rpcFailure)return {data:null,error:{code:rpcFailure}};
      assert.deepEqual(args.p_links.map(p=>p.booking_reference),refs);
+     assert.deepEqual(args.p_links.map(p=>p.payload.driver_remark||''),['Entrance 0','Entrance 1',''],'Each combo trip uses only its own tagged remark');
      assert.doesNotMatch(JSON.stringify(args.p_links),/customer_price|NEVER EXPOSE|internal_admin/);
      const reused=data.driver_job_links.length>0;
      if(!reused)data.driver_job_links=args.p_links.map(p=>({id:crypto.randomUUID(),booking_reference:p.booking_reference,driver_id:45,token_hash:p.token_hash,
@@ -43,6 +46,7 @@ const harnessModule={exports:{}};
 const code=ts.transpileModule(fs.readFileSync('lib/admin-driver-job-link-persistence.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 new Function('require','module','exports',code)(name=>{
  if(name==='server-only')return {};
+ if(name==='./driver-job-remark')return remark;
  if(name==='node:crypto')return crypto;
  if(name==='@supabase/supabase-js')return {createClient:()=>client};
  if(name==='./admin-booking-supabase-adapter')return {checkAdminBookingPersistenceStagingConfigReadiness:()=>({ok:true})};
@@ -53,7 +57,7 @@ new Function('require','module','exports',code)(name=>{
  if(name==='./driver-device-push-notification')return {sendDriverDevicePushAlertForNewJobLink:async(_client,input)=>{sends.push(input);return {native_provider_accepted:true}}};
  throw new Error('Unexpected import '+name);
 },harnessModule,harnessModule.exports);
-const input={booking_reference:refs[0],ttl_hours:96,request_id:crypto.randomUUID(),driver_job_payload:{booking_type:'TRF',pickup_date:'2026-10-01',pickup_time:'1300',pickup_datetime:data.bookings[0].pickup_at,
+const input={booking_reference:refs[0],ttl_hours:96,request_id:crypto.randomUUID(),driver_job_payload:{driver_remark:'Entrance 0',booking_type:'TRF',pickup_date:'2026-10-01',pickup_time:'1300',pickup_datetime:data.bookings[0].pickup_at,
  pickup_location:'QA Hotel 0',dropoff_location:'QA Terminal 0',route:'QA Hotel 0 > QA Terminal 0',passenger_name:'QA Passenger',flight_no:'',assigned_driver_name:'QA Driver',assigned_driver_contact:'00000001',assigned_driver_plate:'QA1234A',assigned_driver_vehicle_model:'AVF',status:'assigned',waypoints:[]}};
 const actor={actor_role:'admin',actor_label:'Synthetic QA',source_surface:'admin_api',boundary_mode:'server-session-role-surface'};
 for(const code of ['40001','PT409']){

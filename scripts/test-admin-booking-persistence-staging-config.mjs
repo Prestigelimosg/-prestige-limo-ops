@@ -15,6 +15,7 @@ const validAdminAccessCheck = "stage-readiness-admin-access-check-1234567890";
 const safeLeakPattern =
   /SUPABASE|NEXT_PUBLIC|PRESTIGE_ADMIN|stage-readiness\.supabase\.co|stage-readiness-server-credential|stage-readiness-admin-access|service_role|server-only|server_only|stack|sql|supabase internals|createClient|secret|key|token/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",

@@ -15,6 +15,7 @@ const unsafeLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_TRAVELERS_IDENTITY_SENTINEL|mock-admin-travelers-crm-identity-session-token|travelers-identity-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-travelers-crm-identity.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",

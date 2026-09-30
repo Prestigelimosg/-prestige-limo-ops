@@ -20,6 +20,7 @@ const safeApiLeakPattern =
 const unsafePriceReviewLeakPattern =
   /contact_phone|contact_email|passenger|driver_payout|paynow|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification_delivery|whatsapp|telegram|sms_send|email_send|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|driver_job_link|token/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-monthly-invoice-draft-lock-enforcement.ts",
   "lib/admin-monthly-invoice-billable-item-price-review-persistence.ts",
   "lib/hourly-billing.ts",

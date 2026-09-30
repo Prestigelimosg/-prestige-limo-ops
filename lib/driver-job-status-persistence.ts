@@ -843,6 +843,7 @@ function safePayloadRecordFromLink(link: DriverJobLinkPersistenceRow) {
     Object.keys(snakeAssignedDriver).length > 0 ? snakeAssignedDriver : camelAssignedDriver;
 
   return {
+    driver_remark: source.driver_remark,
     booking_type: readFirstText(source, ["booking_type", "bookingType"]),
     driver_acknowledged_at: safeTextFromDb(context.driver_acknowledged_at, 80),
     driver_contact: readFirstText(source, [

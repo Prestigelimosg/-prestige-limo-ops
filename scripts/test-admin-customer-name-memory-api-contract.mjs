@@ -15,6 +15,7 @@ const unsafeLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_NAME_MEMORY_SENTINEL|mock-admin-customer-name-memory-session-token|customer-name-memory-contract\.supabase\.co|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/driver-job-remark.ts",
   "lib/admin-customer-name-memory-read.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",

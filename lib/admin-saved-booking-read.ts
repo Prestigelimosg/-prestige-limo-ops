@@ -1,4 +1,5 @@
 import "server-only";
+import { decodeDriverRemark } from "./driver-job-remark";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -67,6 +68,7 @@ export type AdminSavedBookingRecord = {
   driver_dispatch_include_payout: boolean | null;
   driver_id: number | null;
   driver_name: string | null;
+  driver_remark?: string | null;
   driver_notes: string | null;
   driver_payout_amount: number | null;
   driver_payout_max: number | null;
@@ -152,7 +154,7 @@ const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference", "id"]);
 const allowedListReadQueryParams = new Set(["limit", "offset", "scope"]);
 const adminSavedBookingLegacyReadSelect =
-  "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, luggage_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+  "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, luggage_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, remarks, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 // The deployed operational schema retains the legacy safe fields but has no
 // bookings.vehicle_type. Keep legacy status/pricing and normalized extra stops.
 const adminSavedBookingOperationalReadSelect =
@@ -673,6 +675,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     driver_dispatch_include_payout: booleanOrNull(row.driver_dispatch_include_payout),
     driver_id: integerOrNull(row.driver_id),
     driver_name: textOrNull(row.driver_name, 220),
+    driver_remark: decodeDriverRemark(row.remarks) || null,
     driver_notes: textOrNull(row.driver_notes, 1000),
     driver_payout_amount: numberOrNull(row.driver_payout_amount),
     driver_payout_max: numberOrNull(row.driver_payout_max),

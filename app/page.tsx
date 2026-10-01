@@ -16302,7 +16302,7 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
-    if (activeTab !== "dashboard") {
+    if (activeTab !== "dashboard" && activeTab !== "completed") {
       return () => {
         cancelled = true;
       };
@@ -16383,7 +16383,7 @@ export default function Home() {
       .map(adminAppNotificationMonthlyBillingMonth)
       .find(Boolean) || "";
 
-    if (activeTab !== "dashboard" || !billingMonth) {
+    if ((activeTab !== "dashboard" && activeTab !== "completed") || !billingMonth) {
       setAdminMonthlyBillingDashboardClassificationState({
         billingMonth: "",
         groups: [],
@@ -16511,7 +16511,7 @@ export default function Home() {
   }, [activeTab, adminAppNotificationReadRevision]);
 
   useEffect(() => {
-    if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {
+    if ((activeTab !== "dashboard" && activeTab !== "completed") || adminAppNotificationReadState.status === "unavailable") {
       return;
     }
 
@@ -25554,6 +25554,8 @@ export default function Home() {
         const row = rows.find(
           (candidate) => candidate.dataset.adminAppNotificationFeedRowId === notificationId,
         );
+        const monthlyDisclosure = row?.closest<HTMLDetailsElement>('[data-admin-monthly-billing-disclosure="true"]');
+        if (monthlyDisclosure) monthlyDisclosure.open = true;
         const feed = document.querySelector<HTMLElement>('[data-admin-app-notification-feed="true"]');
 
         (row ?? feed)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -25754,7 +25756,7 @@ export default function Home() {
     }
 
     setBookingsAlertMenuOpen(false);
-    selectAppTab("dashboard");
+    selectAppTab(notificationId === dashboardMonthlyBillingNotificationId ? "completed" : "dashboard");
     markAdminAlertLocatorHighlight("admin-app-notification", notificationId || undefined);
     scrollToAdminAlertLocatorTarget("admin-app-notification", notificationId || undefined);
   }
@@ -50809,6 +50811,193 @@ export default function Home() {
           </div>
           {statusPanel}
           {completedBookingsPanel}
+            {dashboardMonthlyBillingMonth && dashboardMonthlyBillingNotification ? (
+              <details
+                className="mt-3 rounded-md border border-stone-200 bg-white"
+                data-admin-monthly-billing-dashboard-position="completed-bottom"
+                data-admin-monthly-billing-disclosure="true"
+                data-admin-monthly-billing-dashboard-sector="true"
+              >
+                <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-800">
+                  Monthly billing · {adminMonthlyBillingGroupingMonthLabel(dashboardMonthlyBillingMonth)}
+                  {adminMonthlyBillingDashboardClassificationState.status === "loaded"
+                    ? ` · ${dashboardMonthlyBillingClassifications.length} need review`
+                    : " · Review"}
+                </summary>
+                <div className="space-y-2 p-2">
+                <div
+                  className={`rounded-md border bg-white p-2 text-xs sm:text-sm ${
+                    dashboardMonthlyBillingNotificationHighlighted
+                      ? "border-amber-300 shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
+                      : "border-sky-100"
+                  }`}
+                  data-admin-alert-locator-highlight={dashboardMonthlyBillingNotificationHighlighted ? "true" : undefined}
+                  data-admin-app-notification-feed-row="true"
+                  data-admin-app-notification-feed-row-id={dashboardMonthlyBillingNotificationId || undefined}
+                  data-admin-monthly-billing-dashboard-notification="true"
+                >
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h4
+                        className="break-words font-semibold text-slate-950"
+                        data-admin-app-notification-feed-title="true"
+                      >
+                        {clean(dashboardMonthlyBillingNotification.safe_title) || "Admin app notification"}
+                      </h4>
+                      <p
+                        className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
+                        data-admin-app-notification-feed-message="true"
+                      >
+                        {clean(dashboardMonthlyBillingNotification.safe_message) || "No safe notification message recorded."}
+                      </p>
+                    </div>
+                    <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
+                      {adminAppNotificationPriorityLabel(dashboardMonthlyBillingNotification.priority)}
+                    </span>
+                  </div>
+                  <p className="mt-2 hidden break-words text-xs text-slate-600">
+                    {adminAppNotificationDisplayLabel(dashboardMonthlyBillingNotification.notification_type)} /{" "}
+                    {adminAppNotificationDisplayLabel(dashboardMonthlyBillingNotification.notification_status)} /{" "}
+                    {adminAppNotificationTimeLabel(dashboardMonthlyBillingNotification.created_at)}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      className="h-7 rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                      data-admin-app-notification-action="read"
+                      disabled={
+                        !dashboardMonthlyBillingNotificationId ||
+                        Boolean(dashboardMonthlyBillingNotificationAction)
+                      }
+                      onClick={() =>
+                        handleAdminAppNotificationStatusUpdate(dashboardMonthlyBillingNotificationId, "read")
+                      }
+                      type="button"
+                    >
+                      {dashboardMonthlyBillingNotificationAction === "read" ? "Saving..." : "Done"}
+                    </button>
+                  </div>
+                </div>
+                    <div
+                      className="space-y-1 rounded-md border border-sky-100 bg-sky-50/60 p-2"
+                      data-admin-monthly-billing-dashboard-classifications="true"
+                      data-admin-monthly-billing-dashboard-month={dashboardMonthlyBillingMonth}
+                    >
+                      <p className="text-xs font-semibold text-slate-800">
+                        {dashboardMonthlyBillingClassifications.length} job{dashboardMonthlyBillingClassifications.length === 1 ? "" : "s"} need Monthly Billing action for {adminMonthlyBillingGroupingMonthLabel(dashboardMonthlyBillingMonth)}
+                      </p>
+                      {adminMonthlyBillingDashboardClassificationState.status === "loading" ? (
+                        <p className="text-xs text-slate-600">Loading classifications...</p>
+                      ) : adminMonthlyBillingDashboardClassificationState.status === "error" ? (
+                        <p className="text-xs font-medium text-rose-700">
+                          {adminMonthlyBillingDashboardClassificationState.message}
+                        </p>
+                      ) : dashboardMonthlyBillingClassifications.length > 0 ? (
+                        <div className="grid max-h-80 gap-1 overflow-y-auto overscroll-contain" data-admin-monthly-billing-dashboard-classification-rows="true">
+                          {dashboardMonthlyBillingClassifications.map((job) => {
+                            const status = job.safe_billing_status || "blocked";
+                            const statusLabel =
+                              job.safe_payment_status === "paid"
+                                ? "Paid"
+                                : job.safe_payment_status === "unpaid"
+                                  ? "Unpaid"
+                                  : status === "ready"
+                                    ? "Ready"
+                                    : status === "covered"
+                                      ? "Already invoiced"
+                                      : "Needs review";
+                            const reference =
+                              clean(job.display_booking_reference) ||
+                              clean(job.booking_reference) ||
+                              "Reference unavailable";
+                            const exactBookingReference = cleanReferenceText(job.booking_reference);
+                            const bookingActionPending =
+                              adminMonthlyBillingDashboardBookingActionState.billingMonth === dashboardMonthlyBillingMonth &&
+                              adminMonthlyBillingDashboardBookingActionState.pendingReference === exactBookingReference;
+                            const reviewPending =
+                              bookingActionPending &&
+                              adminMonthlyBillingDashboardBookingActionState.pendingAction === "review";
+
+                            return (
+                              <div
+                                className="grid gap-1 rounded border border-sky-100 bg-white px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                                data-admin-monthly-billing-dashboard-classification-row={status}
+                                key={`${clean(job.booking_reference)}-${status}`}
+                              >
+                                <div className="min-w-0">
+                                  {exactBookingReference ? (
+                                    <button
+                                      aria-busy={reviewPending}
+                                      aria-label={`Review booking ${reference} in Dispatch`}
+                                      className="inline-flex min-h-11 max-w-full items-center rounded-md text-left font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 transition hover:text-sky-800 hover:decoration-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                                      data-admin-monthly-billing-dashboard-review-booking="true"
+                                      disabled={Boolean(adminMonthlyBillingDashboardBookingActionState.pendingAction)}
+                                      onClick={() => void handleAdminMonthlyBillingDashboardBookingReview(
+                                        job,
+                                        dashboardMonthlyBillingMonth,
+                                      )}
+                                      style={{ minHeight: "2.75rem" }}
+                                      type="button"
+                                    >
+                                      <span className="break-words">
+                                        {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
+                                      </span>
+                                    </button>
+                                  ) : (
+                                    <p className="break-words py-2 font-semibold text-slate-900">
+                                      {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
+                                    </p>
+                                  )}
+                                  <p className="mt-0.5 break-words text-[11px] text-slate-600">
+                                    {clean(job.safe_reason) || "Billing review reason unavailable."}
+                                  </p>
+                                </div>
+                                <div className="flex min-h-11 flex-wrap items-center gap-1 sm:justify-end">
+                                  <span
+                                    className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                      job.safe_payment_status === "paid"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : job.safe_payment_status === "unpaid"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : status === "ready"
+                                            ? "bg-emerald-100 text-emerald-800"
+                                            : status === "covered"
+                                              ? "bg-slate-200 text-slate-800"
+                                              : "bg-amber-100 text-amber-900"
+                                    }`}
+                                    data-admin-monthly-billing-dashboard-status-pill="true"
+                                  >
+                                    {statusLabel}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-600">
+                          No completed jobs need Monthly Billing action for this month.
+                        </p>
+                      )}
+                      {adminMonthlyBillingDashboardBookingActionState.billingMonth === dashboardMonthlyBillingMonth &&
+                      adminMonthlyBillingDashboardBookingActionState.message ? (
+                        <p
+                          className={`text-xs font-medium ${
+                            adminMonthlyBillingDashboardBookingActionState.message.tone === "error"
+                              ? "text-rose-700"
+                              : adminMonthlyBillingDashboardBookingActionState.message.tone === "success"
+                                ? "text-emerald-700"
+                                : "text-slate-700"
+                          }`}
+                          data-admin-monthly-billing-dashboard-booking-feedback="true"
+                          role={adminMonthlyBillingDashboardBookingActionState.message.tone === "error" ? "alert" : "status"}
+                        >
+                          {adminMonthlyBillingDashboardBookingActionState.message.text}
+                        </p>
+                      ) : null}
+                    </div>
+                </div>
+              </details>
+                  ) : null}
         </section>
         ) : null}
 
@@ -52956,184 +53145,7 @@ export default function Home() {
               </div>
             ) : null}
 
-            {dashboardMonthlyBillingMonth && dashboardMonthlyBillingNotification ? (
-              <section
-                className="space-y-2"
-                data-admin-monthly-billing-dashboard-position="page-bottom"
-                data-admin-monthly-billing-dashboard-sector="true"
-              >
-                <div
-                  className={`rounded-md border bg-white p-2 text-xs sm:text-sm ${
-                    dashboardMonthlyBillingNotificationHighlighted
-                      ? "border-amber-300 shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
-                      : "border-sky-100"
-                  }`}
-                  data-admin-alert-locator-highlight={dashboardMonthlyBillingNotificationHighlighted ? "true" : undefined}
-                  data-admin-app-notification-feed-row="true"
-                  data-admin-app-notification-feed-row-id={dashboardMonthlyBillingNotificationId || undefined}
-                  data-admin-monthly-billing-dashboard-notification="true"
-                >
-                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <h4
-                        className="break-words font-semibold text-slate-950"
-                        data-admin-app-notification-feed-title="true"
-                      >
-                        {clean(dashboardMonthlyBillingNotification.safe_title) || "Admin app notification"}
-                      </h4>
-                      <p
-                        className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
-                        data-admin-app-notification-feed-message="true"
-                      >
-                        {clean(dashboardMonthlyBillingNotification.safe_message) || "No safe notification message recorded."}
-                      </p>
-                    </div>
-                    <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
-                      {adminAppNotificationPriorityLabel(dashboardMonthlyBillingNotification.priority)}
-                    </span>
-                  </div>
-                  <p className="mt-2 hidden break-words text-xs text-slate-600">
-                    {adminAppNotificationDisplayLabel(dashboardMonthlyBillingNotification.notification_type)} /{" "}
-                    {adminAppNotificationDisplayLabel(dashboardMonthlyBillingNotification.notification_status)} /{" "}
-                    {adminAppNotificationTimeLabel(dashboardMonthlyBillingNotification.created_at)}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      className="h-7 rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                      data-admin-app-notification-action="read"
-                      disabled={
-                        !dashboardMonthlyBillingNotificationId ||
-                        Boolean(dashboardMonthlyBillingNotificationAction)
-                      }
-                      onClick={() =>
-                        handleAdminAppNotificationStatusUpdate(dashboardMonthlyBillingNotificationId, "read")
-                      }
-                      type="button"
-                    >
-                      {dashboardMonthlyBillingNotificationAction === "read" ? "Saving..." : "Done"}
-                    </button>
-                  </div>
-                </div>
-                    <div
-                      className="space-y-1 rounded-md border border-sky-100 bg-sky-50/60 p-2"
-                      data-admin-monthly-billing-dashboard-classifications="true"
-                      data-admin-monthly-billing-dashboard-month={dashboardMonthlyBillingMonth}
-                    >
-                      <p className="text-xs font-semibold text-slate-800">
-                        {dashboardMonthlyBillingClassifications.length} job{dashboardMonthlyBillingClassifications.length === 1 ? "" : "s"} need Monthly Billing action for {adminMonthlyBillingGroupingMonthLabel(dashboardMonthlyBillingMonth)}
-                      </p>
-                      {adminMonthlyBillingDashboardClassificationState.status === "loading" ? (
-                        <p className="text-xs text-slate-600">Loading classifications...</p>
-                      ) : adminMonthlyBillingDashboardClassificationState.status === "error" ? (
-                        <p className="text-xs font-medium text-rose-700">
-                          {adminMonthlyBillingDashboardClassificationState.message}
-                        </p>
-                      ) : dashboardMonthlyBillingClassifications.length > 0 ? (
-                        <div className="grid gap-1" data-admin-monthly-billing-dashboard-classification-rows="true">
-                          {dashboardMonthlyBillingClassifications.map((job) => {
-                            const status = job.safe_billing_status || "blocked";
-                            const statusLabel =
-                              job.safe_payment_status === "paid"
-                                ? "Paid"
-                                : job.safe_payment_status === "unpaid"
-                                  ? "Unpaid"
-                                  : status === "ready"
-                                    ? "Ready"
-                                    : status === "covered"
-                                      ? "Already invoiced"
-                                      : "Needs review";
-                            const reference =
-                              clean(job.display_booking_reference) ||
-                              clean(job.booking_reference) ||
-                              "Reference unavailable";
-                            const exactBookingReference = cleanReferenceText(job.booking_reference);
-                            const bookingActionPending =
-                              adminMonthlyBillingDashboardBookingActionState.billingMonth === dashboardMonthlyBillingMonth &&
-                              adminMonthlyBillingDashboardBookingActionState.pendingReference === exactBookingReference;
-                            const reviewPending =
-                              bookingActionPending &&
-                              adminMonthlyBillingDashboardBookingActionState.pendingAction === "review";
 
-                            return (
-                              <div
-                                className="grid gap-1 rounded border border-sky-100 bg-white px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                                data-admin-monthly-billing-dashboard-classification-row={status}
-                                key={`${clean(job.booking_reference)}-${status}`}
-                              >
-                                <div className="min-w-0">
-                                  {exactBookingReference ? (
-                                    <button
-                                      aria-busy={reviewPending}
-                                      aria-label={`Review booking ${reference} in Dispatch`}
-                                      className="inline-flex min-h-11 max-w-full items-center rounded-md text-left font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 transition hover:text-sky-800 hover:decoration-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-                                      data-admin-monthly-billing-dashboard-review-booking="true"
-                                      disabled={Boolean(adminMonthlyBillingDashboardBookingActionState.pendingAction)}
-                                      onClick={() => void handleAdminMonthlyBillingDashboardBookingReview(
-                                        job,
-                                        dashboardMonthlyBillingMonth,
-                                      )}
-                                      style={{ minHeight: "2.75rem" }}
-                                      type="button"
-                                    >
-                                      <span className="break-words">
-                                        {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
-                                      </span>
-                                    </button>
-                                  ) : (
-                                    <p className="break-words py-2 font-semibold text-slate-900">
-                                      {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
-                                    </p>
-                                  )}
-                                  <p className="mt-0.5 break-words text-[11px] text-slate-600">
-                                    {clean(job.safe_reason) || "Billing review reason unavailable."}
-                                  </p>
-                                </div>
-                                <div className="flex min-h-11 flex-wrap items-center gap-1 sm:justify-end">
-                                  <span
-                                    className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                      job.safe_payment_status === "paid"
-                                        ? "bg-emerald-100 text-emerald-800"
-                                        : job.safe_payment_status === "unpaid"
-                                          ? "bg-rose-100 text-rose-800"
-                                          : status === "ready"
-                                            ? "bg-emerald-100 text-emerald-800"
-                                            : status === "covered"
-                                              ? "bg-slate-200 text-slate-800"
-                                              : "bg-amber-100 text-amber-900"
-                                    }`}
-                                    data-admin-monthly-billing-dashboard-status-pill="true"
-                                  >
-                                    {statusLabel}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-600">
-                          No completed jobs need Monthly Billing action for this month.
-                        </p>
-                      )}
-                      {adminMonthlyBillingDashboardBookingActionState.billingMonth === dashboardMonthlyBillingMonth &&
-                      adminMonthlyBillingDashboardBookingActionState.message ? (
-                        <p
-                          className={`text-xs font-medium ${
-                            adminMonthlyBillingDashboardBookingActionState.message.tone === "error"
-                              ? "text-rose-700"
-                              : adminMonthlyBillingDashboardBookingActionState.message.tone === "success"
-                                ? "text-emerald-700"
-                                : "text-slate-700"
-                          }`}
-                          data-admin-monthly-billing-dashboard-booking-feedback="true"
-                          role={adminMonthlyBillingDashboardBookingActionState.message.tone === "error" ? "alert" : "status"}
-                        >
-                          {adminMonthlyBillingDashboardBookingActionState.message.text}
-                        </p>
-                      ) : null}
-                    </div>
-              </section>
-                  ) : null}
           </div>
         </section>
         ) : null}

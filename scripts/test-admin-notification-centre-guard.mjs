@@ -205,9 +205,9 @@ const alertRows = Array.from({length: 7}, (_, index) => ({
   id: `alert-${index + 1}`, safe_title: `Job ${index + 1}`, safe_message: `Dispatch message ${index + 1}`,
 }));
 const actions = [];
-const openAlert = new Function('clean', 'otherAdminAppNotifications', 'setBookingsAlertMenuOpen', 'selectAppTab', 'markAdminAlertLocatorHighlight', 'scrollToAdminAlertLocatorTarget',
+const openAlert = new Function('clean', 'otherAdminAppNotifications', 'dashboardMonthlyBillingNotificationId', 'setBookingsAlertMenuOpen', 'selectAppTab', 'markAdminAlertLocatorHighlight', 'scrollToAdminAlertLocatorTarget',
   compiledHandler + '\nreturn openSavedAdminNotificationsFromNotificationCentre;')(
-  (value) => String(value ?? '').trim(), alertRows,
+  (value) => String(value ?? '').trim(), alertRows, 'alert-1',
   (value) => actions.push(['menu', value]), (value) => actions.push(['tab', value]),
   (target, id) => actions.push(['highlight', target, id]),
   (target, id) => actions.push(['scroll', target, id]),
@@ -217,6 +217,9 @@ for (const id of ['alert-2', 'alert-3', 'alert-7']) {
   openAlert(id);
   assert.deepEqual(actions, [['menu', false], ['tab', 'dashboard'], ['highlight', 'admin-app-notification', id], ['scroll', 'admin-app-notification', id]]);
 }
+actions.length = 0;
+openAlert('alert-1');
+assert.deepEqual(actions, [['menu', false], ['tab', 'completed'], ['highlight', 'admin-app-notification', 'alert-1'], ['scroll', 'admin-app-notification', 'alert-1']]);
 actions.length = 0;
 openAlert('not-in-current-account');
 assert.deepEqual(actions, [], 'Unknown alert must not navigate to an unrelated message');
@@ -301,7 +304,7 @@ const renderedLocationMenu = new Function('React', 'otherAdminAppNotifications',
 const locationMarkup = renderToStaticMarkup(renderedLocationMenu());
 for (const row of displayed) assert.ok(locationMarkup.includes(row.safe_title));
 assert.ok(!locationMarkup.includes('PRIVATE_PASSENGER') && !locationMarkup.includes('800'));
-const titleStart = appPage.indexOf('<h4', appPage.indexOf('data-admin-app-notification-feed-row-id='));
+const titleStart = appPage.indexOf('<h4', appPage.indexOf('data-admin-app-notification-feed-row-id=', appPage.indexOf('visibleNonMonthlyAdminAppNotifications.map(')));
 const titleEnd = appPage.indexOf('</h4>', titleStart) + '</h4>'.length;
 const cardTitleCode = ts.transpileModule('function cardTitle(title){return ' + appPage.slice(titleStart, titleEnd) + ';}', {
   compilerOptions:{target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.CommonJS, jsx:ts.JsxEmit.React}, fileName:'card.tsx',

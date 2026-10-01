@@ -39,7 +39,7 @@ try {
     ['admin','/','1zofh8u_QY0-xAsqkM8eN6G7IYp9chqw2'],
     ['customer','/my-bookings','1a2uhL39Fn1JyxaPz8zPfNo9RjnQPJnPa'],
   ]) {
-    const current = role === 'customer' ? 6 : 5;
+    const current = { admin: 6, customer: 6 }[role];
     const older = String(current - 1);
     for (const [build, width, platform] of [[null,390,'Android'],[older,390,'Android'],[String(current),390,'Android'],[String(current + 1),320,'Android'],[null,390,'iPhone']]) {
       if (injected) await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: injected });

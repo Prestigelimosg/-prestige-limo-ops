@@ -62,8 +62,8 @@ export function PublicInformationShell({
         <footer className="border-t border-slate-200 bg-slate-50 px-6 py-6 text-sm text-slate-600 sm:px-10">
           <p>
             Questions about Google Calendar access or these policies? Email{" "}
-            <a className="font-semibold text-sky-800 underline" href="mailto:willsglimo@gmail.com">
-              willsglimo@gmail.com
+            <a className="font-semibold text-sky-800 underline" href="mailto:info@prestigelimo.sg">
+              info@prestigelimo.sg
             </a>
             .
           </p>

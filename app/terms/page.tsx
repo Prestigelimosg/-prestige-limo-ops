@@ -68,7 +68,7 @@ export default function TermsOfServicePage() {
         <p className="mt-2">
           We may update these terms when the Calendar feature or applicable requirements change. These terms are
           governed by the laws of Singapore. Questions, revocation support, or deletion requests may be sent to
-          willsglimo@gmail.com.
+          info@prestigelimo.sg.
         </p>
       </section>
     </PublicInformationShell>

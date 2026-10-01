@@ -7,6 +7,7 @@ import {DriverComboTrips, type DriverComboTripSummary} from "../driver-job/drive
 import {DriverAccountSetup,nativeAccountSetupState} from "./driver-account-setup";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
@@ -1372,6 +1373,9 @@ export default function DriverPortalPage() {
             ))}
           </section>
         )}
+        <nav aria-label="Driver privacy and account help" className="flex flex-wrap gap-x-5 gap-y-2 py-3 text-sm text-slate-600">
+          <Link className="underline" href="/privacy">Privacy &amp; account deletion</Link>
+        </nav>
       </div>
     </main>
   );

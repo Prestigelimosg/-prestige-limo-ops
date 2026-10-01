@@ -66,7 +66,7 @@ export default function GoogleCalendarInformationPage() {
         <h2 className="text-xl font-bold text-sky-950">Driver control</h2>
         <p className="mt-2 text-sky-950">
           Connecting is optional. A driver can remove Prestige Limo Ops access from Google Account permissions
-          and can request deletion of the stored connection by emailing willsglimo@gmail.com. Removing access
+          and can request deletion of the stored connection by emailing info@prestigelimo.sg. Removing access
           stops future Calendar updates until the driver chooses to connect again.
         </p>
       </section>

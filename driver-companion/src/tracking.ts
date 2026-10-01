@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import { Alert, Platform } from "react-native";
 
 import {
   checkDriverLocationReadiness,
@@ -54,6 +55,25 @@ export async function startDriverTracking(
       active: false,
       message: "Background location is unavailable on this phone.",
     };
+  }
+
+  if (Platform.OS === "android" && !current.active) {
+    const accepted = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Share trip location?",
+        "Prestige SG Driver collects and sends your precise location to Prestige dispatch to show your assigned trip's progress, even when the app is not in use or the screen is locked. The customer for that trip can also see your location during the permitted pickup window. Use Stop Sharing to stop location sharing.",
+        [
+          { text: "Not now", style: "cancel", onPress: () => resolve(false) },
+          { text: "Continue", onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+    if (!accepted) {
+      return { active: false, message: "Location sharing was not started. Tap Share Location when ready." };
+    }
+    // The job may have changed while the driver reviewed the disclosure.
+    await checkDriverLocationReadiness(job);
   }
 
   const foreground = await Location.requestForegroundPermissionsAsync();

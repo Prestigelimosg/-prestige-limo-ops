@@ -282,24 +282,31 @@ async function main() {
       "Monthly Billing Draft classification rows",
     );
     await navigateWithLoadEvent(client, appUrl);
+    await waitForSelector(evaluate, '[data-app-tab="completed"]', "Completed tab");
+    assert.equal(await evaluate(`document.querySelector('[data-admin-monthly-billing-dashboard-sector="true"]')`), null);
+    await evaluate(`document.querySelector('[data-app-tab="completed"]')?.click()`);
     await waitForRows();
+    const collapsedByDefault = await evaluate(`(() => {
+      const sector = document.querySelector('[data-admin-monthly-billing-disclosure="true"]');
+      return sector instanceof HTMLDetailsElement && !sector.open && sector.getBoundingClientRect().height < 100;
+    })()`);
+    assert.equal(collapsedByDefault, true);
+    await evaluate(`document.querySelector('[data-admin-monthly-billing-disclosure="true"] > summary')?.click()`);
     reporter.step("checking the compact action queue keeps Review and omits non-actionable rows and Resolve");
     const desktopState = await evaluate(`(() => {
       const panel = document.querySelector('[data-admin-monthly-billing-dashboard-classifications="true"]');
       const sector = document.querySelector('[data-admin-monthly-billing-dashboard-sector="true"]');
       const monthlyNotification = document.querySelector('[data-admin-monthly-billing-dashboard-notification="true"]');
-      const activeJobs = document.querySelector('[data-admin-multi-driver-active-jobs-monitor="true"]');
+      const completed = document.querySelector('#completed-history');
       const review = document.querySelector('button[aria-label="Review booking 11901 in Dispatch"]');
       const pills = [...document.querySelectorAll('[data-admin-monthly-billing-dashboard-status-pill="true"]')];
       return panel instanceof HTMLElement ? {
-        afterActiveJobs: activeJobs instanceof HTMLElement && sector instanceof HTMLElement &&
-          Boolean(activeJobs.compareDocumentPosition(sector) & Node.DOCUMENT_POSITION_FOLLOWING),
+        insideCompleted: completed instanceof HTMLElement && sector instanceof HTMLElement && completed.contains(sector),
         heading: panel.querySelector('p')?.textContent?.trim(),
         isBottomSector: sector instanceof HTMLElement && sector.parentElement?.lastElementChild === sector,
         monthlyNotificationAtBottom: sector instanceof HTMLElement && monthlyNotification instanceof HTMLElement &&
           sector.contains(monthlyNotification),
-        monthlyNotificationBeforeActiveAbsent: activeJobs instanceof HTMLElement && monthlyNotification instanceof HTMLElement &&
-          Boolean(activeJobs.compareDocumentPosition(monthlyNotification) & Node.DOCUMENT_POSITION_FOLLOWING),
+        dashboardMonthlyAbsent: !document.querySelector('[data-admin-multi-driver-active-jobs-monitor="true"]'),
         monthlyNotificationCount: document.querySelectorAll('[data-admin-monthly-billing-dashboard-notification="true"]').length,
         monthlyNotificationDoneLabel: monthlyNotification?.querySelector('[data-admin-app-notification-action="read"]')?.textContent?.trim(),
         monthlyNotificationTitle: monthlyNotification?.querySelector('[data-admin-app-notification-feed-title="true"]')?.textContent?.trim(),
@@ -319,11 +326,11 @@ async function main() {
       } : null;
     })()`);
     assert.deepEqual(desktopState, {
-      afterActiveJobs: true,
+      insideCompleted: true,
       heading: "3 jobs need Monthly Billing action for August 2026",
       isBottomSector: true,
       monthlyNotificationAtBottom: true,
-      monthlyNotificationBeforeActiveAbsent: true,
+      dashboardMonthlyAbsent: true,
       monthlyNotificationCount: 1,
       monthlyNotificationDoneLabel: "Done",
       monthlyNotificationTitle: "Monthly Billing Draft",
@@ -350,8 +357,9 @@ async function main() {
       "Dispatch exact booking load",
     );
     assert.deepEqual(exactBookingReads, [{ method: "GET", reference: blockedReference }]);
-    await evaluate(`document.querySelector('[data-app-tab="dashboard"]')?.click()`);
+    await evaluate(`document.querySelector('[data-app-tab="completed"]')?.click()`);
     await waitForRows();
+    await evaluate(`document.querySelector('[data-admin-monthly-billing-disclosure="true"] > summary')?.click()`);
     assert.equal(await evaluate(`document.querySelector('[data-admin-monthly-billing-dashboard-resolve-booking="true"]')`), null);
 
     await client.send("Emulation.setDeviceMetricsOverride", {

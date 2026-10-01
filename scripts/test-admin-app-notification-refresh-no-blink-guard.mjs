@@ -41,7 +41,7 @@ const refreshEffect = sectionBetween(
 );
 const intervalEffect = sectionBetween(
   dashboardSource,
-  'if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {',
+  'if ((activeTab !== "dashboard" && activeTab !== "completed") || adminAppNotificationReadState.status === "unavailable") {',
   "  useEffect(() => {\n    let cancelled = false;",
 );
 const monthlyBillingClassificationEffect = sectionBetween(
@@ -97,7 +97,7 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  'if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {',
+  'if ((activeTab !== "dashboard" && activeTab !== "completed") || adminAppNotificationReadState.status === "unavailable") {',
   "setAdminAppNotificationReadRevision((revision) => revision + 1)",
   "10 * 1000",
   "[activeTab, adminAppNotificationReadState.status]",

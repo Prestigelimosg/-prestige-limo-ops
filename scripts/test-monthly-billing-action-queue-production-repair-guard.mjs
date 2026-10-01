@@ -22,7 +22,7 @@ for (const fragment of [
   "No completed jobs need Monthly Billing action for this month.",
   'data-admin-monthly-billing-dashboard-sector="true"',
   'data-admin-monthly-billing-dashboard-notification="true"',
-  'data-admin-monthly-billing-dashboard-position="page-bottom"',
+  'data-admin-monthly-billing-dashboard-position="completed-bottom"',
   "data-admin-monthly-billing-dashboard-review-booking",
 ]) {
   assert.ok(app.includes(fragment), `Missing action-queue contract: ${fragment}`);
@@ -38,15 +38,15 @@ assert.equal(
   1,
   "Monthly Billing notification card must render exactly once.",
 );
-const activeJobsRenderIndex = app.lastIndexOf("{activeJobsMonitorPanel}");
-const monthlyBillingBottomPositionIndex = app.indexOf(
-  'data-admin-monthly-billing-dashboard-position="page-bottom"',
-);
-assert.ok(activeJobsRenderIndex >= 0, "Missing established Dashboard Active Jobs render.");
-assert.ok(
-  monthlyBillingBottomPositionIndex > activeJobsRenderIndex,
-  "Monthly Billing action sector must render after the established Dashboard Active Jobs lane.",
-);
+const completedStart = app.indexOf('{activeTab === "completed" ? (');
+const completedEnd = app.indexOf('{activeTab === "drivers" ? (', completedStart);
+const completed = app.slice(completedStart, completedEnd);
+assert.ok(completed.includes('data-admin-monthly-billing-disclosure="true"'));
+assert.ok(completed.indexOf('{completedBookingsPanel}') < completed.indexOf('<details'));
+assert.ok(completed.includes('max-h-80 gap-1 overflow-y-auto overscroll-contain'));
+assert.ok(!completed.slice(completed.indexOf('<details'), completed.indexOf('<summary')).includes('open='), 'Dropdown starts closed');
+assert.ok(app.includes('selectAppTab(notificationId === dashboardMonthlyBillingNotificationId ? "completed" : "dashboard")'));
+assert.ok(app.includes('if (monthlyDisclosure) monthlyDisclosure.open = true;'));
 
 for (const forbidden of [
   "handleAdminMonthlyBillingDashboardBookingResolve",
@@ -61,8 +61,9 @@ for (const forbidden of [
 for (const fragment of [
   "nonActionableReferencesAbsent: true",
   "isBottomSector: true",
+  "assert.equal(collapsedByDefault, true)",
   "monthlyNotificationAtBottom: true",
-  "monthlyNotificationBeforeActiveAbsent: true",
+  "dashboardMonthlyAbsent: true",
   "monthlyNotificationCount: 1",
   'monthlyNotificationDoneLabel: "Done"',
   'monthlyNotificationTitle: "Monthly Billing Draft"',

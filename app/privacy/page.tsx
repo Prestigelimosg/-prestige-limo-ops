@@ -3,24 +3,95 @@ import type { Metadata } from "next";
 import { PublicInformationShell } from "../public-information-shell";
 
 export const metadata: Metadata = {
-  description: "Privacy Policy for Prestige Limo Ops and its optional driver Google Calendar connection.",
+  description: "Privacy Policy for Prestige SG Driver and its optional Google Calendar connection.",
   title: "Privacy Policy | Prestige Limo Ops",
 };
 
 export default function PrivacyPolicyPage() {
   return (
     <PublicInformationShell
-      eyebrow="Effective 20 July 2026"
-      intro="This policy explains the Google user data handled by the optional Prestige Limo Ops driver Calendar connection and the controls available to drivers."
+      eyebrow="Updated 1 October 2026"
+      intro="This policy explains how Prestige Limo SG handles information in Prestige SG Driver, including assigned jobs, location sharing, photos, messages and the optional Google Calendar connection."
       title="Privacy Policy"
     >
+      <section id="account-deletion" className="scroll-mt-6">
+        <h2 className="text-xl font-bold text-slate-950">Request account and data deletion</h2>
+        <div className="mt-3 space-y-3">
+          <p>
+            To request deletion of your Prestige SG Driver account and associated data, email
+            info@prestigelimo.sg with the subject “Driver account deletion”. Include the email address registered
+            to your Driver account. You can send this request even if you have uninstalled the app or cannot sign in.
+            Never send a password, PIN, private Job Link or Google credential.
+          </p>
+          <p>
+            We verify that the request comes from the account holder before acting. We review the account and
+            associated data for deletion and explain any records retained for security, disputes or legal obligations.
+            Sending a request does not immediately delete records, cancel an assigned trip or revoke app access.
+            Contact dispatch separately about an active assignment. For questions about your request, use the same
+            email address.
+          </p>
+        </div>
+      </section>
+
       <section>
         <h2 className="text-xl font-bold text-slate-950">Scope of this policy</h2>
         <p className="mt-2">
-          Prestige Limo Ops provides operational booking and driver-job tools. This policy focuses on the optional
-          Google Calendar connection used by a verified, currently assigned driver. The connection is not required
-          to view the private Driver Job page or report job status.
+          Prestige Limo SG operates Prestige SG Driver and the related private Driver Job pages through Prestige
+          Limo Ops. The app lets drivers access assigned jobs, report progress, share trip location, send proof
+          photos and messages, and optionally save jobs to their own Google Calendar. The Calendar connection is
+          not required to view a private Driver Job page or report job status.
         </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-bold text-slate-950">Driver app information and its use</h2>
+        <div className="mt-3 space-y-3">
+          <p>
+            Account and job information includes the email address and sign-in credentials you provide, driver
+            name, contact number, vehicle and registration plate, assigned job details and acknowledgement and
+            status reports. We use this information to secure access, identify the assigned driver and coordinate
+            transport services. The app uses a device installation identifier to support its one-phone account
+            protection. Device biometric checks are handled by your phone; the app does not receive your biometric
+            template.
+          </p>
+          <p>
+            When you start trip location sharing, Prestige SG Driver collects and sends your precise location to
+            Prestige dispatch for your assigned job, including when the app is not in use or the screen is locked.
+            The customer for that trip can view eligible location updates during the permitted pickup window.
+            Access depends on the current assignment, trip state and location freshness. You can use Stop Sharing
+            in the Driver Job page or revoke location permission in phone Settings. Revoking permission can prevent
+            live trip tracking from working.
+          </p>
+          <p>
+            OTS photos are uploaded when you choose a photo and send it to Admin. Selecting or previewing a photo
+            alone does not upload it. Messages are sent to the Admin or Customer channel you select for the job.
+            We store these submissions and report timestamps to support dispatch, communication and service records.
+          </p>
+          <p>
+            With notification permission, the app registers a device push token to deliver job alerts and messages.
+            App version, device identifiers and technical error information may be processed to maintain security
+            and diagnose delivery or access problems. You can change notification permission in phone Settings.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-bold text-slate-950">Access, service providers and retention</h2>
+        <div className="mt-3 space-y-3">
+          <p>
+            Authorized Prestige staff use operational records to provide and support the transport service. Customers
+            receive only information and messages made available for their own jobs. Hosting, storage, authentication
+            and notification service providers process information needed to operate these features. Google processes
+            Calendar data only when you choose to connect that feature, as described below. Driver information is
+            not sold or used for advertising.
+          </p>
+          <p>
+            Information is retained as needed to provide the service, maintain security, resolve disputes and meet
+            applicable recordkeeping obligations. Temporary live-location markers and proof photos are subject to
+            operational cleanup; stopping location sharing does not itself delete the account or job history.
+            Account-deletion requests are reviewed separately, including any records that must be retained.
+          </p>
+        </div>
       </section>
 
       <section>
@@ -79,7 +150,7 @@ export default function PrivacyPolicyPage() {
           </p>
           <p>
             To request deletion of the server-stored Google connection or ask a privacy question, email
-            willsglimo@gmail.com. Please identify the relevant driver account without sending passwords, private
+            info@prestigelimo.sg. Please identify the relevant driver account without sending passwords, private
             Driver Job links, or Google credentials. We will verify the requester before deleting connection data.
           </p>
         </div>

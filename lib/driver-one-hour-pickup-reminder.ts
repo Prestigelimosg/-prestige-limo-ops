@@ -532,7 +532,9 @@ async function runLocationFollowups(
     let evidence = allowedReferences.includes(reference)
       ? await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds) : null;
     const pickupAt = validDate(evidence?.booking.pickup_at);
-    if (!evidence || !pickupAt ||
+    // At T-35 the independent Admin escalation takes over. Latch this Driver
+    // cycle closed before its next claim; later ticks must never requeue it.
+    if (!evidence || !pickupAt || pickupAt.getTime() - now.getTime() <= 35 * minuteMs ||
       initial.event_key !== pickupReminderEventKey(reference, pickupAt.toISOString()) || evidence.fresh) {
       await markChecked();
       continue;

@@ -220,19 +220,16 @@ policyOpen=true;allowedReferences=[ref];
 }
 {
   const f=fixture();await run(f.db,{...f.options,now:new Date('2026-09-10T06:00:00Z')});
-  assert.equal(f.sends.length,2,'pickup time alone must not stop missing-location reminders');
+  assert.equal(f.sends.length,0,'Driver repeats must remain stopped after the T-35 cutoff');
 }
 {
   const f=fixture();await run(f.db,f.options);
   f.db.tables.driver_job_status_events.push({booking_reference:ref,status_value:'ots',occurred_at:'2026-09-10T06:15:00Z'});
-  await run(f.db,{...f.options,now:new Date('2026-09-10T06:30:00Z')});
-  assert.equal(f.sends.filter(s=>s[0]==='driver').length,2,'continue after original 65-minute lookup and OTS');
+  for(const clock of ['06:30:00','06:30:30','06:35:00']) await run(f.db,{...f.options,now:new Date(`2026-09-10T${clock}Z`)});
+  assert.equal(f.sends.filter(s=>s[0]==='driver').length,1,'OTS and late ticks must not reopen the T-35 cutoff');
   assert.equal(f.sends.filter(s=>s[0]==='admin').length,1);
-  await run(f.db,{...f.options,now:new Date('2026-09-10T06:30:30Z')});
-  assert.equal(f.sends.filter(s=>s[0]==='driver').length,2,'delayed ticks do not replay missed intervals');
-  await run(f.db,{...f.options,now:new Date('2026-09-10T06:35:00Z')});
-  assert.equal(f.sends.filter(s=>s[0]==='driver').length,3);
 }
+
 {
   const f=fixture();f.db.tables.driver_job_links=Array.from({length:101},(_,i)=>({...f.db.tables.driver_job_links[0],id:`bounded-${i}`}));
   const result=await run(f.db,f.options);assert.equal(result.ok,false);assert.equal(f.sends.length,0,'incomplete over-limit evidence cannot send');
@@ -321,6 +318,22 @@ for (const change of ['fresh','cancelled','reassigned','amended','pob','revoked'
     await run(f.db,{...f.options,now:new Date('2026-09-10T05:11:00Z')});
     await run(f.db,{...f.options,now:new Date('2026-09-10T05:20:00Z')});
     assert.equal(payloads.length,2,'GPS recovery stops actual sender dispatch');
+  }
+}
+// Owner-approved handover: Driver repeats end exactly at T-35; Admin takes over.
+for (const clock of ['05:24:59.999','05:25:00','05:25:00.001','05:30:00']) {
+  const f=fixture();await run(f.db,f.options);
+  const before=f.sends.filter(s=>s[0]==='driver').length;
+  await Promise.all([run(f.db,{...f.options,now:new Date(`2026-09-10T${clock}Z`)}),run(f.db,{...f.options,now:new Date(`2026-09-10T${clock}Z`)})]);
+  const cutoff=clock!=='05:24:59.999';
+  assert.equal(f.sends.filter(s=>s[0]==='driver').length,before+(cutoff?0:1),`Driver boundary ${clock}`);
+  assert.equal(f.sends.filter(s=>s[0]==='admin'&&s[2]?.pickupEmergencyMinutes).length,cutoff?1:0,`Admin handover ${clock}`);
+  if(cutoff) {
+    assert.ok(f.db.tables.customer_driver_app_notification_outbox[0].safe_context.location_followup_checked_at);
+    const notice=f.db.tables.customer_driver_app_notification_outbox.find(r=>r.workflow_area==='driver_pickup_location_followup');
+    assert.equal(notice.updated_at,'2026-09-10T05:05:00.000Z','cutoff must not requeue the existing Driver notice');
+    await run(f.db,{...f.options,now:new Date('2026-09-10T06:10:00Z')});
+    assert.equal(f.sends.filter(s=>s[0]==='driver').length,before,'no restart after pickup');
   }
 }
 console.log('Driver location follow-up runtime guard passed.');

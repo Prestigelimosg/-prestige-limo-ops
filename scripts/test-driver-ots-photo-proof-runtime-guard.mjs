@@ -35,6 +35,10 @@ const persistence = files["lib/driver-ots-photo-proof-persistence.ts"];
 const migration = files["supabase/migrations/202607030002_driver_ots_photo_proofs.sql"];
 const setupFoundation = files["lib/admin-ots-photo-proof-setup-foundation.ts"];
 const customerPublicSources = `${files["app/book/page.tsx"]}\n${files["app/my-bookings/page.tsx"]}`;
+assertIncludes(driverPage, 'data-driver-ots-photo-thumbnail="true"', "local selected-photo preview");
+assertIncludes(driverPage, 'data-driver-ots-photo-preview-dialog="true"', "in-page enlargement");
+assertIncludes(driverPage, "URL.revokeObjectURL", "preview memory cleanup");
+assertIncludes(driverPage, "Preview unavailable. You can retake or send this photo.", "decode failure does not block upload");
 const driverOtsUploadFunctionStart = driverPage.indexOf(
   "async function uploadDriverOtsPhotoProof()",
 );
@@ -396,3 +400,68 @@ try {
 }
 
 console.log("driver OTS photo proof runtime guard passed: exact saved plate, private response, upload-first and failure isolation");
+
+// Execute the real page callbacks with local files and a synthetic upload. No network.
+const photoAst = ts.createSourceFile("page.tsx", driverPage, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let clearPreviewCallback, selectPhotoCallback, uploadPhotoCallback;
+function findPhotoCallbacks(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(photoAst) === "clearDriverOtsPhotoPreview") {
+    clearPreviewCallback = node.initializer.arguments[0].getText(photoAst);
+  }
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "handleDriverOtsPhotoFileChange") selectPhotoCallback = node.getText(photoAst);
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "uploadDriverOtsPhotoProof") uploadPhotoCallback = node.getText(photoAst);
+  ts.forEachChild(node, findPhotoCallbacks);
+}
+findPhotoCallbacks(photoAst);
+assert.ok(clearPreviewCallback && selectPhotoCallback && uploadPhotoCallback);
+assertIncludes(driverPage, "useEffect(() => clearDriverOtsPhotoPreview, [token, clearDriverOtsPhotoPreview])", "job change and unmount cleanup");
+const lifecycleJs = ts.transpileModule(`
+const clearDriverOtsPhotoPreview = ${clearPreviewCallback};
+${selectPhotoCallback}
+${uploadPhotoCallback}
+return {clearDriverOtsPhotoPreview, handleDriverOtsPhotoFileChange, uploadDriverOtsPhotoProof};
+`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+let photoState = {action:"idle", feedback:null, selectedFileName:"", previewUrl:"", previewFailed:false, uploadedAt:""};
+const revoked = [], previewRef = {current:""}, inputRef = {current:{files:[],value:""}};
+let closed = 0, requestCount = 0, failUpload = false, failUrl = false, created = 0;
+const callbacks = new Function("URL", "driverOtsPhotoPreviewUrlRef", "driverOtsPhotoPreviewDialogRef", "setDriverOtsPhotoProof", "driverOtsPhotoProofInputRef", "token", "pageState", "workflowStatus", "driverWorkflowHasReachedOts", "prepareDriverOtsPhotoForUpload", "fetch", "driverOtsPhotoProofRoute", "otsPhotoProofBlockedMessage", "addActivity", lifecycleJs)(
+  {createObjectURL:()=>{if(failUrl)throw Error("Unsupported");return `blob:synthetic-${++created}`;},revokeObjectURL:url=>revoked.push(url)},
+  previewRef, {current:{close:()=>closed++}}, value=>{photoState=typeof value==="function"?value(photoState):value;}, inputRef,
+  "synthetic", {kind:"ready"}, "ots", ()=>true,
+  async file=>({blob:file,fileName:file.name}),
+  async (_url,options)=>{requestCount++;assert.equal(options.method,"POST");assert.equal(options.body.get("photo").name,inputRef.current.files[0].name);return {ok:!failUpload,json:async()=>failUpload?{ok:false,reason:"storage_failed"}:{ok:true,proof:{customerVisible:false,external_send:false,uploaded_at:"2026-10-01T03:00:00Z"}}};},
+  ()=>"/api/driver-job/synthetic/ots-photo", ()=>"Synthetic upload failed", ()=>{}
+);
+function choosePhoto(name) {
+  const file = new File(["synthetic image"], name, {type:"image/jpeg"});
+  inputRef.current.files=[file];
+  callbacks.handleDriverOtsPhotoFileChange({target:{files:[file]}});
+}
+choosePhoto("first.jpg");
+assert.equal(photoState.previewUrl,"blob:synthetic-1");
+choosePhoto("retaken.jpg");
+assert.deepEqual(revoked,["blob:synthetic-1"]);
+assert.equal(photoState.selectedFileName,"retaken.jpg");
+assert.equal(requestCount,0,"Preview/retake must not upload or notify");
+failUpload=true;
+await callbacks.uploadDriverOtsPhotoProof();
+assert.equal(photoState.previewUrl,"blob:synthetic-2","Failure retains selected preview for retry");
+assert.equal(photoState.action,"idle");
+failUpload=false;
+await callbacks.uploadDriverOtsPhotoProof();
+assert.equal(photoState.previewUrl,"");
+assert.equal(photoState.selectedFileName,"");
+assert.deepEqual(revoked,["blob:synthetic-1","blob:synthetic-2"]);
+failUrl=true;
+choosePhoto("no-preview.jpg");
+assert.equal(photoState.previewFailed,true);
+assert.equal(photoState.selectedFileName,"no-preview.jpg");
+await callbacks.uploadDriverOtsPhotoProof();
+assert.equal(photoState.feedback.tone,"success","Preview failure must not block the existing upload");
+failUrl=false;
+choosePhoto("leaving-job.jpg");
+callbacks.clearDriverOtsPhotoPreview();
+assert.equal(previewRef.current,"");
+assert.equal(revoked.at(-1),"blob:synthetic-3");
+assert.ok(closed>=4,"Replacement, success and cleanup close the enlargement");
+console.log("Local OTS preview callbacks passed: retake, no-send selection, failed-upload retry, success and job-exit cleanup, preview failure fallback");

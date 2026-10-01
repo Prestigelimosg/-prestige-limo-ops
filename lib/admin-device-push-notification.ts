@@ -102,6 +102,7 @@ type AdminNativePushSubscriptionInput = {
   channel: "native_ios";
   endpoint: string;
   installationId: string;
+  supportsAlertTarget: boolean;
 };
 
 type ParsedAdminDevicePushSubscriptionInput =
@@ -195,6 +196,8 @@ export type AdminDevicePushSender = (
 
 type AdminDevicePushAlertOptions = {
   pickupLocationState?: "missing" | "overlap";
+  alertTarget?: unknown;
+  pickupEmergencyMinutes?: number;
   badgeClient?: Pick<SupabaseClient, "from">;
   bookingReference?: unknown;
   safeMessage?: unknown;
@@ -217,6 +220,7 @@ type AdminNativeDevicePushPayload = {
   body: string;
   data: {
     open_target: "/";
+    alert_target?: string;
     type: AdminNativeDevicePushEventType;
   };
   priority: "high";
@@ -244,6 +248,7 @@ type LoadedAdminDevicePushSubscription = {
   channel: "native_ios" | "web";
   endpoint: string;
   webSubscription: PushSubscription | null;
+  supportsAlertTarget?: boolean;
 };
 
 function cleanEnvValue(env: EnvInput, key: string): string | null {
@@ -375,6 +380,12 @@ function parseRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function missingAlertCapabilityColumn(error: unknown): boolean {
+  const record = parseRecord(error);
+  return (record?.code === "42703" || record?.code === "PGRST204") &&
+    typeof record.message === "string" && record.message.includes("supports_alert_target");
+}
+
 function parseSubscriptionInput(
   value: unknown,
 ): ParsedAdminDevicePushSubscriptionInput | null {
@@ -391,6 +402,7 @@ function parseSubscriptionInput(
           channel: "native_ios",
           endpoint,
           installationId,
+          supportsAlertTarget: body.supports_alert_target === true,
         }
       : null;
   }
@@ -513,21 +525,27 @@ export async function registerAdminDevicePushSubscription(
     }
   }
 
-  const { data, error } = await supabase
-    .from("admin_device_push_subscriptions")
-    .upsert({
+  const registrationPayload = {
       endpoint: parsed.endpoint,
       p256dh: parsed.channel === "native_ios" ? adminNativePushSubscriptionSentinel : parsed.keys.p256dh,
       auth: parsed.channel === "native_ios" ? adminNativePushSubscriptionSentinel : parsed.keys.auth,
       device_label: parsed.channel === "native_ios" ? nativeDeviceLabel : parsed.device_label,
+      ...(parsed.channel === "native_ios" ? { supports_alert_target: parsed.supportsAlertTarget } : {}),
       subscription_status: "active",
       source_surface: parsed.channel === "native_ios" ? adminNativePushSubscriptionSource : adminBrowserPushSubscriptionSource,
       actor_label: actor.actor_label,
       revoked_at: null,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "endpoint" })
-    .select("id, device_label, subscription_status")
-    .single();
+    };
+  const writeRegistration = (payload: Record<string, unknown>) => supabase
+    .from("admin_device_push_subscriptions").upsert(payload, { onConflict: "endpoint" })
+    .select("id, device_label, subscription_status").single();
+  let { data, error } = await writeRegistration(registrationPayload);
+  if (parsed.channel === "native_ios" && missingAlertCapabilityColumn(error)) {
+    const legacyPayload = { ...registrationPayload };
+    delete legacyPayload.supports_alert_target;
+    ({ data, error } = await writeRegistration(legacyPayload));
+  }
 
   if (error) {
     return blockedSubscriptionResult(
@@ -798,6 +816,16 @@ function safeVehiclePlate(value: unknown): string | null {
   return plate;
 }
 
+export function adminPickupEmergencyCopy(plateValue: unknown, minutes: unknown, overlap = false) {
+  if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 35) return null;
+  const plate = safeVehiclePlate(plateValue) || "Plate unavailable";
+  return {
+    title: `Emergency ‼️ ${minutes} minutes left`,
+    body: overlap ? `${plate} is sharing another job. Check overlapping assignments.`
+      : `${plate} no location yet! Open Dashboard to review.`,
+  };
+}
+
 function safePublicBookingReference(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -815,6 +843,7 @@ function safeAlertPayload(
   bookingReference?: unknown,
   safeMessage?: unknown,
   pickupLocationState?: "missing" | "overlap",
+  pickupEmergencyMinutes?: number,
 ): AdminDevicePushPayload {
   const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
   const publicReference =
@@ -825,7 +854,9 @@ function safeAlertPayload(
     statusLabel || eventType === "driver_acknowledged" || eventType === "driver_pool_accepted"
       ? safeVehiclePlate(vehiclePlate)
       : null;
-  const copy =
+  const emergencyCopy = eventType === "driver_issue" && pickupLocationState
+    ? adminPickupEmergencyCopy(vehiclePlate, pickupEmergencyMinutes, pickupLocationState === "overlap") : null;
+  const copy = emergencyCopy ?? (
     eventType === "driver_issue" && pickupLocationState === "missing"
       ? { title: "Location unavailable", body: "Location unavailable after the pickup reminder. Open Dashboard to review." }
       : eventType === "driver_issue" && pickupLocationState === "overlap"
@@ -845,7 +876,7 @@ function safeAlertPayload(
             body: `${plate} saved details and acknowledged a job. Open Dashboard to review.`,
             title: `${plate} acknowledged job`,
           }
-      : adminDevicePushEventCopy[eventType];
+      : adminDevicePushEventCopy[eventType]);
 
   const message = safeText(safeMessage, 500);
   const messagePreview =
@@ -903,7 +934,7 @@ function loadedAdminDevicePushSubscription(
       row.auth === adminNativePushSubscriptionSentinel &&
       installationId &&
       safeText(row.actor_label, 160)
-      ? { channel: "native_ios", endpoint, webSubscription: null }
+      ? { channel: "native_ios", endpoint, webSubscription: null, supportsAlertTarget: row.supports_alert_target === true }
       : null;
   }
 
@@ -923,11 +954,14 @@ async function loadActiveSubscriptions(
   config: AdminDevicePushConfig,
 ): Promise<LoadedAdminDevicePushSubscription[]> {
   const supabase = createSupabaseClient(config);
-  const { data, error } = await supabase
-    .from("admin_device_push_subscriptions")
-    .select("endpoint, p256dh, auth, source_surface, device_label, actor_label")
-    .eq("subscription_status", "active")
-    .limit(25);
+  const legacyColumns = "endpoint, p256dh, auth, source_surface, device_label, actor_label";
+  const readSubscriptions = (columns: string) => supabase.from("admin_device_push_subscriptions")
+    .select(columns).eq("subscription_status", "active").limit(25);
+  let { data, error } = await readSubscriptions(`${legacyColumns}, supports_alert_target`);
+  if (missingAlertCapabilityColumn(error)) {
+    // Rolling deployment safety: absent migration retains every legacy send.
+    ({ data, error } = await readSubscriptions(legacyColumns));
+  }
 
   if (error) {
     throw error;
@@ -961,6 +995,7 @@ function safeNativePayload(
   vehiclePlate?: unknown,
   bookingReference?: unknown,
   messageBody?: string,
+  emergencyCopy?: { title: string; body: string } | null,
 ): AdminNativeDevicePushPayload {
   const plate = safeVehiclePlate(vehiclePlate);
   const publicReference = safePublicBookingReference(bookingReference);
@@ -979,7 +1014,7 @@ function safeNativePayload(
           : adminDevicePushEventCopy[eventType].body;
 
   return {
-    body: eventType === "driver_issue" && (
+    body: eventType === "driver_issue" && emergencyCopy ? `${emergencyCopy.title}. ${emergencyCopy.body}` : eventType === "driver_issue" && (
       messageBody === "Location unavailable after the pickup reminder. Open Dashboard to review." ||
       messageBody === "Driver is sharing another job. Open Dashboard to review."
     ) ? messageBody : (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply" || eventType === "driver_to_admin_reply") && messageBody
@@ -1330,6 +1365,7 @@ export async function sendAdminDevicePushAlert(
     options.bookingReference,
     options.safeMessage,
     options.pickupLocationState,
+    options.pickupEmergencyMinutes,
   );
   if (payloadHasForbiddenFragments(payload)) {
     return blockedAlertResult("provider_failure", true);
@@ -1373,6 +1409,8 @@ export async function sendAdminDevicePushAlert(
     options.vehiclePlate,
     options.bookingReference,
     payload.body,
+    eventType === "driver_issue" && options.pickupLocationState
+      ? adminPickupEmergencyCopy(options.vehiclePlate, options.pickupEmergencyMinutes, options.pickupLocationState === "overlap") : null,
   );
   const shouldRecordSubscriptionHealth =
     !options.loadedSubscriptionLoader &&
@@ -1382,9 +1420,17 @@ export async function sendAdminDevicePushAlert(
   const badgeClient = options.badgeClient ??
     (shouldRecordSubscriptionHealth ? createSupabaseClient(config) : null);
 
+  // Only updated, explicitly registered wrappers understand this optional field.
+  // Legacy native apps reject unknown data keys, so retain their exact payload.
+  const alertTarget = typeof options.alertTarget === "string" &&
+    /^(?:message|alert):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(options.alertTarget)
+      ? options.alertTarget.toLowerCase() : null;
   let providerRequestCount = 0;
   let successfulRequestCount = 0;
   for (const subscription of eligibleSubscriptions) {
+    const subscriptionPayload = subscription.supportsAlertTarget && alertTarget
+      ? { ...nativePayload, data: { ...nativePayload.data, alert_target: alertTarget } }
+      : nativePayload;
     const badgeReservation =
       subscription.channel === "native_ios" && nativePayload && badgeClient
         ? await reserveNativePushBadgeCount(badgeClient, {
@@ -1401,8 +1447,8 @@ export async function sendAdminDevicePushAlert(
                 sendNativePush(expoPushToken, pushPayload, options.nativePushFetcher)))(
                 subscription.endpoint,
                 badgeReservation
-                  ? { ...nativePayload, badge: badgeReservation.count }
-                  : nativePayload,
+                  ? { ...subscriptionPayload, badge: badgeReservation.count }
+                  : subscriptionPayload,
               )
           : null
         : () => webSender(subscription.webSubscription!, payload);

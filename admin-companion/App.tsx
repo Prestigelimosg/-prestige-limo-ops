@@ -113,7 +113,7 @@ export default function App() {
   const nativeBridgeBusyRef = useRef(false);
   const pendingNativeActionRef = useRef<"register" | "unregister" | null>(null);
   const pendingNativeContextRef = useRef<"badge_reset" | "sign_out" | "toggle" | null>(null);
-  const pendingDashboardOpenRef = useRef(false);
+  const pendingDashboardOpenRef = useRef<string | null>(null);
   const pendingNativeTokenRef = useRef("");
   const pendingPreviousNativeTokenRef = useRef("");
   const completedBadgeResetSequenceRef = useRef(0);
@@ -398,11 +398,12 @@ export default function App() {
       );
       if (!request) return;
 
-      pendingDashboardOpenRef.current = true;
+      pendingDashboardOpenRef.current = request.openTarget;
       if (biometricEnabled) {
         setAdminScreenMode("locked");
         void unlockAdminApp();
       } else if (installationId) {
+        pendingDashboardOpenRef.current = null;
         setCurrentUrl(`${productionOrigin}${request.openTarget}`);
         setNavigationKey((current) => current + 1);
       }
@@ -437,8 +438,9 @@ export default function App() {
       return;
     }
 
-    pendingDashboardOpenRef.current = false;
-    setCurrentUrl(`${productionOrigin}/`);
+    const openTarget = pendingDashboardOpenRef.current;
+    pendingDashboardOpenRef.current = null;
+    setCurrentUrl(`${productionOrigin}${openTarget}`);
     setNavigationKey((current) => current + 1);
   }, [biometricEnabled, installationId, screenMode]);
 

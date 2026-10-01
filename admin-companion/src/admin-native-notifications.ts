@@ -50,7 +50,7 @@ const adminNativeNotificationTypes = new Set<AdminNativeNotificationType>([
 ]);
 
 export type AdminNativeNotificationOpenRequest = {
-  openTarget: "/";
+  openTarget: string;
   type: AdminNativeNotificationType;
 };
 
@@ -69,10 +69,13 @@ export function nativeAdminNotificationOpenRequest(
     )
       ? (notification.type as AdminNativeNotificationType)
       : null;
-  return notification.open_target === "/" &&
+  const target = notification.alert_target;
+  const validTarget = target === undefined || (typeof target === "string" &&
+    /^(?:message|alert):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(target));
+  return validTarget && notification.open_target === "/" &&
     type &&
-    Object.keys(notification).every((key) => key === "open_target" || key === "type")
-    ? { openTarget: "/", type }
+    Object.keys(notification).every((key) => key === "open_target" || key === "type" || key === "alert_target")
+    ? { openTarget: target ? `/?admin_alert=${encodeURIComponent(String(target).toLowerCase())}` : "/", type }
     : null;
 }
 

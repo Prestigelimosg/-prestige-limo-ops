@@ -15704,6 +15704,7 @@ export default function Home() {
     notificationId?: string;
     target: AdminAlertLocatorTarget;
   } | null>(null);
+  const adminNotificationTargetHandledRef = useRef(false);
   const [bookingsAlertMenuOpen, setBookingsAlertMenuOpen] = useState(false);
   const [adminAlertMenuPosition, setAdminAlertMenuPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   useEffect(() => {
@@ -25757,6 +25758,38 @@ export default function Home() {
     markAdminAlertLocatorHighlight("admin-app-notification", notificationId || undefined);
     scrollToAdminAlertLocatorTarget("admin-app-notification", notificationId || undefined);
   }
+
+  useEffect(() => {
+    if (adminNotificationTargetHandledRef.current || activeTab !== "dashboard" ||
+      adminAppNotificationReadState.status !== "loaded") return;
+    const url = new URL(window.location.href);
+    const target = url.searchParams.get("admin_alert");
+    if (target === null) return;
+    const requestedId = target.toLowerCase().startsWith("alert:") ? target.toLowerCase().slice(6) : target.toLowerCase();
+    if (adminAppNotificationReadState.message?.tone === "error" &&
+      !otherAdminAppNotifications.some((item) => item.id === requestedId)) return;
+    adminNotificationTargetHandledRef.current = true;
+    url.searchParams.delete("admin_alert");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    if (!/^(?:message|alert):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(target)) {
+      setAdminAppNotificationReadState((current) => ({ ...current, message: {
+        tone: "info", text: "This notification target is invalid. Review the saved Admin alerts.",
+      } }));
+      return;
+    }
+    const normalized = target.toLowerCase();
+    const id = normalized.startsWith("message:") ? normalized : normalized.slice("alert:".length);
+    if (!otherAdminAppNotifications.some((item) => item.id === id)) {
+      setAdminAppNotificationReadState((current) => ({ ...current, message: {
+        tone: "info", text: "This exact alert is no longer available. It may have been cleared or resolved; no other message was selected.",
+      } }));
+      return;
+    }
+    openSavedAdminNotificationsFromNotificationCentre(id);
+    // The authenticated existing reader must finish before selecting a target.
+    // No read/Done, reply, status or badge write is performed by this handoff.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, adminAppNotificationReadState.status, adminAppNotificationReadState.notifications]);
 
   async function saveAdminBookingOperationalSnapshot() {
     const missingPickupMessage = adminDispatchSaveCrmMissingPickupMessage(

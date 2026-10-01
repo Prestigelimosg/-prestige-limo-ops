@@ -157,7 +157,7 @@ includes(
 );
 assert.match(
   source.helper,
-  /safeNativePayload\(\s*nativeEventType,\s*options\.vehiclePlate,\s*options\.bookingReference,\s*payload\.body,?\s*\)/,
+  /safeNativePayload\(\s*nativeEventType,\s*options\.vehiclePlate,\s*options\.bookingReference,\s*payload\.body,\s*eventType === "driver_issue" && options\.pickupLocationState/,
   "Admin native payload must retain the exact event, vehicle plate and public booking reference plus the validated message body",
 );
 includes(
@@ -475,6 +475,95 @@ try {
   assert.equal(invalidNativeEvent.ok, false);
   assert.equal(invalidNativeEvent.reason, "invalid_event");
   assert.equal(invalidNativeSendCount, 0);
+
+  // Registration capability is explicit, server-authenticated, and never inferred
+  // from an Android/iOS label or an old registration.
+  for (const capability of [undefined, false, true, "true"]) {
+    const captured = {};
+    globalThis.__ADMIN_NATIVE_PUSH_TEST_CLIENT__ = plannedClient([
+      {data:[],error:null},
+      {data:{id:"registration",device_label:`admin-native-ios:${installationId}`,subscription_status:"active"},error:null},
+      {data:[{actor_label:adminActor.actor_label,device_label:`admin-native-ios:${installationId}`,endpoint:nativeEndpoint}],error:null},
+    ],captured);
+    const result = await helper.registerAdminDevicePushSubscription({channel:"admin_native_ios",
+      installation_id:installationId,native_token:nativeEndpoint,supports_alert_target:capability},adminActor,configuredEnv);
+    assert.equal(result.ok,true);
+    assert.equal(captured.upserts[0].supports_alert_target,capability===true);
+  }
+  {
+    const captured = {};
+    globalThis.__ADMIN_NATIVE_PUSH_TEST_CLIENT__ = plannedClient([
+      {data:[],error:null},
+      {data:null,error:{code:"PGRST204",message:"Could not find supports_alert_target"}},
+      {data:{id:"registration",device_label:`admin-native-ios:${installationId}`,subscription_status:"active"},error:null},
+      {data:[{actor_label:adminActor.actor_label,device_label:`admin-native-ios:${installationId}`,endpoint:nativeEndpoint}],error:null},
+    ],captured);
+    const result=await helper.registerAdminDevicePushSubscription({channel:"admin_native_ios",installation_id:installationId,
+      native_token:nativeEndpoint,supports_alert_target:true},adminActor,configuredEnv);
+    assert.equal(result.ok,true,'missing migration preserves legacy registration');
+    assert.equal(captured.upserts.length,2);assert.equal(captured.upserts[1].supports_alert_target,undefined);
+  }
+
+  const targetId = "11111111-1111-4111-8111-111111111111";
+  const target = `message:${targetId}`;
+  assert.deepEqual(nativeNotifications.nativeAdminNotificationOpenRequest({
+    open_target: "/", type: "driver_issue", alert_target: target,
+  }), { openTarget: `/?admin_alert=${encodeURIComponent(target)}`, type: "driver_issue" });
+  for (const invalid of ["https://evil.test", "message:bad", `booking:${targetId}`, "", { id: targetId }]) {
+    assert.equal(nativeNotifications.nativeAdminNotificationOpenRequest({
+      open_target: "/", type: "driver_issue", alert_target: invalid,
+    }), null);
+  }
+  // Exercise the real subscription reader, including rolling deployment fallback.
+  for (const missingColumn of [false, true]) {
+    const row = { endpoint:nativeEndpoint,p256dh:"native_expo_push_token",auth:"native_expo_push_token",
+      source_surface:"admin_native_ios",device_label:`admin-native-ios:${installationId}`,
+      actor_label:adminActor.actor_label,...(missingColumn?{}:{supports_alert_target:true}) };
+    const plans = [...(missingColumn?[{data:null,error:{code:"42703",message:"supports_alert_target does not exist"}}]:[]),
+      {data:[row],error:null}];
+    globalThis.__ADMIN_NATIVE_PUSH_TEST_CLIENT__=plannedClient(plans);
+    let delivered;
+    const result=await helper.sendAdminDevicePushAlert("driver_to_admin_reply",{
+      env:configuredEnv,alertTarget:target,safeMessage:"Please review this trip.",
+      nativePushSender:async(_token,payload)=>{delivered=payload;},
+    });
+    assert.equal(result.ok,true);assert.equal(plans.length,0);
+    assert.equal(delivered.data.alert_target,missingColumn?undefined:target);
+  }
+  for (const capable of [false, true]) {
+    let delivered;
+    await helper.sendAdminDevicePushAlert("driver_to_admin_reply", {
+      env: configuredEnv, alertTarget: target, safeMessage: "Please review this trip.",
+      loadedSubscriptionLoader: async () => [{ channel: "native_ios", endpoint: nativeEndpoint,
+        webSubscription: null, supportsAlertTarget: capable }],
+      nativePushSender: async (_token, payload) => { delivered = payload; },
+    });
+    assert.equal(delivered.data.alert_target, capable ? target : undefined);
+    assert.equal(delivered.data.open_target, "/");
+    assert.equal(delivered.data.type, "driver_issue");
+    assert.equal(delivered.body, "Please review this trip.");
+  }
+
+  for (const [plate, minutes, state, expected] of [
+    ["snp9124s",35,"missing","SNP9124S no location yet!"],
+    ["invalid!",34,"missing","Plate unavailable no location yet!"],
+    ["SNP9124S",35,"overlap","SNP9124S is sharing another job."],
+  ]) {
+    let delivered;
+    await helper.sendAdminDevicePushAlert("driver_issue", {
+      env: configuredEnv, alertTarget: `alert:${targetId}`, vehiclePlate: plate,
+      pickupEmergencyMinutes: minutes, pickupLocationState: state,
+      loadedSubscriptionLoader: async () => [{ channel: "native_ios", endpoint: nativeEndpoint,
+        webSubscription: null, supportsAlertTarget: true }],
+      nativePushSender: async (_token, payload) => { delivered = payload; },
+    });
+    assert.ok(delivered.body.startsWith(`Emergency ‼️ ${minutes} minutes left.`));
+    assert.ok(delivered.body.includes(expected));
+    assert.equal(delivered.data.alert_target, `alert:${targetId}`);
+    assert.equal(delivered.title,"Prestige Limo Ops");
+    assert.equal(delivered.sound,"default");assert.equal(delivered.priority,"high");
+  }
+  for (const minutes of [-1,0,36,NaN,"35"]) assert.equal(helper.adminPickupEmergencyCopy("SNP9124S",minutes),null);
 
   let duplicateNativeSendCount = 0;
   let preservedWebSendCount = 0;

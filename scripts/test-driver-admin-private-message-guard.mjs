@@ -92,7 +92,7 @@ assert.equal(result.status,200,JSON.stringify(result));
 assert.equal(rows[table].length,1);
 assert.equal(rows[table][0].notification_status,"read","Sent echo must not create an unread Driver alert");
 assert.equal(result.body.direction,"driver_to_admin");
-assert.deepEqual(push,[["driver_to_admin_reply",{safeMessage:body.message_text}]]);
+assert.deepEqual(push,[["driver_to_admin_reply",{safeMessage:body.message_text,alertTarget:`message:${rows[table][0].id}`}]]);
 assert.equal(result.body.notification.driver_job_link_id,undefined);
 assert.equal(result.body.notification.actor_label,undefined);
 // Exactly the same attempt retries safely, including concurrent duplicate requests.

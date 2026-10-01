@@ -19,6 +19,13 @@ assert.equal(projected.safe_context.location_followup_repeat,undefined);
 assert.equal(projected.safe_context.minutes_before_pickup,60);
 assert.equal(contextFixture.location_followup_repeat,'v1','projection must not mutate persistence');
 assert.deepEqual(projectSafe({delivery_surface:'customer_app',workflow_area:'unrelated',safe_context:{direction:'admin_to_customer'}}).safe_context,{direction:'admin_to_customer'});
+const pushSource = await readFile('lib/admin-device-push-notification.ts','utf8');
+const copyScope = {};
+vm.runInNewContext(ts.transpileModule(pushSource.slice(pushSource.indexOf('function safeVehiclePlate('),
+  pushSource.indexOf('function safePublicBookingReference(')).replace('export function','function'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText+'; globalThis.copy = adminPickupEmergencyCopy;',copyScope);
+const emergencyCopy = copyScope.copy;
 const module = { exports: {} };
 let policyOpen = true;
 let allowedReferences = ['ADM-20260910050000'];
@@ -26,6 +33,8 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
 }}).outputText, { module, exports: module.exports, Date, console, process: { env: {} },
   require(name) {
+    if (name === 'node:crypto') return { createHash };
+    if (name.endsWith('admin-device-push-notification')) return { adminPickupEmergencyCopy: emergencyCopy };
     if (name === 'server-only') return {};
     if (name === '@supabase/supabase-js') return { createClient() { throw Error('No live client'); } };
     if (name.endsWith('driver-job-link')) return {
@@ -90,7 +99,7 @@ function fixture() {
   },from(table){return new Query(this,table);}};
   const sends=[];
   const options={now,sendPush:async(_c,input)=>{sends.push(['driver',input]);return {ok:true};},
-    sendAdminPush:async(type)=>{sends.push(['admin',type]);return {ok:true};}};
+    sendAdminPush:async(type,input)=>{sends.push(['admin',type,input]);return {ok:true};}};
   return {db,sends,options};
 }
 function fresh(f, reference=ref, linkId=link) {
@@ -315,3 +324,111 @@ for (const change of ['fresh','cancelled','reassigned','amended','pob','revoked'
   }
 }
 console.log('Driver location follow-up runtime guard passed.');
+
+// A new/late job must escalate independently of the one-hour reminder cycle.
+{
+  const f=fixture();
+  f.db.tables.customer_driver_app_notification_outbox=[];
+  f.db.tables.bookings[0].driver_plate_number='SNP9124S';
+  await run(f.db,{...f.options,now:new Date('2026-09-10T05:25:00Z')});
+  assert.equal(f.db.tables.admin_app_notification_outbox.length,1,'missing GPS at T-35 must save an Admin emergency');
+  assert.equal(f.db.tables.admin_app_notification_outbox[0].safe_context.escalation,'pickup_35m');
+  assert.match(f.db.tables.admin_app_notification_outbox[0].safe_message,/SNP9124S/);
+  assert.equal(f.sends.filter(s=>s[0]==='driver').length,0,'emergency is Admin-only');
+}
+function emergencyFixture() {
+  const f=fixture();f.db.tables.customer_driver_app_notification_outbox=[];
+  f.db.tables.bookings[0].driver_plate_number='SNP9124S';
+  f.options.now=new Date('2026-09-10T05:25:00Z');return f;
+}
+const emergencies=f=>f.db.tables.admin_app_notification_outbox.filter(r=>r.safe_context?.escalation==='pickup_35m');
+const emergencySends=f=>f.sends.filter(s=>s[0]==='admin'&&s[2]?.pickupEmergencyMinutes);
+for (const [clock,count,minutes] of [
+  ['05:24:59.999',0,null],['05:25:00',1,35],['05:26:20',1,34],['05:59:59',1,1],['06:00:00',0,null],['06:00:01',0,null],
+]) {
+  const f=emergencyFixture();await run(f.db,{...f.options,now:new Date(`2026-09-10T${clock}Z`)});
+  assert.equal(emergencies(f).length,count,`T-35 boundary ${clock}`);
+  if(count) assert.equal(emergencySends(f)[0][2].pickupEmergencyMinutes,minutes);
+}
+{
+  const f=emergencyFixture();await Promise.all([run(f.db,f.options),run(f.db,f.options)]);
+  await run(f.db,{...f.options,now:new Date('2026-09-10T05:26:00Z')});
+  assert.equal(emergencies(f).length,1,'concurrent ticks claim one escalation');
+  assert.equal(emergencySends(f).length,1);
+  assert.equal(emergencySends(f)[0][2].vehiclePlate,'SNP9124S');
+  assert.equal(emergencySends(f)[0][2].alertTarget,`alert:${emergencies(f)[0].id}`);
+  assert.equal(f.db.tables.customer_driver_app_notification_outbox.length,0,'no Driver/customer notices');
+}
+{
+  const f=emergencyFixture();f.db.tables.bookings[0].pickup_at='2026-09-10T06:00:00+00:00';
+  await run(f.db,f.options);
+  assert.equal(emergencies(f)[0].safe_context.pickup_at,f.db.tables.bookings[0].pickup_at);
+  await run(f.db,{...f.options,now:new Date('2026-09-10T05:26:00Z')});
+  assert.equal(emergencies(f)[0].notification_status,'queued','database timezone spelling must not falsely archive the alert');
+  assert.equal(emergencySends(f).length,1);
+}
+for (const [name,change] of [
+  ['cancelled',f=>f.db.tables.bookings[0].status='cancelled'],
+  ['reassigned',f=>f.db.tables.bookings[0].driver_id=9],
+  ['revoked',f=>f.db.tables.driver_job_links[0].revoked_at='2026-09-10T05:00:00Z'],
+  ['expired',f=>f.db.tables.driver_job_links[0].expires_at='2026-09-10T05:00:00Z'],
+  ['POB',f=>f.db.tables.driver_job_status_events.push({booking_reference:ref,status_value:'pob',occurred_at:'2026-09-10T05:24:00Z'})],
+  ['JC',f=>f.db.tables.driver_job_status_events.push({booking_reference:ref,status_value:'completed',occurred_at:'2026-09-10T05:24:00Z'})],
+  ['newer other-driver link',f=>f.db.tables.driver_job_links.push({...f.db.tables.driver_job_links[0],id:'22222222-2222-4222-8222-222222222222',driver_id:9,created_at:'2026-09-10T05:20:00Z'})],
+  ['fresh GPS',f=>{fresh(f);Object.assign(f.db.tables.driver_live_location_latest_positions[0],{captured_at:'2026-09-10T05:24:00Z',stale_after:'2026-09-10T05:29:00Z'});}],
+]) {
+  const f=emergencyFixture();change(f);await run(f.db,f.options);
+  assert.equal(emergencySends(f).length,0,name);
+}
+for (const status of ['otw','ots']) {
+  const f=emergencyFixture();f.db.tables.driver_job_status_events.push({booking_reference:ref,status_value:status,occurred_at:'2026-09-10T05:24:00Z'});
+  await run(f.db,f.options);assert.equal(emergencySends(f).length,1,`${status} without fresh GPS is not location evidence`);
+}
+{
+  const f=emergencyFixture();fresh(f); // old GPS must not suppress the new checkpoint
+  await run(f.db,f.options);assert.equal(emergencySends(f).length,1);
+}
+{
+  const f=emergencyFixture();const first={...fixture().db.tables.customer_driver_app_notification_outbox[0]};
+  first.safe_context={...first.safe_context,location_followup_checked_at:'2026-09-10T05:02:00Z'};
+  f.db.tables.customer_driver_app_notification_outbox.push(first);
+  await run(f.db,f.options);assert.equal(emergencySends(f).length,1,'previous GPS recovery does not disable T-35 check');
+  assert.equal(f.sends.filter(s=>s[0]==='driver').length,0,'closed Driver reminder stays closed');
+}
+for (const failure of ['bookings','driver_job_links','driver_job_status_events','driver_live_location_latest_positions','admin_app_notification_outbox:insert']) {
+  const f=emergencyFixture();f.db.fail=failure;const result=await run(f.db,f.options);
+  assert.equal(result.ok,false,failure);assert.equal(emergencySends(f).length,0);
+}
+{
+  const f=emergencyFixture();f.db.beforeQuery=q=>{
+    if(q.table==='admin_app_notification_outbox'&&q.op==='insert'&&q.payload.safe_context?.escalation==='pickup_35m') {
+      fresh(f);Object.assign(f.db.tables.driver_live_location_latest_positions[0],{captured_at:'2026-09-10T05:24:00Z',stale_after:'2026-09-10T05:29:00Z'});
+    }
+  };
+  await run(f.db,f.options);assert.equal(emergencySends(f).length,0,'GPS during reservation suppresses send');
+  assert.equal(emergencies(f)[0].notification_status,'archived');
+}
+{
+  const f=emergencyFixture();f.db.beforeQuery=q=>{
+    if(q.table==='admin_app_notification_outbox'&&q.op==='insert'&&q.payload.safe_context?.escalation==='pickup_35m') f.db.tables.bookings[0].driver_id=9;
+  };
+  await run(f.db,f.options);assert.equal(emergencySends(f).length,0,'reassignment during reservation suppresses send');
+}
+{
+  const f=emergencyFixture();const other='OTHER';
+  f.db.tables.bookings.push({...f.db.tables.bookings[0],booking_reference:other,pickup_at:'2026-09-10T08:00:00Z'});
+  const otherLink='22222222-2222-4222-8222-222222222222';
+  f.db.tables.driver_job_links.push({...f.db.tables.driver_job_links[0],id:otherLink,booking_reference:other});
+  f.db.tables.driver_live_location_latest_positions.push({booking_reference:other,driver_job_link_id:otherLink,sharing_state:'active',captured_at:'2026-09-10T05:24:00Z',stale_after:'2026-09-10T05:29:00Z'});
+  await run(f.db,f.options);assert.match(emergencies(f)[0].safe_message,/sharing another job/);
+  assert.doesNotMatch(emergencies(f)[0].safe_message,/no location/);
+  assert.equal(emergencySends(f)[0][2].pickupLocationState,'overlap');
+}
+{
+  const f=emergencyFixture();await run(f.db,f.options);
+  fresh(f);Object.assign(f.db.tables.driver_live_location_latest_positions[0],{captured_at:'2026-09-10T05:25:40Z',stale_after:'2026-09-10T05:30:40Z'});
+  await run(f.db,{...f.options,now:new Date('2026-09-10T05:26:00Z')});
+  assert.equal(emergencies(f)[0].notification_status,'archived','recovery archives warning only');
+  assert.equal(f.db.tables.driver_job_status_events.length,0);
+}
+console.log('Admin T-35 escalation passed: boundary/catch-up, late assignment, concurrency, GPS stop/recovery, exact assignment, overlap, failed evidence and Admin-only targeting.');

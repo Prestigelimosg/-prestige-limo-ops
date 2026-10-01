@@ -152,6 +152,7 @@ export function adminNativeSubscriptionRequestScript(input: {
     channel: "admin_native_ios",
     installation_id: input.installationId.toLowerCase(),
     native_token: token,
+    ...(input.action === "register" ? { supports_alert_target: true } : {}),
   });
   const previousToken =
     input.previousToken && input.previousToken !== input.nativeToken

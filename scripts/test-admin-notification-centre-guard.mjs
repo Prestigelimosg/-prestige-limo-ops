@@ -197,7 +197,7 @@ console.log("Admin notification centre guard passed");
 // Execute the real saved-alert handoff with distinct and unknown IDs.
 const ts = (await import('typescript')).default;
 const handlerStart = appPage.indexOf('function openSavedAdminNotificationsFromNotificationCentre(');
-const handlerEnd = appPage.indexOf('\n  async function ', handlerStart);
+const handlerEnd = appPage.indexOf('\n  useEffect(() => {', handlerStart);
 const compiledHandler = ts.transpileModule(appPage.slice(handlerStart, handlerEnd), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;

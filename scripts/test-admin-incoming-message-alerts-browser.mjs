@@ -22,8 +22,8 @@ try {
     const booking=(ref,pub,driver)=>({id:ref,booking_reference:ref,public_booking_reference:pub,booking_type:'TRF',vehicle:'AVF',pickup_at:new Date(now-3600000).toISOString(),pickup_datetime:new Date(now-3600000).toISOString(),pickup_address:'Example pickup',dropoff_address:'Example destination',passenger_name:'Example customer',driver_name:driver,driver_id:71,status:'assigned',pax:1,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString()});
     window.qaBookings=[booking('EXACT-A','11001','Example Driver A'),booking('EXACT-B','11002','Example Driver B')];
     window.qaBookings.push({...booking('UPCOMING','11080','Upcoming Driver'),pickup_at:new Date(now+18*3600000).toISOString(),pickup_datetime:new Date(now+18*3600000).toISOString()});
-    window.qaMessages=[{id:'driver-a',booking_reference:'EXACT-A',safe_title:'Driver reply',safe_message:'Please confirm pickup point.',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',actor_role:'driver',safe_context:{direction:'driver_to_admin'},created_at:new Date(now).toISOString()},
-      {id:'customer-b',booking_reference:'EXACT-B',safe_title:'Example Customer B',safe_message:'We are at the lobby.',workflow_area:'customer_driver_quick_replies',delivery_surface:'driver_app',actor_role:'customer',safe_context:{direction:'customer_to_driver'},created_at:new Date(now).toISOString()}];
+    window.qaMessages=[{id:'11111111-1111-4111-8111-111111111111',booking_reference:'EXACT-A',safe_title:'Driver reply',safe_message:'Please confirm pickup point.',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',actor_role:'driver',safe_context:{direction:'driver_to_admin'},created_at:new Date(now).toISOString()},
+      {id:'22222222-2222-4222-8222-222222222222',booking_reference:'EXACT-B',safe_title:'Example Customer B',safe_message:'We are at the lobby.',workflow_area:'customer_driver_quick_replies',delivery_surface:'driver_app',actor_role:'customer',safe_context:{direction:'customer_to_driver'},created_at:new Date(now).toISOString()}];
     const original=window.fetch.bind(window);
     window.fetch=async(input,init)=>{
       const u=new URL(typeof input==='string'?input:input.url,location.href);
@@ -53,14 +53,14 @@ try {
         }
         return Response.json({ok:true,notifications:window.qaMessages.filter(m=>m.booking_reference===u.searchParams.get('booking_reference'))});
       }
-      if(u.pathname==='/api/admin-app-notifications')return Response.json({ok:true,notifications:[{id:'existing',workflow_area:'other',notification_status:'queued',safe_title:'Existing operational alert',safe_message:'Existing alert stays available'}],pagination:{has_next_page:false}});
+      if(u.pathname==='/api/admin-app-notifications')return Response.json({ok:true,notifications:[{id:'existing',workflow_area:'other',notification_status:'queued',safe_title:'Existing operational alert',safe_message:'Existing alert stays available'},{id:'33333333-3333-4333-8333-333333333333',booking_reference:'EXACT-A',workflow_area:'driver_pickup_location_followup',notification_status:'queued',notification_type:'driver_status',priority:'urgent',safe_title:'Emergency ‼️ 35 minutes left',safe_message:'SNP9124S no location yet! Open Dashboard to review.'}],pagination:{has_next_page:false}});
       return Response.json({ok:true,external_send:false,write_action:false,enabled:false,records:[],bookings:[],notifications:[],statuses:[],items:[],links:[],settings:{enabled:false},has_more:false});
     };
   `});
   await client.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
   await client.send('Page.navigate',{url});
   const wait=async(expr,label)=>waitForCondition(()=>evaluate(`Boolean(${expr})`),30000,label);
-  await wait(`document.querySelector('[data-admin-incoming-message-open="message:driver-a"]') && document.querySelectorAll('[data-admin-multi-driver-active-job]').length===2`,'message alerts and existing job cards');
+  await wait(`document.querySelector('[data-admin-incoming-message-open="message:11111111-1111-4111-8111-111111111111"]') && document.querySelectorAll('[data-admin-multi-driver-active-job]').length===2`,'message alerts and existing job cards');
   assert.equal(await evaluate(`document.querySelectorAll('[data-admin-app-notification-feed="true"]').length`),1);
   await evaluate(`window.qaMessages.push({...window.qaMessages[0],id:'upcoming',booking_reference:'UPCOMING',reply_driver_job_link_id:'upcoming-link',sender_driver_id:71,safe_message:'Please confirm tomorrow pickup.'});document.querySelector('[data-admin-app-notification-feed-refresh="true"]').click()`);
   await wait(`document.querySelector('[data-admin-incoming-message-open="message:upcoming"]')`,'upcoming incoming alert');
@@ -102,22 +102,22 @@ try {
   const desktopScreenshot=await client.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
   await writeFile(path.join(evidence,'admin-incoming-message-alerts-desktop.png'),Buffer.from(desktopScreenshot.data,'base64'));
 
-  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:driver-a"]').innerText.includes('11001')`),true);
-  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:customer-b"]').innerText.includes('Example Customer B')`),true);
-  await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:customer-b"]').click()`);
+  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:11111111-1111-4111-8111-111111111111"]').innerText.includes('11001')`),true);
+  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:22222222-2222-4222-8222-222222222222"]').innerText.includes('Example Customer B')`),true);
+  await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:22222222-2222-4222-8222-222222222222"]').click()`);
   await wait(`document.activeElement?.closest('[data-admin-multi-driver-active-job]')?.getAttribute('data-admin-multi-driver-active-job')==='EXACT-B'`,'exact customer message card focused');
   assert.equal(await evaluate(`Array.from(document.querySelector('[data-admin-multi-driver-active-job="EXACT-B"]').querySelectorAll('button')).find(e=>e.textContent==='Customer').getAttribute('aria-pressed')`),'true');
   const activeStatusReads=await evaluate(`window.qaStatusReads.filter(ref=>ref==='EXACT-A').length`);
-  await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:driver-a"]').click()`);
+  await evaluate(`document.querySelector('[data-admin-incoming-message-open="message:11111111-1111-4111-8111-111111111111"]').click()`);
   await wait(`document.activeElement?.closest('[data-admin-multi-driver-active-job]')?.getAttribute('data-admin-multi-driver-active-job')==='EXACT-A'`,'exact driver message card focused');
   assert.equal(await evaluate(`Array.from(document.querySelector('[data-admin-multi-driver-active-job="EXACT-A"]').querySelectorAll('button')).find(e=>e.textContent==='Driver').getAttribute('aria-pressed')`),'true');
   assert.equal(await evaluate(`window.qaStatusReads.filter(ref=>ref==='EXACT-A').length`),activeStatusReads,'Active Reply must not reset existing Driver Reports/JC state');
-  await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:driver-a"] [data-admin-app-notification-action="read"]').click()`);
-  await wait(`!document.querySelector('[data-admin-app-notification-feed-row-id="message:driver-a"]')`,'Done hides attention only');
+  await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:11111111-1111-4111-8111-111111111111"] [data-admin-app-notification-action="read"]').click()`);
+  await wait(`!document.querySelector('[data-admin-app-notification-feed-row-id="message:11111111-1111-4111-8111-111111111111"]')`,'Done hides attention only');
   assert.ok(await evaluate(`document.querySelector('[data-admin-multi-driver-active-job="EXACT-A"] [data-admin-active-job-message-history]').innerText.includes('Please confirm pickup point.')`));
   await client.send('Page.reload');
-  await wait(`document.querySelector('[data-admin-incoming-message-open="message:customer-b"]')`,'reload');
-  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:driver-a"]')===null`),true);
+  await wait(`document.querySelector('[data-admin-incoming-message-open="message:22222222-2222-4222-8222-222222222222"]')`,'reload');
+  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="message:11111111-1111-4111-8111-111111111111"]')===null`),true);
   await evaluate(`window.qaMessages.push({...window.qaMessages[0],id:'driver-new',safe_message:'New message after Done'});document.querySelector('[data-admin-app-notification-feed-refresh="true"]').click()`);
   await wait(`document.querySelector('[data-admin-incoming-message-open="message:driver-new"]')`,'new message cannot be blocked by old dismissal');
   await client.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
@@ -132,6 +132,24 @@ try {
   await evaluate(`window.qaMessagesFailed=true;document.querySelector('[data-admin-app-notification-feed-refresh="true"]').click()`);
   await wait(`document.body.innerText.includes('Incoming messages could not be loaded')`,'read failure visible');
   assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="existing"]')!==null`),true);
+  // Native target opens the exact existing message after a full page load.
+  await client.send('Page.navigate',{url:url+'/?admin_alert=message%3A22222222-2222-4222-8222-222222222222'});
+  await wait(`document.querySelector('[data-admin-app-notification-feed-row-id="message:22222222-2222-4222-8222-222222222222"][data-admin-alert-locator-highlight="true"]')`,'native target selects exact customer message');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-admin-alert-locator-highlight="true"]').length`),1);
+  assert.equal(await evaluate(`new URL(location.href).searchParams.has('admin_alert')`),false,'consume target without persistent repeated scrolling');
+  await wait(`(()=>{const r=document.querySelector('[data-admin-app-notification-feed-row-id="message:22222222-2222-4222-8222-222222222222"]').getBoundingClientRect();return r.top>=0 && r.top<innerHeight;})()`,'target scrolled into phone viewport');
+  const targetScreenshot=await client.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await writeFile(path.join(evidence,'admin-exact-notification-target.png'),Buffer.from(targetScreenshot.data,'base64'));
+  assert.deepEqual(await evaluate('window.qaWrites'),[],'opening never sends or changes Done/status');
+  await client.send('Page.navigate',{url:url+'/?admin_alert=alert%3A33333333-3333-4333-8333-333333333333'});
+  await wait(`document.querySelector('[data-admin-app-notification-feed-row-id="33333333-3333-4333-8333-333333333333"][data-admin-alert-locator-highlight="true"]')`,'exact emergency target');
+  assert.equal(await evaluate(`document.querySelector('[data-admin-app-notification-feed-row-id="33333333-3333-4333-8333-333333333333"]').innerText.includes('SNP9124S no location yet!')`),true);
+  await wait(`(()=>{const r=document.querySelector('[data-admin-app-notification-feed-row-id="33333333-3333-4333-8333-333333333333"]').getBoundingClientRect();return r.top>=0 && r.top<innerHeight;})()`,'emergency scrolled into phone viewport');
+  const emergencyScreenshot=await client.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await writeFile(path.join(evidence,'admin-exact-emergency-target.png'),Buffer.from(emergencyScreenshot.data,'base64'));
+  await client.send('Page.navigate',{url:url+'/?admin_alert=message%3A11111111-1111-4111-8111-111111111111'});
+  await wait(`document.body.innerText.includes('This exact alert is no longer available')`,'cleared message tap has visible feedback');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-admin-alert-locator-highlight="true"]').length`),0,'cleared target cannot pick another message');
   assert.deepEqual(await evaluate('window.qaWrites'),[]);assert.deepEqual(errors,[]);
-  console.log('Browser passed: one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, one isolated synthetic send, replacement/JC/read-failure gates, no external sends or source-history/status writes.');
-}finally{if(client)await client.close();await terminateChildProcess(chrome);await rm(profile,{recursive:true,force:true});}
+  console.log('Browser passed: exact native message/emergency targeting and cleared-target feedback, one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, one isolated synthetic send, replacement/JC/read-failure gates, no external sends or source-history/status writes.');
+}finally{if(client)await client.close();await terminateChildProcess(chrome);await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}

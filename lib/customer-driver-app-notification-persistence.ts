@@ -3335,7 +3335,7 @@ async function insertQuickReplyNotification(
     notification.workflow_area === "admin_driver_job_messages") {
     try {
       const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
-      await sendAdminDevicePushAlert("driver_to_admin_reply", { safeMessage: notification.safe_message });
+      await sendAdminDevicePushAlert("driver_to_admin_reply", { safeMessage: notification.safe_message, alertTarget: `message:${notification.id}` });
     } catch {
       // Save succeeds even when Admin push is unavailable; a retry must not duplicate it.
     }
@@ -3714,7 +3714,7 @@ export async function sendCustomerQuickReplyToDriver(
     if (isDriverDetailsAcknowledgement) {
       await sendAdminDevicePushAlert("customer_driver_details_acknowledged");
     } else {
-      await sendAdminDevicePushAlert("customer_to_driver_reply", { safeMessage: created.data.safe_message });
+      await sendAdminDevicePushAlert("customer_to_driver_reply", { safeMessage: created.data.safe_message, alertTarget: `message:${created.data.id}` });
     }
   } catch {
     // A saved customer action must not fail because Admin device push is unavailable.

@@ -1,9 +1,11 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { sendDriverDevicePushAlertForPickupReminder } from "./driver-device-push-notification";
-import { sendAdminDevicePushAlert } from "./admin-device-push-notification";
+import { adminPickupEmergencyCopy, sendAdminDevicePushAlert } from "./admin-device-push-notification";
 import { driverLiveLocationRuntimeGateOpen, readAdminControlledRuntimePolicy } from "./driver-live-location-runtime";
 import {
   isDriverJobLinkExpired,
@@ -353,10 +355,10 @@ function freshLocation(row: UnknownRecord, now: Date, staleAfterSeconds: number)
 // Uses existing exact-job sources, never a name, plate, nearby pin or phone label.
 async function readLocationFollowupEvidence(
   client: ReminderClient, reference: string, sourceLinkId: string, now: Date,
-  staleAfterSeconds = 300,
+  staleAfterSeconds = 300, strictCurrentLink = false,
 ) {
   const bookingRead = await client.from("bookings")
-    .select("booking_reference, driver_id, pickup_at, status, admin_internal_status, customer_facing_status, cancellation_review_status")
+    .select("booking_reference, driver_id, driver_plate_number, pickup_at, status, admin_internal_status, customer_facing_status, cancellation_review_status")
     .eq("booking_reference", reference).limit(2);
   if (bookingRead.error) throw new Error("Location follow-up booking read failed");
   const bookings = asRows(bookingRead.data);
@@ -412,16 +414,23 @@ async function readLocationFollowupEvidence(
   });
   // Recheck the current schedule and assignment after the other evidence reads.
   const latestBookingRead = await client.from("bookings")
-    .select("booking_reference, driver_id, pickup_at, status, admin_internal_status, customer_facing_status, cancellation_review_status")
+    .select("booking_reference, driver_id, driver_plate_number, pickup_at, status, admin_internal_status, customer_facing_status, cancellation_review_status")
     .eq("booking_reference", reference).limit(2);
   if (latestBookingRead.error) throw new Error("Location follow-up final booking read failed");
   const latestBookings = asRows(latestBookingRead.data);
   if (latestBookings.length > 1) throw new Error("Location follow-up final booking is ambiguous");
+  if (strictCurrentLink) {
+    const newestRead = await client.from("driver_job_links").select("id")
+      .eq("booking_reference", reference).eq("link_status", "active")
+      .order("created_at", { ascending: false }).limit(1);
+    if (newestRead.error) throw new Error("Emergency latest-link read failed");
+    if (asRows(newestRead.data)[0]?.id !== sourceLinkId) return null;
+  }
   const currentBooking = latestBookings[0];
   if (!currentBooking || terminalBooking(currentBooking) ||
     positiveInteger(currentBooking.driver_id) !== driverId || currentBooking.pickup_at !== booking.pickup_at) return null;
   return {
-    booking, driverId,
+    booking: currentBooking, driverId,
     fresh: verifiedFresh.some(position => position.booking_reference === reference),
     overlap: verifiedFresh.some(position => position.booking_reference !== reference),
   };
@@ -480,11 +489,13 @@ async function runLocationFollowups(
         .in("notification_status", ["queued", "read"]);
       if (result.error) throw new Error("Location follow-up warning cleanup failed");
     } else if (context.overlap !== evidence.overlap) {
+      const emergencyCopy = context.escalation === "pickup_35m"
+        ? adminPickupEmergencyCopy(evidence.booking.driver_plate_number, context.minutes_before_pickup, evidence.overlap) : null;
       const changed = await client.from("admin_app_notification_outbox").update({
-        safe_title: evidence.overlap ? "Check overlapping jobs" : "Location unavailable",
-        safe_message: evidence.overlap
+        safe_title: emergencyCopy?.title || (evidence.overlap ? "Check overlapping jobs" : "Location unavailable"),
+        safe_message: emergencyCopy?.body || (evidence.overlap
           ? "Driver is sharing another job. Check overlapping assignments."
-          : "Location unavailable after the pickup reminder. Check with the driver.",
+          : "Location unavailable after the pickup reminder. Check with the driver."),
         safe_context: { ...context, overlap: evidence.overlap }, updated_at: now.toISOString(),
       }).eq("id", warning.id).eq("event_key", warning.event_key)
         .eq("workflow_area", locationFollowupWorkflow).in("notification_status", ["queued", "read"]);
@@ -521,7 +532,9 @@ async function runLocationFollowups(
     let evidence = allowedReferences.includes(reference)
       ? await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds) : null;
     const pickupAt = validDate(evidence?.booking.pickup_at);
-    if (!evidence || !pickupAt ||
+    // At T-35 the independent Admin escalation takes over. Latch this Driver
+    // cycle closed before its next claim; later ticks must never requeue it.
+    if (!evidence || !pickupAt || pickupAt.getTime() - now.getTime() <= 35 * minuteMs ||
       initial.event_key !== pickupReminderEventKey(reference, pickupAt.toISOString()) || evidence.fresh) {
       await markChecked();
       continue;
@@ -597,6 +610,81 @@ async function runLocationFollowups(
   }
 }
 
+// One Admin escalation, independently of whether an earlier Driver reminder existed
+// or stopped after GPS recovery. Reuses the same worker, evidence and outbox.
+async function runPickupEmergencyEscalations(
+  client: ReminderClient, options: ReminderRunOptions, result: DriverOneHourPickupReminderResult,
+) {
+  const now = new Date(options.now ?? new Date());
+  if (!driverLiveLocationRuntimeGateOpen()) return;
+  const policy = await readAdminControlledRuntimePolicy({ client, env: process.env, purpose: "capture" });
+  if (!policy.ok) {
+    if (policy.reason === "driver_live_location_admin_runtime_gate_closed") return;
+    throw new Error("Emergency runtime policy unavailable");
+  }
+  // Catch a delayed tick or late assignment, never replay after pickup. Copy uses
+  // the actual remaining whole minutes, rather than promising 35 after a delay.
+  const read = await client.from("bookings")
+    .select("booking_reference, driver_id, pickup_at, status, admin_internal_status, customer_facing_status, cancellation_review_status")
+    .gte("pickup_at", now.toISOString())
+    .lt("pickup_at", new Date(now.getTime() + 35 * minuteMs + 1).toISOString())
+    .order("pickup_at", { ascending: true }).limit(maxCandidatesPerRun + 1);
+  const bookings = asRows(read.data);
+  if (read.error || bookings.length > maxCandidatesPerRun) throw new Error("Emergency candidate read unavailable");
+  for (const booking of bookings) {
+    const reference = cleanText(booking.booking_reference, 120);
+    const driverId = positiveInteger(booking.driver_id);
+    const pickup = validDate(booking.pickup_at);
+    if (!reference || !driverId || !pickup || pickup <= now || terminalBooking(booking) ||
+      !policy.policy.allowedJobReferences.includes(reference)) continue;
+    const linksRead = await client.from("driver_job_links")
+      .select("id, driver_id, link_status, revoked_at, expires_at, safe_link_context")
+      .eq("booking_reference", reference).eq("link_status", "active")
+      .order("created_at", { ascending: false }).limit(1);
+    if (linksRead.error) throw new Error("Emergency link read failed");
+    const link = asRows(linksRead.data)[0];
+    const linkId = cleanText(link?.id, 80);
+    if (!linkId || !uuidPattern.test(linkId) || positiveInteger(link?.driver_id) !== driverId || !activeLink(link, now)) continue;
+    const evidence = await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds, true);
+    if (!evidence || evidence.fresh || evidence.driverId !== driverId || validDate(evidence.booking.pickup_at)?.getTime() !== pickup.getTime()) continue;
+    const minutes = Math.min(35, Math.ceil((pickup.getTime() - now.getTime()) / minuteMs));
+    const copy = adminPickupEmergencyCopy(evidence.booking.driver_plate_number, minutes, evidence.overlap)!;
+    const eventKey = `driver_gps_35m:${createHash("sha256").update(JSON.stringify([reference, driverId, pickup.toISOString()])).digest("hex")}`;
+    const inserted = await client.from("admin_app_notification_outbox").insert({
+      booking_reference: reference, event_key: eventKey, notification_status: "queued",
+      notification_type: "driver_status", priority: "urgent", delivery_surface: "admin_app",
+      source_surface: "system", actor_role: "system", workflow_area: locationFollowupWorkflow,
+      safe_title: copy.title, safe_message: copy.body,
+      safe_context: { escalation: "pickup_35m", minutes_before_pickup: minutes,
+        driver_job_link_id: linkId, pickup_at: evidence.booking.pickup_at, overlap: evidence.overlap },
+      updated_at: now.toISOString(),
+    }).select("id").single();
+    if (inserted.error) {
+      if (asRecord(inserted.error).code === "23505") continue;
+      throw new Error("Emergency claim write failed");
+    }
+    const alertId = cleanText(asRecord(inserted.data).id, 80);
+    if (!alertId) throw new Error("Emergency claim write returned no identity");
+    // A second exact evidence read closes the reservation-time recovery/change race.
+    const current = await readLocationFollowupEvidence(client, reference, linkId, now, policy.policy.staleAfterSeconds, true);
+    if (!current || current.fresh || current.driverId !== driverId ||
+      current.overlap !== evidence.overlap || current.booking.driver_plate_number !== evidence.booking.driver_plate_number ||
+      validDate(current.booking.pickup_at)?.getTime() !== pickup.getTime()) {
+      const archived = await client.from("admin_app_notification_outbox")
+        .update({ notification_status: "archived", updated_at: now.toISOString() })
+        .eq("id", alertId).eq("event_key", eventKey).eq("notification_status", "queued");
+      if (archived.error) throw new Error("Emergency recovery cleanup write failed");
+      continue;
+    }
+    result.admin_warning_count = (result.admin_warning_count ?? 0) + 1;
+    await (options.sendAdminPush ?? sendAdminDevicePushAlert)("driver_issue", {
+      pickupLocationState: current.overlap ? "overlap" : "missing",
+      pickupEmergencyMinutes: minutes, vehiclePlate: current.booking.driver_plate_number,
+      alertTarget: `alert:${alertId}`,
+    }).catch(() => null);
+  }
+}
+
 export async function runDriverOneHourPickupRemindersWithClient(
   client: ReminderClient, options: ReminderRunOptions = {},
 ): Promise<DriverOneHourPickupReminderResult> {
@@ -604,6 +692,7 @@ export async function runDriverOneHourPickupRemindersWithClient(
   if (!result.ok) return result;
   try {
     await runLocationFollowups(client, options, result);
+    await runPickupEmergencyEscalations(client, options, result);
     return result;
   } catch (error) {
     const writeFailed = error instanceof Error && /write|claim|cleanup/.test(error.message);

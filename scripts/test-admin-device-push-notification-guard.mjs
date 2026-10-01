@@ -218,7 +218,7 @@ assertIncludes(
   customerDriverNotificationPersistenceSource,
   [
     'sendAdminDevicePushAlert("customer_driver_details_acknowledged")',
-    'sendAdminDevicePushAlert("customer_to_driver_reply", { safeMessage: created.data.safe_message })',
+    'sendAdminDevicePushAlert("customer_to_driver_reply", { safeMessage: created.data.safe_message, alertTarget: `message:${created.data.id}` })',
     'sendAdminDevicePushAlert("driver_to_customer_reply", { safeMessage: created.data.safe_message })',
   ],
   "existing customer and driver quick-reply success paths",

@@ -278,6 +278,8 @@ type DriverOtsPhotoProofState = {
   action: "idle" | "uploading";
   feedback: ControlFeedback | null;
   selectedFileName: string;
+  previewUrl: string;
+  previewFailed: boolean;
   uploadedAt: string;
 };
 
@@ -363,6 +365,8 @@ const emptyDriverOtsPhotoProofState: DriverOtsPhotoProofState = {
   action: "idle",
   feedback: null,
   selectedFileName: "",
+  previewUrl: "",
+  previewFailed: false,
   uploadedAt: "",
 };
 const emptyDriverCalendarState: DriverCalendarState = {
@@ -1061,6 +1065,16 @@ export default function DriverJobPage() {
   const driverCalendarActionRevisionRef = useRef(0);
   const driverAppUpdatesOpenTargetHandledRef = useRef(false);
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
+  const driverOtsPhotoPreviewUrlRef = useRef("");
+  const driverOtsPhotoPreviewDialogRef = useRef<HTMLDialogElement | null>(null);
+  const clearDriverOtsPhotoPreview = useCallback(() => {
+    driverOtsPhotoPreviewDialogRef.current?.close();
+    if (driverOtsPhotoPreviewUrlRef.current) {
+      URL.revokeObjectURL(driverOtsPhotoPreviewUrlRef.current);
+      driverOtsPhotoPreviewUrlRef.current = "";
+    }
+  }, []);
+  useEffect(() => clearDriverOtsPhotoPreview, [token, clearDriverOtsPhotoPreview]);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
   const driverLiveLocationPostInFlightRef = useRef(false);
   const driverLiveLocationLastPostAtRef = useRef(0);
@@ -2450,11 +2464,23 @@ export default function DriverJobPage() {
 
   function handleDriverOtsPhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] || null;
+    clearDriverOtsPhotoPreview();
+    let previewUrl = "";
+    if (file) {
+      try {
+        previewUrl = URL.createObjectURL(file);
+        driverOtsPhotoPreviewUrlRef.current = previewUrl;
+      } catch {
+        // Local preview failure must never change the existing upload eligibility.
+      }
+    }
 
     setDriverOtsPhotoProof((currentState) => ({
       ...currentState,
       feedback: null,
       selectedFileName: file?.name || "",
+      previewUrl,
+      previewFailed: Boolean(file && !previewUrl),
     }));
   }
 
@@ -2541,6 +2567,7 @@ export default function DriverJobPage() {
       if (driverOtsPhotoProofInputRef.current) {
         driverOtsPhotoProofInputRef.current.value = "";
       }
+      clearDriverOtsPhotoPreview();
 
       setDriverOtsPhotoProof({
         action: "idle",
@@ -2549,6 +2576,8 @@ export default function DriverJobPage() {
           text: "OTS photo sent to admin.",
         },
         selectedFileName: "",
+        previewUrl: "",
+        previewFailed: false,
         uploadedAt: result.proof.uploaded_at || new Date().toISOString(),
       });
       addActivity("OTS photo sent", "Driver sent an admin-only OTS photo proof.");
@@ -3349,6 +3378,59 @@ export default function DriverJobPage() {
                       type="file"
                     />
                   </div>
+                  {driverOtsPhotoProof.previewUrl && !driverOtsPhotoProof.previewFailed ? (
+                    <div data-driver-ots-photo-preview="true" key={driverOtsPhotoProof.previewUrl}>
+                      <button
+                        aria-label="Preview selected OTS photo"
+                        className="block h-20 w-20 overflow-hidden rounded-md border border-sky-300 bg-white"
+                        data-driver-ots-photo-thumbnail="true"
+                        onClick={() => driverOtsPhotoPreviewDialogRef.current?.showModal()}
+                        type="button"
+                      >
+                        <Image
+                          alt="Selected OTS photo"
+                          className="h-full w-full object-contain"
+                          height={80}
+                          onError={() => {
+                            const failedUrl = driverOtsPhotoProof.previewUrl;
+                            setDriverOtsPhotoProof((current) => current.previewUrl === failedUrl
+                              ? { ...current, previewFailed: true }
+                              : current);
+                          }}
+                          src={driverOtsPhotoProof.previewUrl}
+                          unoptimized
+                          width={80}
+                        />
+                      </button>
+                      <dialog
+                        aria-label="Selected OTS photo preview"
+                        className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg rounded-lg border border-sky-200 bg-white p-3 shadow-xl backdrop:bg-slate-950/60"
+                        data-driver-ots-photo-preview-dialog="true"
+                        ref={driverOtsPhotoPreviewDialogRef}
+                      >
+                        <button
+                          autoFocus
+                          className="mb-2 min-h-11 rounded-md border border-sky-300 px-4 text-sm font-semibold text-sky-950"
+                          onClick={() => driverOtsPhotoPreviewDialogRef.current?.close()}
+                          type="button"
+                        >
+                          Close preview
+                        </button>
+                        <Image
+                          alt="Selected OTS photo enlarged"
+                          className="mx-auto h-auto max-h-[70dvh] w-full object-contain"
+                          height={1600}
+                          src={driverOtsPhotoProof.previewUrl}
+                          unoptimized
+                          width={1600}
+                        />
+                      </dialog>
+                    </div>
+                  ) : driverOtsPhotoProof.previewFailed ? (
+                    <p className="text-xs text-sky-950" role="status">
+                      Preview unavailable. You can retake or send this photo.
+                    </p>
+                  ) : null}
                   <button
                     className="h-11 w-full rounded-md border border-sky-400 bg-white px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                     data-driver-job-ots-photo-proof-upload="true"

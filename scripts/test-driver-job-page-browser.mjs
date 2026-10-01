@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { mockDriverJobTokens } from "../lib/driver-job-link-mock-store.ts";
@@ -22,6 +22,7 @@ const chromeBinary =
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9228);
 const browserErrors = [];
 const browserConsoleErrors = [];
+const otsPreviewOnly = process.env.OTS_PREVIEW_ONLY === "1";
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
@@ -1011,6 +1012,7 @@ async function runChromeTest() {
       return state;
     };
 
+    if (!otsPreviewOnly) {
     // A first-time Android browser stays on its exact private job while downloading.
     await client.send("Emulation.setDeviceMetricsOverride", {
       width: 390, height: 844, deviceScaleFactor: 1, mobile: true,
@@ -1106,6 +1108,7 @@ async function runChromeTest() {
         'Unavailable jobs must not offer app handoff.');
     }
     await client.send('Emulation.clearDeviceMetricsOverride');
+    }
 
     const resetMockDriverJobData = async () => {
       const response = await fetch(driverJobApiUrl(mockDriverJobTokens.workflowOrder), {
@@ -1666,11 +1669,14 @@ async function runChromeTest() {
         }
 
         const canvas = document.createElement("canvas");
-        canvas.width = 24;
-        canvas.height = 24;
+        canvas.width = 240;
+        canvas.height = 160;
         const context = canvas.getContext("2d");
         context.fillStyle = "#2384c6";
         context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = "white";
+        context.font = "bold 16px sans-serif";
+        context.fillText("SYNTHETIC OTS PHOTO", 16, 80);
         const validJpeg = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
         if (!validJpeg) {
           return { ok: false, size: 0 };
@@ -1695,6 +1701,61 @@ async function runChromeTest() {
         true,
         "Expected the browser fixture to start with a photo above Vercel's request limit.",
       );
+
+      await waitForCondition(() => evaluate(`(() => {
+        const image = document.querySelector('[data-driver-ots-photo-thumbnail] img');
+        return Boolean(image?.complete && image.naturalWidth > 0);
+      })()`), 10000, "local OTS thumbnail decoded");
+      const preview = await evaluate(`(() => {
+        const thumbnail = document.querySelector('[data-driver-ots-photo-thumbnail]');
+        const box = thumbnail.getBoundingClientRect();
+        thumbnail.click();
+        const dialog = document.querySelector('[data-driver-ots-photo-preview-dialog]');
+        const open = dialog.open;
+        dialog.querySelector('button').click();
+        return { width: box.width, height: box.height, open, closed: !dialog.open,
+          sameColumn: !!thumbnail.closest('[data-driver-job-ots-photo-proof]'),
+          local: thumbnail.querySelector('img').src.startsWith('blob:') };
+      })()`);
+      assert.deepEqual(preview, { width: 80, height: 80, open: true, closed: true, sameColumn: true, local: true });
+      for (const width of [320, 390]) {
+        await client.send("Emulation.setDeviceMetricsOverride", { width, height: 844, deviceScaleFactor: 1, mobile: true });
+        assert.equal(await evaluate("document.documentElement.scrollWidth <= window.innerWidth"), true, "Photo preview must not widen the phone page");
+      }
+      await evaluate("document.querySelector('[data-driver-job-ots-photo-proof]').scrollIntoView({block:'center'})");
+      const photoScreenshot = await client.send("Page.captureScreenshot", { format: "png" });
+      await writeFile(path.join(os.tmpdir(), "driver-ots-preview-390.png"), Buffer.from(photoScreenshot.data, "base64"));
+      await evaluate("document.querySelector('[data-driver-ots-photo-thumbnail]').click()");
+      assert.equal(await evaluate("document.querySelector('[data-driver-ots-photo-preview-dialog] img').getBoundingClientRect().width > 80"), true, "Enlargement must actually be larger than the thumbnail");
+      const enlargedScreenshot = await client.send("Page.captureScreenshot", { format: "png" });
+      await writeFile(path.join(os.tmpdir(), "driver-ots-preview-enlarged-390.png"), Buffer.from(enlargedScreenshot.data, "base64"));
+      await evaluate("document.querySelector('[data-driver-ots-photo-preview-dialog] button').click()");
+      // Camera cancellation must not submit or discard the existing selection.
+      await evaluate("document.querySelector('[data-driver-job-ots-photo-proof-input]').dispatchEvent(new Event('cancel', {bubbles:true}))");
+      assert.deepEqual((await pageState()).fetchCalls.filter(call => !call.startsWith("GET ")), beforeState.fetchCalls.filter(call => !call.startsWith("GET ")), "Preview, enlargement and cancel send nothing");
+      await evaluate(`(() => {
+        const input = document.querySelector('[data-driver-job-ots-photo-proof-input]');
+        window.__originalPreviewFile = input.files[0];
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(['unsupported image bytes'], 'unsupported.heic', {type:'image/heic'}));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', {bubbles:true}));
+      })()`);
+      await waitForCondition(() => evaluate("document.body.innerText.includes('Preview unavailable. You can retake or send this photo.')"), 10000, "undecodable photo preview fallback");
+      assert.equal(await evaluate("document.querySelector('[data-driver-job-ots-photo-proof-upload]').disabled"), false, "Preview failure cannot disable send");
+      await evaluate(`(() => {
+        const input = document.querySelector('[data-driver-job-ots-photo-proof-input]');
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([window.__originalPreviewFile], 'retaken-photo.jpg', {type:'image/jpeg'}));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', {bubbles:true}));
+        delete window.__originalPreviewFile;
+      })()`);
+      await waitForCondition(() => evaluate(`(() => {
+        const image = document.querySelector('[data-driver-ots-photo-thumbnail] img');
+        return Boolean(image?.complete && image.naturalWidth > 0);
+      })()`), 10000, "retaken photo replaces fallback");
+      assert.deepEqual((await pageState()).fetchCalls.filter(call => !call.startsWith("GET ")), beforeState.fetchCalls.filter(call => !call.startsWith("GET ")), "Retakes make no network writes");
 
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-ots-photo-proof-upload]");
@@ -1731,9 +1792,9 @@ async function runChromeTest() {
         "Expected OTS photo proof to use the tokenized driver OTS photo route.",
       );
       assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length + 1,
-        "OTS photo proof should make one internal app POST only.",
+        afterState.fetchCalls.filter(call => !call.startsWith("GET ")).length,
+        beforeState.fetchCalls.filter(call => !call.startsWith("GET ")).length + 1,
+        "OTS photo proof should make one internal app POST only; existing reads may poll.",
       );
       assert.equal(afterState.otsPhotoUploadBodies.length, 1, "Expected one OTS photo upload body.");
       assert.equal(
@@ -1743,6 +1804,8 @@ async function runChromeTest() {
       );
       assert.equal(afterState.otsPhotoUploadBodies[0].type, "image/jpeg");
       assert.match(afterState.otsPhotoUploadBodies[0].name, /\.jpg$/);
+      assert.match(afterState.otsPhotoUploadBodies[0].name, /^retaken-photo/, "Send must use the retaken file");
+      assert.equal(await evaluate("Boolean(document.querySelector('[data-driver-ots-photo-thumbnail]'))"), false, "Successful send clears the local thumbnail");
       assertNoSensitiveText(afterState);
       return afterState;
     };
@@ -1802,6 +1865,24 @@ async function runChromeTest() {
       assertNoSensitiveText(afterState);
       return afterState;
     };
+
+    if (otsPreviewOnly) {
+      assert.ok(["localhost", "127.0.0.1"].includes(new URL(appUrl).hostname), "Focused photo fixture is local-only");
+      await resetMockDriverJobData();
+      await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
+      await saveAndAcknowledgeJob();
+      await clickStatus("OTW", "I'm on the way", "Sharing live location. Keep this app open.");
+      await clickStatus("OTS", "I've arrived", "Status updated to I've arrived.");
+      await uploadOtsPhotoProof();
+      await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
+      const finalPhotoState = await pageState();
+      assert.deepEqual(finalPhotoState.errors, []);
+      assert.deepEqual(finalPhotoState.consoleErrors, []);
+      assert.deepEqual(browserErrors, []);
+      assert.deepEqual(browserConsoleErrors, []);
+      console.log("Driver OTS preview browser passed: ACK/OTW/OTS, 80px thumbnail, enlargement/close, cancel, unsupported image, retake, unchanged reduced upload, success cleanup and POB.");
+      return;
+    }
 
     await resetMockDriverJobData();
     const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");

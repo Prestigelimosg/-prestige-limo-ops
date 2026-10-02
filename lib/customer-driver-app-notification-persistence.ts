@@ -2022,6 +2022,37 @@ async function assertAdminDriverAppNotificationWriteScope(
     };
   }
 
+  // Only Admin-authored job messages require this stronger recipient gate.
+  // Link issuance, cancellation and Customer quick replies retain their own lanes.
+  if (input.workflow_area === "admin_driver_job_messages") {
+    const [newest, booking, completed] = await Promise.all([
+      client.from("driver_job_links")
+        .select("id, driver_id, expires_at, revoked_at, safe_link_context")
+        .eq("booking_reference", input.booking_reference).eq("link_status", "active")
+        .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle(),
+      client.from("bookings").select("driver_id, status, admin_internal_status, customer_facing_status")
+        .eq("booking_reference", input.booking_reference).maybeSingle(),
+      client.from("driver_job_status_events").select("id")
+        .eq("booking_reference", input.booking_reference).eq("status_value", "completed").limit(1).maybeSingle(),
+    ]);
+    if (newest.error || booking.error || completed.error) {
+      return { error: "The assigned driver and job status could not be verified. Refresh and try again.", ok: false, status: 503 };
+    }
+    const current = asRecord(newest.data);
+    const savedBooking = asRecord(booking.data);
+    const ack = asRecord(current.safe_link_context).driver_acknowledged_at;
+    const expires = typeof current.expires_at === "string" ? Date.parse(current.expires_at) : NaN;
+    if (current.id !== input.driver_job_link_id || current.revoked_at ||
+      !Number.isSafeInteger(current.driver_id) || Number(current.driver_id) <= 0 ||
+      savedBooking.driver_id !== current.driver_id ||
+      typeof ack !== "string" || !Number.isFinite(Date.parse(ack)) || Date.parse(ack) > Date.now() ||
+      !Number.isFinite(expires) || expires <= Date.now() || completed.data ||
+      [savedBooking.status, savedBooking.admin_internal_status, savedBooking.customer_facing_status]
+        .some(value => ["completed", "cancelled", "canceled", "archived", "history", "declined", "rejected"].includes(String(value || "").trim().toLowerCase()))) {
+      return { error: "Driver messaging requires the current acknowledged assignment and an unfinished job. Refresh the booking.", ok: false, status: 409 };
+    }
+  }
+
   return { data: null, ok: true };
 }
 
@@ -4220,6 +4251,25 @@ export async function createCustomerDriverAppNotification(
     .single();
 
   if (error) {
+    // A repeated Admin attempt returns the same saved message without a second push.
+    // Never update an existing row or treat a different payload as a successful retry.
+    if (input.delivery_surface === "driver_app" && input.workflow_area === "admin_driver_job_messages" &&
+      input.event_key && asRecord(error).code === "23505") {
+      const existing = await clientResult.data.from(notificationTable).select(notificationSelect)
+        .eq("event_key", input.event_key).eq("booking_reference", input.booking_reference!)
+        .eq("driver_job_link_id", input.driver_job_link_id!).maybeSingle();
+      const saved = normalizeRecord(existing.data);
+      if (!existing.error && saved.id && saved.delivery_surface === input.delivery_surface &&
+        saved.workflow_area === input.workflow_area && saved.actor_role === actor.actor_role &&
+        saved.actor_label === actor.actor_label && saved.source_surface === actor.source_surface &&
+        saved.safe_message === input.safe_message && saved.safe_title === input.safe_title &&
+        saved.notification_type === input.notification_type && saved.priority === input.priority &&
+        Object.keys(saved.safe_context).length === Object.keys(input.safe_context).length &&
+        Object.keys(input.safe_context).every(key => JSON.stringify(saved.safe_context[key]) === JSON.stringify(input.safe_context[key]))) {
+        return { data: toSafeRecord(saved), ok: true };
+      }
+      return { error: "This message attempt could not be verified. Refresh messages before trying again.", ok: false, status: 409 };
+    }
     return safeAdapterFailure(safeNotificationCreateError, 500, error);
   }
 

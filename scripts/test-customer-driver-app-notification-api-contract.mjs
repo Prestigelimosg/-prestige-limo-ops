@@ -1102,12 +1102,14 @@ try {
 
     setEnv(validEnv());
     const dashboardPostMock = installMockClient({
+      bookings: [{ booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001", driver_id: 7, status: "assigned" }],
       driver_job_links: [
         {
           booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
           expires_at: "2099-12-31T23:59:59.000Z",
           id: "11111111-1111-4111-8111-111111111111",
           link_status: "active",
+          driver_id: 7, revoked_at: null, safe_link_context: {driver_acknowledged_at: "2026-01-01T00:00:00Z"},
         },
       ],
     });

@@ -12,6 +12,7 @@ import {
   refreshCancelledDriverPoolRecipients,
   decideDriverPoolOffer,
   loadDriverPoolWinnerPlate,
+  loadDriverPoolWinnerAlertTarget,
   parseDriverPoolAdminActionPayload,
   getDriverPoolClientForProduction,
   loadAdminDriverPoolAttentionOffers,
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
         database.client,
         parsed.data.page,
         parsed.data.limit,
+        parsed.data.notification_id,
       );
       return result.ok
         ? response({ ...result.data, ok: true }, 200)
@@ -144,7 +146,9 @@ export async function PATCH(request: Request) {
               .catch(() => console.warn("Driver Pool assignment Operations Calendar sync failed safely.")),
             (async () => {
               const vehiclePlate = await loadDriverPoolWinnerPlate(database.client, input.driver_id!);
+              const alertTarget = vehiclePlate ? await loadDriverPoolWinnerAlertTarget(database.client, input.offer_key) : null;
               if (vehiclePlate) await sendAdminDevicePushAlert("driver_pool_accepted", {
+                ...(alertTarget ? { alertTarget } : {}),
                 bookingReference: result.data.public_booking_reference!, vehiclePlate,
               });
             })(),

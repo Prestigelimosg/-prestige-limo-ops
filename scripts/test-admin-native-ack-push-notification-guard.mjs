@@ -544,6 +544,22 @@ try {
     assert.equal(delivered.body, "Please review this trip.");
   }
 
+  // Pool winner UUID uses the already-shipped alert envelope. Old wrappers retain root-only data.
+  for (const capable of [false, true]) {
+    let delivered;
+    await helper.sendAdminDevicePushAlert("driver_pool_accepted", {
+      env: configuredEnv, alertTarget: `alert:${targetId}`, vehiclePlate: "QA1234", bookingReference: "11080",
+      loadedSubscriptionLoader: async () => [{ channel: "native_ios", endpoint: nativeEndpoint,
+        webSubscription: null, supportsAlertTarget: capable }],
+      nativePushSender: async (_token, payload) => { delivered = payload; },
+    });
+    assert.equal(delivered.body, "QA1234 won Job 11080.");
+    assert.deepEqual(delivered.data, { open_target: "/", type: "driver_acknowledged",
+      ...(capable ? { alert_target: `alert:${targetId}` } : {}) });
+    assert.equal(nativeNotifications.nativeAdminNotificationOpenRequest(delivered.data).openTarget,
+      capable ? `/?admin_alert=${encodeURIComponent(`alert:${targetId}`)}` : "/");
+  }
+
   for (const [plate, minutes, state, expected] of [
     ["snp9124s",35,"missing","SNP9124S no location yet!"],
     ["invalid!",34,"missing","Plate unavailable no location yet!"],

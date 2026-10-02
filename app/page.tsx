@@ -64,6 +64,8 @@ import {
   type AssignedDriverPoolAdminOffer,
 } from "./admin-driver-pool-control";
 
+import type { AdminDriverPoolAttentionItem } from "../lib/driver-pool-fast-accept";
+
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminDriverJobLinksApiPath = "/api/admin-driver-job-links";
@@ -25771,9 +25773,14 @@ export default function Home() {
     if (adminAppNotificationReadState.message?.tone === "error" &&
       !otherAdminAppNotifications.some((item) => item.id === requestedId)) return;
     adminNotificationTargetHandledRef.current = true;
-    url.searchParams.delete("admin_alert");
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    const consumeTarget = () => {
+      const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.get("admin_alert") !== target) return;
+      currentUrl.searchParams.delete("admin_alert");
+      window.history.replaceState(window.history.state, "", `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+    };
     if (!/^(?:message|alert):[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(target)) {
+      consumeTarget();
       setAdminAppNotificationReadState((current) => ({ ...current, message: {
         tone: "info", text: "This notification target is invalid. Review the saved Admin alerts.",
       } }));
@@ -25782,11 +25789,43 @@ export default function Home() {
     const normalized = target.toLowerCase();
     const id = normalized.startsWith("message:") ? normalized : normalized.slice("alert:".length);
     if (!otherAdminAppNotifications.some((item) => item.id === id)) {
+      if (normalized.startsWith("alert:")) {
+        // Pool winner IDs reuse the existing capable-native alert envelope.
+        // Resolve only through the authenticated, exact-filtered Pool reader.
+        void (async () => {
+          try {
+            const response = await fetch(`/api/admin-driver-job-bid-offers?scope=attention&page=1&limit=1&notification_id=${encodeURIComponent(id)}`, {
+              cache: "no-store", headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+            });
+            const result = await response.json() as { ok?: boolean; items?: AdminDriverPoolAttentionItem[] };
+            if (!response.ok || result.ok !== true) throw new Error("Pool notification lookup unavailable");
+            if (activeTabRef.current !== "dashboard" || new URL(window.location.href).searchParams.get("admin_alert") !== target) return;
+            const item = result.items?.length === 1 ? result.items[0] : null;
+            if (item?.attention_status === "accepted_link_pending" && item.offer_status === "assigned" && item.booking_reference) {
+              await loadAdminDriverPoolPendingBooking(item.booking_reference, false, target);
+            } else {
+              setAdminAppNotificationReadState((current) => ({ ...current, message: {
+                tone: "info", text: "This exact alert or pending Pool assignment is no longer available. It may already have a Job Link, or have changed or closed. Review Driver Pool; no other job was selected.",
+              } }));
+            }
+            consumeTarget();
+          } catch {
+            if (activeTabRef.current === "dashboard") setAdminAppNotificationReadState((current) => ({ ...current, message: {
+              tone: "info", text: "This notification's Pool assignment could not be verified. Refresh Admin alerts to retry, or review Driver Pool. No other job was selected.",
+            } }));
+            // Keep the URL target for the existing reader's next refresh.
+            adminNotificationTargetHandledRef.current = false;
+          }
+        })();
+        return;
+      }
+      consumeTarget();
       setAdminAppNotificationReadState((current) => ({ ...current, message: {
         tone: "info", text: "This exact alert is no longer available. It may have been cleared or resolved; no other message was selected.",
       } }));
       return;
     }
+    consumeTarget();
     openSavedAdminNotificationsFromNotificationCentre(id);
     // The authenticated existing reader must finish before selecting a target.
     // No read/Done, reply, status or badge write is performed by this handoff.
@@ -28585,7 +28624,7 @@ export default function Home() {
     }
   }
 
-  async function loadAdminDriverPoolPendingBooking(bookingReference: string, reviewResponses = false) {
+  async function loadAdminDriverPoolPendingBooking(bookingReference: string, reviewResponses = false, notificationTarget?: string) {
     const exactBookingReference = cleanReferenceText(bookingReference);
     if (!exactBookingReference) {
       throw new Error("Driver Pool pending job has no valid booking reference.");
@@ -28595,6 +28634,8 @@ export default function Home() {
       exactBookingReference,
       `Exact saved booking ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
     );
+    if (notificationTarget && (activeTabRef.current !== "dashboard" ||
+      new URL(window.location.href).searchParams.get("admin_alert") !== notificationTarget)) return;
     const exactBookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(exactBooking);
     await loadSelectedBooking(exactBookingRecord, {
       adminBookingRecordOverride: exactBooking,

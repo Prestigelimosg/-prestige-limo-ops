@@ -804,6 +804,7 @@ async function loadDriverPoolDecisionRouteHarness() {
   await writeModule("lib/driver-pool-fast-accept.js", `
     const client = {};
     exports.getDriverPoolClientForProduction = () => ({ client, ok: true });
+    exports.loadDriverPoolWinnerAlertTarget = async () => null;
     exports.loadDriverPoolWinnerPlate = async (_client, driverId) => {
       globalThis.__driverPoolPlateReadTables.push("drivers");
       if (!Number.isSafeInteger(driverId) || driverId <= 0 || typeof globalThis.__driverPoolPlate !== "string") return null;

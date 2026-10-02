@@ -12,6 +12,7 @@ import {
   getDriverPoolClientForProduction,
   loadAvailableDriverPoolJobs,
   loadDriverPoolWinnerPlate,
+  loadDriverPoolWinnerAlertTarget,
   parseDriverPoolDecisionPayload,
   type DriverPoolClient,
 } from "../../../lib/driver-pool-fast-accept";
@@ -61,12 +62,15 @@ async function notifyAdminOfDriverPoolAcceptance(
   client: DriverPoolClient,
   driverId: number,
   publicBookingReference: string,
+  offerKey: string,
 ) {
   try {
     const vehiclePlate = await loadDriverPoolWinnerPlate(client, driverId);
     if (!vehiclePlate) return;
 
+    const alertTarget = await loadDriverPoolWinnerAlertTarget(client, offerKey);
     await sendAdminDevicePushAlert("driver_pool_accepted", {
+      ...(alertTarget ? { alertTarget } : {}),
       bookingReference: publicBookingReference,
       vehiclePlate,
     });
@@ -123,6 +127,7 @@ async function decide(request: Request, action: "accept" | "decline") {
             account.client,
             account.driverId,
             acceptedPublicBookingReference,
+            parsed.data.offer_key,
           ),
           sendDriverDevicePushAlertForDriverPoolOffer(account.client, {
             driver_id: account.driverId,

@@ -44,6 +44,15 @@ try {
       if(u.pathname==='/api/admin-driver-job-statuses')window.qaStatusReads.push(u.searchParams.get('booking_reference'));
       if(u.pathname==='/api/admin-driver-job-links'&&u.searchParams.get('booking_reference')==='UPCOMING')return Response.json({ok:true,links:[{id:window.qaReplyLinkId,booking_reference:'UPCOMING',link_status:'active',revoked_at:null,expires_at:new Date(now+86400000).toISOString(),safe_summary:{acknowledged:true}}]});
       if(u.pathname==='/api/admin-driver-job-statuses'&&u.searchParams.get('booking_reference')==='UPCOMING')return window.qaStatusFailure?Response.json({ok:false},{status:503}):Response.json({ok:true,statuses:window.qaJobCompleted?[{booking_reference:'UPCOMING',status_value:'completed'}]:[]});
+      if(u.pathname==='/api/admin-driver-job-bid-offers'&&u.searchParams.has('notification_id')){
+        window.qaPoolTargetReads=(window.qaPoolTargetReads||[]).concat(u.searchParams.get('notification_id'));
+        if(sessionStorage.getItem('qa-pool-target')==='failed')return Response.json({ok:false},{status:503});
+        return Response.json({ok:true,items:sessionStorage.getItem('qa-pool-target')==='missing'?[]:[{offer_key:'a'.repeat(64),offer_status:'assigned',attention_status:'accepted_link_pending',booking_reference:'EXACT-POOL',public_booking_reference:'11081'}]});
+      }
+      if(u.pathname==='/api/admin-bookings'&&u.searchParams.get('booking_reference')==='EXACT-POOL'){
+        window.qaExactPoolReads=(window.qaExactPoolReads||0)+1;
+        return Response.json({ok:true,booking:{booking_reference:'EXACT-POOL',public_booking_reference:'11081',service_type:'TRF',vehicle_type_or_category:'AVF',pickup_at:new Date(now+18*3600000).toISOString(),pickup_location:'Example pool pickup',dropoff_location:'Example pool destination',passenger_name:'Example Pool Passenger',driver_id:72,driver_name:'Example Pool Winner',driver_contact:'90000072',driver_plate_number:'QA0072',status:'assigned',pax_count:1,created_at:new Date(now).toISOString(),updated_at:new Date(now).toISOString(),route_points:[],pricing_snapshot:{}}});
+      }
       if(u.pathname==='/api/admin-saved-bookings')return Response.json({ok:true,bookings:window.qaBookings});
       if(u.pathname==='/api/admin-load-bookings-typed-read')return Response.json({ok:true,bookings:[],read_gate_open:true,status:'ready'});
       if(u.pathname==='/api/admin-customer-driver-app-notifications'){
@@ -151,5 +160,30 @@ try {
   await wait(`document.body.innerText.includes('This exact alert is no longer available')`,'cleared message tap has visible feedback');
   assert.equal(await evaluate(`document.querySelectorAll('[data-admin-alert-locator-highlight="true"]').length`),0,'cleared target cannot pick another message');
   assert.deepEqual(await evaluate('window.qaWrites'),[]);assert.deepEqual(errors,[]);
+  // Winner tap must load the existing exact booking and focus its manual Create Link control.
+  const poolTarget=url+'/?admin_alert=alert%3A44444444-4444-4444-8444-444444444444';
+  await client.send('Page.navigate',{url:poolTarget});
+  await wait(`document.querySelector('[data-driver-job-link-handoff-notice]')?.innerText.includes('11081')`,'exact Pool winner booking loaded');
+  await wait(`(()=>{const r=document.querySelector('[data-dispatch-workflow-step="driver-job-link"]')?.getBoundingClientRect();return r&&r.top>=0&&r.top<innerHeight;})()`,'existing Create Link section in mobile viewport');
+  assert.equal(await evaluate(`document.querySelectorAll('[data-create-driver-job-link-button]').length`),1);
+  assert.equal(await evaluate('window.qaExactPoolReads'),1);
+  assert.deepEqual(await evaluate('window.qaPoolTargetReads'),['44444444-4444-4444-8444-444444444444']);
+  assert.deepEqual(await evaluate('window.qaWrites'),[],'winner tap must not create a link, acknowledge, send, or save');
+  assert.equal(await evaluate(`new URL(location.href).searchParams.has('admin_alert')`),false);
+  const poolScreenshot=await client.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+  await writeFile(path.join(evidence,'admin-pool-winner-create-link.png'),Buffer.from(poolScreenshot.data,'base64'));
+  await evaluate(`sessionStorage.setItem('qa-pool-target','missing')`);
+  await client.send('Page.navigate',{url:poolTarget});
+  await wait(`document.body.innerText.includes('This exact alert or pending Pool assignment is no longer available')`,'stale Pool target explained');
+  assert.equal(await evaluate('window.qaExactPoolReads||0'),0);
+  assert.deepEqual(await evaluate('window.qaWrites'),[]);
+  await evaluate(`sessionStorage.setItem('qa-pool-target','failed')`);
+  await client.send('Page.navigate',{url:poolTarget});
+  await wait(`document.body.innerText.includes("Pool assignment could not be verified")`,'failed lookup explained');
+  assert.equal(await evaluate(`new URL(location.href).searchParams.has('admin_alert')`),true);
+  await evaluate(`sessionStorage.removeItem('qa-pool-target');document.querySelector('[data-admin-app-notification-feed-refresh="true"]').click()`);
+  await wait(`document.querySelector('[data-driver-job-link-handoff-notice]')?.innerText.includes('11081')`,'existing refresh retries exact Pool target');
+  assert.deepEqual(await evaluate('window.qaWrites'),[]);assert.deepEqual(errors,[]);
+  console.log('Pool winner browser passed: exact Create Link focus, mobile visibility, no writes, stale target feedback and failed-read refresh recovery.');
   console.log('Browser passed: exact native message/emergency targeting and cleared-target feedback, one attention sector, existing histories, exact-job/recipient reply handoff, Done/reload/new-message isolation, missing-job and read-failure handling, mobile bounds, one isolated synthetic send, replacement/JC/read-failure gates, no external sends or source-history/status writes.');
 }finally{if(client)await client.close();await terminateChildProcess(chrome);await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}

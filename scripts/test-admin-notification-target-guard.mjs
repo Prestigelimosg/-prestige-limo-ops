@@ -42,6 +42,14 @@ function phone(locked,installation='fixture') {
   const f=phone(false);f.open(response({open_target:'/',type:'driver_issue'}));assert.equal(f.urls[0],'https://app.prestigelimo.sg/');
   f.open(response({...data(id),untrusted:'extra'}));assert.equal(f.urls.length,1,'extra keys still rejected');
 }
+// The winner uses the same shipped alert UUID envelope and unlock queue.
+for (const [locked,installation] of [[false,'fixture'],[true,'fixture'],[false,'']]) {
+  const f=phone(locked,installation);
+  f.open(response({open_target:'/',type:'driver_acknowledged',alert_target:`alert:${id}`}));
+  if(locked||!installation)assert.equal(f.urls.length,0);
+  f.screenMode='web';f.installationId='fixture';f.drain();f.drain();
+  assert.deepEqual(f.urls,[`https://app.prestigelimo.sg/?admin_alert=alert%3A${id}`]);
+}
 const effectStart=page.lastIndexOf('  useEffect(() => {',page.indexOf('    if (adminNotificationTargetHandledRef.current'));
 const effect=page.slice(effectStart+'  useEffect(() => {'.length,page.indexOf('  }, [activeTab, adminAppNotificationReadState.status, adminAppNotificationReadState.notifications]);',effectStart));
 function browser(target,status='loaded',items=[{id:`message:${id}`}]) {
@@ -50,7 +58,7 @@ function browser(target,status='loaded',items=[{id:`message:${id}`}]) {
   scope.window={location:{href:'https://app.prestigelimo.sg/?admin_alert='+encodeURIComponent(target)},history:{state:null,replaceState:(_s,_t,url)=>scope.replaced.push(url)}};
   scope.openSavedAdminNotificationsFromNotificationCentre=id=>scope.opened.push(id);
   scope.setAdminAppNotificationReadState=fn=>scope.adminAppNotificationReadState=fn(scope.adminAppNotificationReadState);
-  vm.createContext(scope);scope.run=()=>vm.runInContext(`(function(){${effect}})()`,scope);return scope;
+  vm.createContext(scope);scope.run=()=>vm.runInContext(transpile(`(function(){${effect}})()`),scope);return scope;
 }
 {
   const f=browser(`message:${id}`,'loading');f.run();assert.equal(f.opened.length,0);

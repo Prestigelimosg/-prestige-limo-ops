@@ -265,14 +265,18 @@ export function parseDriverPoolDecisionPayload(value: unknown): AdminBookingResu
 export function parseDriverPoolAttentionQuery(params: URLSearchParams): AdminBookingResult<{
   limit: number;
   page: number;
+  notification_id?: string;
 }> {
-  const allowed = new Set(["limit", "page", "scope"]);
+  const allowed = new Set(["limit", "page", "scope", "notification_id"]);
   const keys = [...params.keys()];
   const pageText = params.get("page") || "1";
   const limitText = params.get("limit") || "20";
   const page = Number(pageText);
   const limit = Number(limitText);
-  const valid = params.get("scope") === "attention" &&
+  const notificationId = params.get("notification_id");
+  const valid = (notificationId === null || (page === 1 &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(notificationId))) &&
+    params.get("scope") === "attention" &&
     keys.every((key) => allowed.has(key)) &&
     [...allowed].every((key) => params.getAll(key).length <= 1) &&
     /^[1-9][0-9]*$/.test(pageText) &&
@@ -281,7 +285,7 @@ export function parseDriverPoolAttentionQuery(params: URLSearchParams): AdminBoo
     Number.isSafeInteger(limit) && limit <= 20;
 
   return valid
-    ? { data: { limit, page }, ok: true }
+    ? { data: { limit, page, ...(notificationId ? { notification_id: notificationId.toLowerCase() } : {}) }, ok: true }
     : { error: "Malformed Driver Pool pending-list request.", ok: false, status: 400 };
 }
 
@@ -530,7 +534,11 @@ export async function loadAdminDriverPoolAttentionOffers(
   client: DriverPoolClient,
   page: number,
   limit: number,
+  notificationId?: string,
 ) {
+  if (notificationId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(notificationId)) {
+    return { error: "Malformed Driver Pool notification target.", ok: false, status: 400 } as const;
+  }
   if (!driverPoolIsEnabled()) {
     return {
       data: { enabled: false, has_more: false, items: [] as AdminDriverPoolAttentionItem[], page: 1 },
@@ -547,9 +555,11 @@ export async function loadAdminDriverPoolAttentionOffers(
   let rawRowsRemain = true;
 
   while (attentionItems.length < targetCount && rawRowsRemain) {
-    const { data, error } = await client.from("driver_job_bid_offers")
+    let query = client.from("driver_job_bid_offers")
       .select("id,booking_reference,public_booking_reference,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,pickup_at,closes_at,updated_at,safe_offer_context,safe_vehicle_label")
-      .in("offer_status", ["open", "assigned"])
+      .in("offer_status", ["open", "assigned"]);
+    if (notificationId) query = query.eq("id", notificationId.toLowerCase());
+    const { data, error } = await query
       .order("pickup_at", { ascending: true })
       .order("offer_key", { ascending: true })
       .range(rawOffset, rawOffset + scanChunkSize - 1);
@@ -602,6 +612,17 @@ export async function loadAdminDriverPoolAttentionOffers(
       const publicReference = publicBookingReference(row.public_booking_reference);
       const pickupAt = timestamp(row.pickup_at);
       if (!offer || !exactBookingReference || !publicReference || !pickupAt) continue;
+
+      // A notification must still name this exact current winning assignment.
+      // Ordinary Pool pending-list and cancellation presentation stay unchanged.
+      if (notificationId) {
+        const booking = assignedBookings.get(exactBookingReference);
+        if (String(row.id).toLowerCase() !== notificationId.toLowerCase() ||
+          offer.offer_status !== "assigned" || !booking?.driver_id ||
+          String(booking.driver_id) !== String(winningDrivers.get(String(row.id))) ||
+          [booking.status, booking.admin_internal_status, booking.customer_facing_status].some((status) =>
+            ["cancelled", "canceled", "completed", "complete", "archived", "deleted", "declined", "declined_internal", "history", "job completed", "job_completed"].includes(String(status || "").trim().toLowerCase()))) continue;
+      }
 
       if (offer.offer_status === "open") {
         attentionItems.push({
@@ -743,6 +764,19 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
     }
   }
   return { data: { enabled: true, has_more: result.has_more === true, jobs: mapped }, ok: true } as const;
+}
+
+// Optional read-only navigation context; acceptance and the generic push survive failures.
+export async function loadDriverPoolWinnerAlertTarget(client: DriverPoolClient, key: string): Promise<string | null> {
+  const exactKey = offerKey(key);
+  if (!exactKey) return null;
+  try {
+    const { data, error } = await client.from("driver_job_bid_offers").select("id")
+      .eq("offer_key", exactKey).eq("offer_status", "assigned").maybeSingle();
+    return !error && typeof data?.id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.id)
+      ? `alert:${data.id.toLowerCase()}` : null;
+  } catch { return null; }
 }
 
 export async function loadDriverPoolWinnerPlate(

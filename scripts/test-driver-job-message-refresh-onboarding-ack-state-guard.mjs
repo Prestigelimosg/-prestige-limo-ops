@@ -98,9 +98,11 @@ async function refreshScenario({ status, native = false, networkError = false, s
   let updates = { kind: "loaded", updates: [{ id: "old", safe_message: "Synthetic private message" }], feedback: null };
   let combo = { trips: [{ reference: "QA-PRIVATE" }] };
   const navigations = [];
+  const activityCalls = [];
   const sequence = { current: 0 };
   const loadedToken = { current: "qa-token" };
   const bindings = {
+    reportDriverActivity(installationId) { activityCalls.push(installationId); },
     token: "qa-token", isVerifiedEmbeddedDriverApp: () => native,
     currentEmbeddedDriverInstallationId: () => native ? "qa-installation" : "",
     driverAppUpdatesRequestSequenceRef: sequence,
@@ -125,6 +127,7 @@ async function refreshScenario({ status, native = false, networkError = false, s
     `return (${refreshNode.getText(ast)});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
   ).outputText)(...Object.values(bindings));
   await refresh({ preserveContent: true });
+  assert.deepEqual(activityCalls, [native ? "qa-installation" : ""], "Activity uses installation identity, never the private job token");
   return { page, updates, combo, navigations, loadedToken };
 }
 for (const [status, reason] of [[401, "unauthorized"], [403, "revoked"], [410, "expired"]]) {

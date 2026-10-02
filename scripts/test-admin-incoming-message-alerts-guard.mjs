@@ -171,7 +171,7 @@ assert.ok(page.includes('.filter((bookingRecord) => bookingRecordIsInsideActiveJ
 const sendStart=page.indexOf('  async function sendAdminTodayJobMessage(');
 const sendEnd=page.indexOf('  function renderAdminJobMessages(',sendStart);
 let sendState, posts, link, reports, candidate;
-const send=new Function('cleanReferenceText','clean','adminTodayJobDriverMessageStates','setAdminTodayJobDriverMessageStates','fetch','adminDriverJobLinksApiPath','adminLegacyDataPurpose','adminCustomerDriverAppNotificationsApiPath','adminIncomingReplyBooking','adminIncomingReplyReference','loadAdminDriverJobStatusRead','adminDriverJobStatusTimeLabel','refreshAdminTodayJobMessageHistory',compile(page.slice(sendStart,sendEnd))+';return sendAdminTodayJobMessage;');
+const send=new Function('cleanReferenceText','clean','adminTodayJobDriverMessageStates','setAdminTodayJobDriverMessageStates','fetch','adminDriverJobLinksApiPath','adminLegacyDataPurpose','adminCustomerDriverAppNotificationsApiPath','adminIncomingReplyBooking','adminIncomingReplyReference','loadAdminDriverJobStatusRead','adminDriverJobStatusTimeLabel','refreshAdminTodayJobMessageHistory','const adminDriverMessageAttemptsRef={current:{}};const adminDriverMessageSendingRef={current:new Set()};'+compile(page.slice(sendStart,sendEnd))+';return sendAdminTodayJobMessage;');
 async function tryReply(overrides={}) {
  sendState={UPCOMING:{audience:'driver',draft:'Please meet at the main lobby.',status:'idle'}};posts=[];
  link={id:'link-future',booking_reference:'UPCOMING',link_status:'active',revoked_at:null,expires_at:new Date(now+86400000).toISOString(),safe_summary:{acknowledged:true},...overrides.link};

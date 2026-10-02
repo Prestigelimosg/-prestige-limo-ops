@@ -15901,6 +15901,8 @@ export default function Home() {
   const [adminTodayJobDriverMessageStates, setAdminTodayJobDriverMessageStates] = useState<
     Record<string, AdminTodayJobDriverMessageState>
   >({});
+  const adminDriverMessageAttemptsRef = useRef<Record<string, { signature: string; eventKey: string }>>({});
+  const adminDriverMessageSendingRef = useRef(new Set<string>());
   const [adminIncomingReplyNotificationId, setAdminIncomingReplyNotificationId] = useState("");
   const [adminTodayJobMessageHistories, setAdminTodayJobMessageHistories] = useState<
     Record<string, AdminTodayJobMessageHistoryState>
@@ -26280,6 +26282,7 @@ export default function Home() {
         statuses: loadedDriverStatuses.statuses,
       });
       void refreshAdminDriverOtsPhotoProofRead(bookingReference);
+      void refreshAdminTodayJobMessageHistory(bookingReference);
     } catch (error) {
       const currentBookingReference =
         cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
@@ -32436,6 +32439,24 @@ export default function Home() {
         normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))
       );
     });
+  const dispatchDriverMessageMatches = dispatchReleaseWorkflowBookingReference ? operationalBookings.filter(
+    (item) => getActiveJobBookingReference(item) === dispatchReleaseWorkflowBookingReference,
+  ) : [];
+  const dispatchDriverMessageBooking = dispatchDriverMessageMatches.length === 1 ? dispatchDriverMessageMatches[0] : null;
+  const dispatchDriverMessageClosedReason = !dispatchDriverMessageBooking ? "Load one saved booking to message its driver."
+    : bookingRecordIsCompletedStatus(dispatchDriverMessageBooking) || bookingRecordIsCancelledStatus(dispatchDriverMessageBooking) ||
+      bookingRecordStatusValues(dispatchDriverMessageBooking).some(value => ["archived", "history", "declined", "rejected"].includes(value)) ||
+      (adminDriverJobStatusReadState.bookingReference === dispatchReleaseWorkflowBookingReference &&
+        adminDriverJobStatusReadState.statuses.some(item => item.status_value === "completed"))
+      ? "Driver messaging closed because this job has ended."
+    : !activeAdminDriverJobLink?.safe_summary.acknowledged || activeAdminDriverJobLink.revoked_at ||
+      !Number.isFinite(Date.parse(activeAdminDriverJobLink.expires_at || "")) ||
+      Date.parse(activeAdminDriverJobLink.expires_at || "") <= currentTimeMs ||
+      !Number.isSafeInteger(Number(dispatchDriverMessageBooking.driver_id)) || Number(dispatchDriverMessageBooking.driver_id) <= 0
+      ? "Available after the current assigned driver saves and acknowledges this job."
+    : adminDriverJobStatusReadState.bookingReference !== dispatchReleaseWorkflowBookingReference ||
+      adminDriverJobStatusReadState.status !== "loaded"
+      ? "Checking job status. Use Refresh messages if it remains unavailable." : "";
   const adminIncomingReplyNotification = adminAppNotificationReadState.notifications.find(
     (item) => item.id === adminIncomingReplyNotificationId &&
       item.workflow_area === "admin_incoming_job_message" && item.safe_context?.direction === "driver_to_admin",
@@ -33164,7 +33185,7 @@ export default function Home() {
     }
   }
 
-  function updateAdminTodayJobDriverMessageDraft(bookingReferenceValue: string, draft: string) {
+  function updateAdminTodayJobDriverMessageDraft(bookingReferenceValue: string, draft: string, driverOnly = false) {
     const bookingReference = cleanReferenceText(bookingReferenceValue);
 
     if (!bookingReference) {
@@ -33174,7 +33195,7 @@ export default function Home() {
     setAdminTodayJobDriverMessageStates((current) => ({
       ...current,
       [bookingReference]: {
-        audience: current[bookingReference]?.audience || "driver",
+        audience: driverOnly ? "driver" : current[bookingReference]?.audience || "driver",
         draft,
         message: "",
         status: "idle",
@@ -33203,11 +33224,12 @@ export default function Home() {
     }));
   }
 
-  async function sendAdminTodayJobMessage(bookingReferenceValue: string, replyLinkId?: string) {
+  async function sendAdminTodayJobMessage(bookingReferenceValue: string, replyLinkId?: string, dispatchLinkId?: string) {
     const bookingReference = cleanReferenceText(bookingReferenceValue);
     const currentState = adminTodayJobDriverMessageStates[bookingReference];
-    const audience = currentState?.audience || "driver";
-    const safeMessage = clean(currentState?.draft).slice(0, 500);
+    const audience = dispatchLinkId ? "driver" : currentState?.audience || "driver";
+    const safeMessage = clean(dispatchLinkId && currentState?.audience === "customer" ? "" : currentState?.draft).slice(0, 500);
+    if (audience === "driver" && adminDriverMessageSendingRef.current.has(bookingReference)) return;
 
     if (!bookingReference || !safeMessage) {
       setAdminTodayJobDriverMessageStates((current) => ({
@@ -33232,7 +33254,9 @@ export default function Home() {
       },
     }));
 
+    if (audience === "driver") adminDriverMessageSendingRef.current.add(bookingReference);
     try {
+      let driverMessageEventKey: string | null = null;
       let activeDriverJobLinkId: string | null = null;
 
       if (audience === "driver") {
@@ -33276,6 +33300,29 @@ export default function Home() {
           }
         }
 
+        if (dispatchLinkId) {
+          if (appliedAdminBookingSnapshotReferenceRef.current !== bookingReference ||
+            !dispatchDriverMessageBooking || dispatchDriverMessageClosedReason ||
+            activeLink.id !== dispatchLinkId || !activeLink.safe_summary.acknowledged || activeLink.revoked_at ||
+            !Number.isFinite(Date.parse(activeLink.expires_at || "")) || Date.parse(activeLink.expires_at || "") <= Date.now()) {
+            throw new Error("This assignment has changed or is not acknowledged. Refresh the saved booking before sending.");
+          }
+          const reports = await loadAdminDriverJobStatusRead(bookingReference);
+          if (reports.statuses.some(item => item.status_value === "completed")) {
+            await refreshAdminDriverJobStatusRead();
+            throw new Error("Driver messaging closed after Job Completed.");
+          }
+          if (appliedAdminBookingSnapshotReferenceRef.current !== bookingReference) {
+            throw new Error("The selected booking changed. Review it before sending.");
+          }
+        }
+        const signature = JSON.stringify([bookingReference, activeLink.id, safeMessage]);
+        let attempt = adminDriverMessageAttemptsRef.current[bookingReference];
+        if (!attempt || attempt.signature !== signature) {
+          attempt = { signature, eventKey: `admin-driver:${crypto.randomUUID()}` };
+          adminDriverMessageAttemptsRef.current[bookingReference] = attempt;
+        }
+        driverMessageEventKey = attempt.eventKey;
         activeDriverJobLinkId = activeLink.id;
       }
 
@@ -33305,7 +33352,7 @@ export default function Home() {
               booking_reference: bookingReference,
               delivery_surface: "driver_app",
               driver_job_link_id: activeDriverJobLinkId,
-              event_key: `${bookingReference}:admin-driver-message:${Date.now()}`,
+              event_key: driverMessageEventKey,
               notification_status: "queued",
               notification_type: "trip_update",
               priority: "normal",
@@ -33340,11 +33387,13 @@ export default function Home() {
         throw new Error(result?.error || `Message could not be queued for this ${audience}.`);
       }
 
+      if (audience === "driver") delete adminDriverMessageAttemptsRef.current[bookingReference];
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
           audience,
-          draft: "",
+          draft: audience === "driver" && clean(current[bookingReference]?.draft).slice(0, 500) !== safeMessage
+            ? current[bookingReference]?.draft || "" : "",
           message:
             audience === "driver"
               ? `Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`
@@ -33363,12 +33412,15 @@ export default function Home() {
           status: "error",
         },
       }));
+    } finally {
+      if (audience === "driver") adminDriverMessageSendingRef.current.delete(bookingReference);
     }
   }
 
-  function renderAdminJobMessages(activeJobBooking: BookingRecord, activeJobDriverMessagingClosed: boolean, replyLinkId?: string) {
+  function renderAdminJobMessages(activeJobBooking: BookingRecord, activeJobDriverMessagingClosed: boolean, replyLinkId?: string, dispatchContext?: { linkId: string; closedReason: string }) {
     const activeJobBookingReference = getActiveJobBookingReference(activeJobBooking);
-    const activeJobDriverMessageState = adminTodayJobDriverMessageStates[activeJobBookingReference] || {
+    const storedDriverMessageState = adminTodayJobDriverMessageStates[activeJobBookingReference];
+    const activeJobDriverMessageState = (dispatchContext && storedDriverMessageState?.audience === "customer" ? null : storedDriverMessageState) || {
       audience: "driver" as const, draft: "", message: "", status: "idle" as const,
     };
     const activeJobMessageHistory = adminTodayJobMessageHistories[activeJobBookingReference] || {
@@ -33387,14 +33439,20 @@ export default function Home() {
             data-admin-active-job-message-history-refresh="true"
             disabled={activeJobMessageHistory.status === "loading"}
             onClick={() => {
-              void refreshAdminTodayJobMessageHistory(activeJobBookingReference);
-              if (replyLinkId) void refreshDashboardDriverJobStatusRead(activeJobBookingReference);
+              if (dispatchContext) void refreshAdminDriverJobStatusRead();
+              else {
+                void refreshAdminTodayJobMessageHistory(activeJobBookingReference);
+                if (replyLinkId) void refreshDashboardDriverJobStatusRead(activeJobBookingReference);
+              }
             }}
             type="button"
           >
             {activeJobMessageHistory.status === "loading" ? "Loading" : "Refresh messages"}
           </button>
         </div>
+        {dispatchContext ? <p className="mt-1 font-semibold" data-dispatch-driver-message-recipient="true">
+          To: {activeJobBooking.driver_name || "Assigned driver"} · Job {bookingPublicReference(activeJobBooking) || activeJobBookingReference}
+        </p> : null}
         <div className="mt-2 rounded-md border border-sky-100 bg-white p-2" data-admin-active-job-message-history="true">
           {activeJobMessageHistory.messages.length > 0 ? (
             <ol className="grid gap-1.5">
@@ -33429,7 +33487,7 @@ export default function Home() {
           >
             <legend className="font-semibold">Send message to</legend>
             <div className="grid grid-cols-2 gap-1 rounded-md border border-sky-200 bg-white p-1">
-              {(replyLinkId ? (["driver"] as const) : (["driver", "customer"] as const)).map((audience) => {
+              {((replyLinkId || dispatchContext) ? (["driver"] as const) : (["driver", "customer"] as const)).map((audience) => {
                 const isSelectedAudience = activeJobDriverMessageState.audience === audience;
                 const audienceLabel = audience === "driver" ? "Driver" : "Customer";
 
@@ -33442,6 +33500,7 @@ export default function Home() {
                         : "bg-white text-sky-900 hover:bg-sky-50"
                     }`}
                     data-admin-active-job-message-audience-option={audience}
+                    disabled={Boolean(dispatchContext)}
                     key={audience}
                     onClick={() =>
                       updateAdminTodayJobMessageAudience(
@@ -33472,6 +33531,7 @@ export default function Home() {
                 updateAdminTodayJobDriverMessageDraft(
                   activeJobBookingReference,
                   event.target.value,
+                  Boolean(dispatchContext),
                 )
               }
               placeholder={`Type a short job message for this ${activeJobDriverMessageState.audience}`}
@@ -33488,7 +33548,7 @@ export default function Home() {
                 (activeJobDriverMessagingClosed &&
                   activeJobDriverMessageState.audience === "driver")
               }
-              onClick={() => void sendAdminTodayJobMessage(activeJobBookingReference, replyLinkId)}
+              onClick={() => void sendAdminTodayJobMessage(activeJobBookingReference, replyLinkId, dispatchContext?.linkId)}
               type="button"
             >
               {activeJobDriverMessageState.status === "loading"
@@ -33519,7 +33579,7 @@ export default function Home() {
               className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 font-semibold text-slate-800"
               data-admin-active-job-driver-message-closed="true"
             >
-              {replyLinkId && dashboardDriverJobStatusReadStates[activeJobBookingReference]?.status !== "loaded"
+              {dispatchContext ? dispatchContext.closedReason : replyLinkId && dashboardDriverJobStatusReadStates[activeJobBookingReference]?.status !== "loaded"
                 ? "Checking job status. If unavailable, use Refresh messages before replying."
                 : "Driver messaging closed after Job Completed."}
             </p>
@@ -50745,6 +50805,13 @@ export default function Home() {
                 </div>
                 ) : null}
                 </details>
+                {dispatchDriverMessageBooking ? (
+                  <div data-dispatch-driver-message="true">
+                    {renderAdminJobMessages(dispatchDriverMessageBooking, Boolean(dispatchDriverMessageClosedReason), undefined, {
+                      linkId: activeAdminDriverJobLink?.id || "", closedReason: dispatchDriverMessageClosedReason,
+                    })}
+                  </div>
+                ) : null}
                 <details
                   open
                   className="rounded-md border border-indigo-100 bg-white px-2 py-1.5"

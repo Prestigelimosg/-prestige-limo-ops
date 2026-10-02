@@ -15,6 +15,13 @@ const memo = findNode(n => ts.isVariableDeclaration(n) && n.name.getText(tree) =
 const resetEffect = findNode(n => ts.isCallExpression(n) && n.expression.getText(tree) === 'useEffect' &&
   n.arguments[0]?.getText(tree).includes('const bookingReference = clean(dispatchReleaseWorkflowBookingReference);') &&
   n.arguments[0]?.getText(tree).includes('setAdminDriverJobLinkState'));
+let acknowledgementEffect;
+function findAcknowledgementEffect(node) {
+  if (ts.isCallExpression(node) && node.expression.getText(tree) === 'useEffect' &&
+      node.arguments[0]?.getText(tree).includes('const acknowledgedCopySnapshot =')) acknowledgementEffect = node.arguments[0].getText(tree);
+  ts.forEachChild(node, findAcknowledgementEffect);
+}
+findAcknowledgementEffect(tree);
 export const runtime = ts.transpileModule([
   fn('adminBookingFormSyncSignature'), fn('safeDriverVehicleModelDisplay'),
   `const mergeCurrentBookingDriverDetailsFromActiveLink = ${callback('mergeCurrentBookingDriverDetailsFromActiveLink')};`,
@@ -22,7 +29,8 @@ export const runtime = ts.transpileModule([
   fn('createDriverJobLink'), fn('copyDriverJobLink'),
   `const copyMessage = ${memo.initializer.arguments[0].getText(tree)};`,
   `const syncSelection = ${resetEffect.arguments[0].getText(tree)};`,
-  'return {createDriverJobLink, copyDriverJobLink, copyMessage, syncSelection, refreshAdminDriverJobLinkForReference};',
+  `const reconcileAcknowledgedCopy = ${acknowledgementEffect || '() => {}'};`,
+  'return {createDriverJobLink, copyDriverJobLink, copyMessage, syncSelection, refreshAdminDriverJobLinkForReference, reconcileAcknowledgedCopy};',
 ].join('\n'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
 
 // Real production callbacks; only UI setters, clipboard and network are replaced.
@@ -37,7 +45,7 @@ export function makeHarness(runtime, assigned = true, resultOverrides = {}) {
     driverJobLinkRequestRevisionRef:{current:0}, bookingMessageRef:{current:{value:'QA ORIGINAL MESSAGE'}},
     appliedAdminBookingSnapshotReferenceRef:{current:'QA-ONE'},loadedBookingIdRef:{current:'QA-ONE'},
     adminDriverJobLinkState:{action:null,link:null,loadedReference:'',oneTimeUrl:'',message:null},
-    dashboard:{linksByReference:{},status:'idle'},copies:[],resets:0,requestCount:0,
+    saving:false, adminBookingPersistenceAction:null, adminBookingCrossDeviceConflict:null, aiAssistLoading:false, aiAssistMode:'parser', copyEditStates:{}, document:{visibilityState:'visible'}, dashboard:{linksByReference:{},status:'idle'},copies:[],resets:0,requestCount:0,
     crypto:{randomUUID:()=> 'qa-request-id'}, adminDriverJobLinksApiPath:'/api/admin-driver-job-links', adminLegacyDataPurpose:'admin-booking-persistence',
     adminVisibleBookingReference:()=> '99001',adminDriverJobLinkFailureMessage:e=>e.message,
     formatBookingTimestampSgt:v=>v,formatPickupDateTime:(d,t)=>`${d} ${t}`,
@@ -60,6 +68,7 @@ export function makeHarness(runtime, assigned = true, resultOverrides = {}) {
   env.result={ok:true,disposition:'created',link,driver_job_url:'https://example.invalid/driver-job/QA-ONE',native_app_alert:{reason:'provider_failed'},...resultOverrides};
   env.fetch=async(_url,options)=>{if(options?.method==='GET'){env.readCount=(env.readCount||0)+1;return{ok:true,json:async()=>({ok:true,links:[env.refreshLink||env.result.link]})};}env.requestCount++;if(env.beforeResponse)await env.beforeResponse();if(env.networkFails)throw Error('network failure');return{ok:env.result.ok,json:async()=>env.result};};
   const callbacks=new Function('env',`with(env){${runtime}}`)(env);
+  Object.defineProperty(env,'dashboardDriverJobLinksReadState',{get:()=>env.dashboard});
   Object.defineProperty(env,'activeAdminDriverJobLink',{get:()=>env.adminDriverJobLinkState.link?.booking_reference===env.dispatchReleaseWorkflowBookingReference?env.adminDriverJobLinkState.link:null});
   Object.defineProperty(env,'driverJobLinkMessage',{get:callbacks.copyMessage});
   env.edit=patch=>{env.booking={...env.booking,...patch};env.bookingFormRef.current=env.booking;};
@@ -151,6 +160,65 @@ export async function runChecks() {
   const newerRequest=makeHarness(runtime);newerRequest.env.beforeResponse=async()=>{newerRequest.env.driverJobLinkRequestRevisionRef.current++;newerRequest.env.dashboard={linksByReference:{'QA-ONE':{id:'NEWER'}},status:'loaded'};};await newerRequest.createDriverJobLink();assert.equal(newerRequest.env.resets,0);assert.equal(newerRequest.env.dashboard.linksByReference['QA-ONE'].id,'NEWER');
   const invalid=makeHarness(runtime);invalid.env.buildAdminDriverJobLinkCreatePayload=()=>({ok:false,error:'Unsaved amendment'});await invalid.createDriverJobLink();assert.equal(invalid.env.requestCount,0);assert.equal(invalid.env.resets,0);
   const dsp=makeHarness(runtime,true);dsp.env.isDspItinerary=true;dsp.env.itineraryDisplayStops=[{time:'1300',location:'FIRST STOP'},{time:'1500',location:'SECOND STOP'}];await dsp.createDriverJobLink();dsp.syncSelection();assertInstallCopy(dsp.copyMessage());assert.match(dsp.copyMessage(),/1300 - FIRST STOP/);assert.match(dsp.copyMessage(),/1500 - SECOND STOP/);
+  // Reproduce the reported ACK -> still populated Dispatch boundary using actual callbacks.
+  const ack=makeHarness(runtime,false);await ack.createDriverJobLink();
+  ack.env.dashboard={status:'loaded',linksByReference:{'QA-ONE':{...ack.env.result.link,safe_summary:{...ack.env.result.link.safe_summary,acknowledged:true,acknowledged_at:'2030-10-01T13:01:00Z'}}}};
+  ack.reconcileAcknowledgedCopy();
+  assert.equal(ack.env.resets,1,'Exact fresh ACK must clear its unchanged issued booking');
+  assert.equal(ack.env.adminDriverJobLinkState.oneTimeUrl,'','Exact ACK must retire the retained copy');
+  async function pendingAck(assigned=false) {
+    const h=makeHarness(runtime,assigned);await h.createDriverJobLink();
+    h.env.dashboard={status:'loaded',linksByReference:{'QA-ONE':{...h.env.result.link,safe_summary:{...h.env.result.link.safe_summary,acknowledged:true,acknowledged_at:'2030-10-01T13:01:00Z'}}}};
+    return h;
+  }
+  for (const mode of ['loading','error','idle','absent','other-link','other-booking','pending','no-timestamp','invalid-timestamp','revoked','expired','invalid-expiry','closed-only','busy','background','other-tab','new-context','saving','updating','conflict','ai-loading','ask-ai']) {
+    const h=await pendingAck();const link=h.env.dashboard.linksByReference['QA-ONE'];
+    if(['loading','error','idle'].includes(mode))h.env.dashboard.status=mode;
+    if(mode==='absent')h.env.dashboard.linksByReference={};
+    if(mode==='other-link')link.id='newer-link';
+    if(mode==='other-booking')link.booking_reference='QA-TWO';
+    if(mode==='pending')link.safe_summary.acknowledged=false;
+    if(mode==='no-timestamp')link.safe_summary.acknowledged_at=null;
+    if(mode==='invalid-timestamp')link.safe_summary.acknowledged_at='invalid';
+    if(mode==='revoked')link.revoked_at='2030-10-01T13:02:00Z';
+    if(mode==='expired')link.expires_at='2000-01-01';
+    if(mode==='invalid-expiry')link.expires_at=null;
+    if(mode==='closed-only'){link.safe_summary.acknowledged=false;link.safe_summary.ack_alert_closed=true;}
+    if(mode==='saving')h.env.saving=true;
+    if(mode==='updating')h.env.adminBookingPersistenceAction='update';
+    if(mode==='conflict')h.env.adminBookingCrossDeviceConflict={bookingReference:'QA-ONE'};
+    if(mode==='ai-loading')h.env.aiAssistLoading=true;
+    if(mode==='ask-ai')h.env.aiAssistMode='assistant';
+    if(mode==='busy')h.env.adminDriverJobLinkState.action='create';
+    if(mode==='background')h.env.document.visibilityState='hidden';
+    if(mode==='other-tab')h.env.activeTab='bookings';
+    if(mode==='new-context')h.env.driverJobLinkFormContextRevisionRef.current++;
+    h.reconcileAcknowledgedCopy();
+    assert.equal(h.env.resets,0,mode);assert.ok(h.env.adminDriverJobLinkState.oneTimeUrl,mode);
+  }
+  for(const field of ['name','pickup','dropoff','date','time','vehicle','driverId','driverName','driverContact','driverPlate','driverVehicleModel','internalAdminNotes','customerPriceOverride','driverPayoutOverride']) {
+    const h=await pendingAck();h.env.edit({[field]:'NEW UNSAVED VALUE'});h.reconcileAcknowledgedCopy();
+    assert.equal(h.env.resets,0,`Preserve edited ${field}`);assert.equal(h.env.booking[field],'NEW UNSAVED VALUE');
+  }
+  const raw=await pendingAck();raw.env.bookingMessageRef.current.value='NEXT BOOKING';raw.reconcileAcknowledgedCopy();assert.equal(raw.env.resets,0);
+  const copyEdit=await pendingAck();copyEdit.env.copyEditStates={customerCopy:{isEditing:true}};copyEdit.reconcileAcknowledgedCopy();assert.equal(copyEdit.env.resets,0);
+  const next=await pendingAck();next.env.nextBooking();next.reconcileAcknowledgedCopy();assert.equal(next.env.resets,0);assert.equal(next.env.booking.name,'QA SECOND PASSENGER');
+  const already=makeHarness(runtime,false);already.env.result.link.safe_summary.acknowledged=true;await already.createDriverJobLink();already.env.dashboard.linksByReference['QA-ONE'].safe_summary.acknowledged_at='2030-10-01';already.reconcileAcknowledgedCopy();assert.equal(already.env.resets,0,'Reopening/reusing an acknowledged link is not a new ACK');
+  for(const remoteBaseline of [false,true]) {
+    const h=await pendingAck();const link=h.env.dashboard.linksByReference['QA-ONE'];
+    Object.assign(link.safe_summary,{assigned_driver:'QA DRIVER',assigned_driver_contact:'80000000',assigned_driver_plate:'QA1234',vehicle:'Combi'});
+    h.env.refreshLink=link;await h.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});
+    if(remoteBaseline){h.env.edit({driverId:'42'});h.env.loadedAdminBookingBaselineRef.current={bookingReference:'QA-ONE',form:{...h.env.booking}};}
+    h.reconcileAcknowledgedCopy();assert.equal(h.env.resets,1,'Exact safe ACK hydration can clear');assert.equal(h.env.requestCount,1,'ACK clearing performs no server write');
+    h.reconcileAcknowledgedCopy();assert.equal(h.env.resets,1,'ACK clearing is once only');
+  }
+  for(const assigned of [false,true]) {
+    const h=await pendingAck(assigned);if(!assigned)await h.copyDriverJobLink();
+    assert.equal(h.env.resets,1);h.env.edit({name:'NEXT UNSAVED PASSENGER'});h.env.bookingMessageRef.current.value='NEXT RAW MESSAGE';
+    h.reconcileAcknowledgedCopy();assert.equal(h.env.resets,1,'Old ACK must not reset the next draft');
+    assert.equal(h.env.booking.name,'NEXT UNSAVED PASSENGER');assert.equal(h.env.bookingMessageRef.current.value,'NEXT RAW MESSAGE');
+    assert.equal(h.env.adminDriverJobLinkState.oneTimeUrl,'','Retire only the acknowledged old preview');
+  }
   console.log('PASS Driver link form clear: assigned/unassigned, exact retained copy, next booking, failed create/copy, late responses, newer draft, DSP and queue handoff. Synthetic callbacks; no live sends.');
 }
 if(process.argv[1]===new URL(import.meta.url).pathname) await runChecks();

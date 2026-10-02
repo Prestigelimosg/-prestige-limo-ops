@@ -1022,6 +1022,7 @@ type AdminDriverJobLinkState = {
     itineraryDisplayStops: ItineraryDisplayStop[];
     formSignature: string;
     hydratedVehicleFormSignature?: string;
+    awaitingAcknowledgementLinkId?: string;
     bookingMessage: string;
     contextRevision: number;
     clearAfterCopy: boolean;
@@ -28351,6 +28352,9 @@ export default function Home() {
           cleanReferenceText(link.booking_reference) !== cleanReferenceText(payloadResult.data.booking_reference)) {
         throw new Error("Driver job link response was missing the expected booking link.");
       }
+      // Arm clearing only for this issued, not-yet-acknowledged link. A reused
+      // acknowledged link must not reset a deliberately reopened saved booking.
+      if (!link.safe_summary.acknowledged) copySnapshot.awaitingAcknowledgementLinkId = link.id;
       // The existing link refresh may fill the hidden driver vehicle model on an
       // unassigned job. Accept only that exact returned/requested vehicle change;
       // all editable booking/driver fields and the original copy remain protected.
@@ -32997,6 +33001,71 @@ export default function Home() {
     // The exact active-booking reference key controls queue membership; the read keeps only the newest active link per booking.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driverAckQueueMonitorIsActive, pendingDriverAckQueueReferenceKey]);
+
+  useEffect(() => {
+    const acknowledgedCopySnapshot = adminDriverJobLinkState.copySnapshot;
+    const issuedLink = adminDriverJobLinkState.link;
+    if (activeTab !== "dispatch" || document.visibilityState !== "visible" ||
+        dashboardDriverJobLinksReadState.status !== "loaded" ||
+        adminDriverJobLinkState.action !== null || !adminDriverJobLinkState.oneTimeUrl ||
+        !acknowledgedCopySnapshot?.awaitingAcknowledgementLinkId || !issuedLink) return;
+
+    const reference = cleanReferenceText(issuedLink.booking_reference);
+    const acknowledgedLink = dashboardDriverJobLinksReadState.linksByReference[reference];
+    if (!reference || !acknowledgedLink ||
+        acknowledgedLink.id !== acknowledgedCopySnapshot.awaitingAcknowledgementLinkId ||
+        issuedLink.id !== acknowledgedLink.id ||
+        cleanReferenceText(acknowledgedLink.booking_reference) !== reference ||
+        acknowledgedLink.link_status !== "active" || acknowledgedLink.revoked_at ||
+        !acknowledgedLink.safe_summary.acknowledged ||
+        !Number.isFinite(Date.parse(acknowledgedLink.safe_summary.acknowledged_at || "")) ||
+        !Number.isFinite(Date.parse(acknowledgedLink.expires_at || "")) ||
+        Date.parse(acknowledgedLink.expires_at || "") <= Date.now()) return;
+
+    const currentReference = cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+      cleanReferenceText(loadedBookingIdRef.current);
+    if (currentReference) {
+      if (currentReference !== reference || saving || adminBookingPersistenceAction !== null ||
+          adminBookingCrossDeviceConflict !== null || aiAssistLoading || aiAssistMode !== "parser" ||
+          acknowledgedCopySnapshot.contextRevision !== driverJobLinkFormContextRevisionRef.current ||
+          acknowledgedCopySnapshot.bookingMessage !== (bookingMessageRef.current?.value ?? "") ||
+          Object.values(copyEditStates).some((state) => state.isEditing)) return;
+
+      // The ACK read can hydrate the exact driver's safe fields before this effect.
+      // Accept only those verified values, preserving every other form field.
+      const summary = acknowledgedLink.safe_summary;
+      const acknowledgedForm = {
+        ...acknowledgedCopySnapshot.booking,
+        driverName: clean(summary.assigned_driver) || acknowledgedCopySnapshot.booking.driverName,
+        driverContact: clean(summary.assigned_driver_contact) || acknowledgedCopySnapshot.booking.driverContact,
+        driverPlate: clean(summary.assigned_driver_plate) || acknowledgedCopySnapshot.booking.driverPlate,
+        driverVehicleModel: safeDriverVehicleModelDisplay(summary.vehicle) || acknowledgedCopySnapshot.booking.driverVehicleModel,
+      };
+      const baseline = loadedAdminBookingBaselineRef.current;
+      if (baseline?.bookingReference === reference && clean(baseline.form.driverId) &&
+          clean(baseline.form.driverName) === clean(summary.assigned_driver) &&
+          clean(baseline.form.driverContact) === clean(summary.assigned_driver_contact) &&
+          clean(baseline.form.driverPlate) === clean(summary.assigned_driver_plate) &&
+          clean(baseline.form.driverVehicleModel) === safeDriverVehicleModelDisplay(summary.vehicle)) {
+        acknowledgedForm.driverId = baseline.form.driverId;
+      }
+      const currentSignature = adminBookingFormSyncSignature(bookingFormRef.current);
+      if (currentSignature !== acknowledgedCopySnapshot.formSignature &&
+          currentSignature !== acknowledgedCopySnapshot.hydratedVehicleFormSignature &&
+          currentSignature !== adminBookingFormSyncSignature(acknowledgedForm)) return;
+
+      resetAdminBookingDraft("message");
+    }
+    // An already-cleared form may now contain a new draft. Retire only the old
+    // copy in that case; never reset, navigate, save, revoke or complete anything.
+    setAdminDriverJobLinkState({
+      action: null, link: null, loadedReference: "", message: null, oneTimeUrl: "",
+    });
+    setDriverJobLinkCopyMessage(null);
+    // Reconcile on fresh existing ACK reads, not on each keystroke. All form and
+    // selection checks use the current refs; no additional polling/write lane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dashboardDriverJobLinksReadState, adminDriverJobLinkState]);
 
   useEffect(() => {
     if (!liveDispatchMapReferenceKey) {

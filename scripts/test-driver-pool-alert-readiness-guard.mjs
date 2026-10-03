@@ -62,6 +62,7 @@ try {
  // GET contract: purpose/role boundary runs before readiness; unknown inputs cannot broaden the read.
  let allowed=true,requested=[];
  const route=load('app/api/admin-driver-job-bid-offers/route.ts',{
+  '../../../lib/driver-job-operations-calendar-sync':{syncAcknowledgedDriverDetailsToOperationsCalendar:()=>assert.fail('Readiness GET must not call Calendar')},
   'next/server':{},'../../../lib/driver-account-activity':{loadDriverPoolActivity:async()=>[]},'../../../lib/admin-device-push-notification':{},'../../../lib/admin-booking-supabase-adapter':{},
   '../../../lib/admin-dispatcher-auth-boundary':{resolveAdminDispatcherBoundary:()=>({ok:allowed,error:'Denied'}),adminBookingPersistencePurpose:'admin-booking-persistence'},
   '../../../lib/driver-device-push-notification':{loadDriverPoolAlertReadiness:async(_c,ids)=>{requested.push(ids);return ids.map(driver_id=>({driver_id,ready:true}));}},

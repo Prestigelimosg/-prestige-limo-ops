@@ -17,9 +17,10 @@ try {
  for(const [name,file] of [['admin','app/admin-driver-pool-control.tsx'],['driver','app/driver-portal/page.tsx']]) {
   let source=await readFile(file,'utf8');
   if(name==='driver') source=source.replace('import { PublicAppBuildMarker } from "@/app/public-app-build-marker";', 'const PublicAppBuildMarker = () => null;');
+  if(name==='driver') source=source.replace('../../lib/driver-activity-client','./driver-activity-client').replace('../driver-job/driver-combo-trips','./driver-combo-trips').replace('../android-app-update','./android-app-update');
   await writeFile(path.join(temp,name+'.js'),ts.transpileModule(source,{compilerOptions}).outputText);
  }
- for(const [name,file] of [['driver-account-setup','app/driver-portal/driver-account-setup.tsx'],['driver-account-password','lib/driver-account-password.ts']]) {
+ for(const [name,file] of [['driver-account-setup','app/driver-portal/driver-account-setup.tsx'],['driver-account-password','lib/driver-account-password.ts'],['driver-activity-client','lib/driver-activity-client.ts'],['driver-combo-trips','app/driver-job/driver-combo-trips.tsx'],['android-app-update','app/android-app-update.tsx']]) {
   const source=(await readFile(file,'utf8')).replace('../../lib/driver-account-password','./driver-account-password');
   await writeFile(path.join(temp,name+'.js'),ts.transpileModule(source,{compilerOptions}).outputText);
  }
@@ -54,7 +55,7 @@ try {
  };
  createRoot(document.getElementById('root')).render(location.pathname.startsWith('/driver')?<Driver/>:<AdminDriverPoolControl drivers={drivers} savedVehicle="AVF" bookingReference="POOL-QA" expectedUpdatedAt={base.updated_at} eligible disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={100} onLoadBooking={async(ref)=>window.poolTest.loads.push(ref)} onCancelAssignment={async(item)=>{window.poolTest.cancelled.push(item);if(window.poolTest.failCancel)throw Error('Driver Pool state changed. Reload and try again.');offer.offer_status='cancelled';return true;}}/>);`;
  await writeFile(path.join(temp,'entry.js'),ts.transpileModule(entry,{compilerOptions}).outputText);
- await new Promise((resolve,reject)=>webpack({mode:'development',entry:path.join(temp,'entry.js'),resolve:{modules:[path.join(process.cwd(),'node_modules')]},output:{path:temp,filename:'bundle.js'}},(err,stats)=>err||stats.hasErrors()?reject(err||Error(stats.toString({all:false,errors:true}))):resolve()));
+ await new Promise((resolve,reject)=>webpack({mode:'development',plugins:[new webpack.DefinePlugin({'process.env':JSON.stringify({NODE_ENV:'development',__NEXT_ROUTER_BASEPATH:''})})],entry:path.join(temp,'entry.js'),resolve:{modules:[path.join(process.cwd(),'node_modules')]},output:{path:temp,filename:'bundle.js'}},(err,stats)=>err||stats.hasErrors()?reject(err||Error(stats.toString({all:false,errors:true}))):resolve()));
  const bundle=await readFile(path.join(temp,'bundle.js'));
  // Use the tested production stylesheet for responsive checks.
  const {readdir}=await import('node:fs/promises');
@@ -78,9 +79,9 @@ try {
  for(const width of [390,1280]) {
   await client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width===390});
   await client.send('Page.navigate',{url:url+'/readiness'});await wait("document.querySelector('[data-driver-alert-status=\"11\"]')?.innerText==='Alerts not ready'");
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[10].disabled"),true);
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[11].disabled"),true);
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[9].disabled"),true,'Mismatched vehicle cannot be selected');
+  assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"11\"]').closest('label').querySelector('input').disabled"),true);
+  assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"12\"]').closest('label').querySelector('input').disabled"),true);
+  assert.equal(await evaluate("Boolean(document.querySelector('[data-driver-alert-status=\"10\"]'))"),false,'Mismatched vehicle is hidden');
   assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"1\"]').innerText"),'Alerts registered');
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Selection overflow at ${width}`);
   const selectedShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-direct-selected-'+width+'.png',Buffer.from(selectedShot.data,'base64'));

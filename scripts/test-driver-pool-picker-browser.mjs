@@ -18,7 +18,7 @@ try {
   const source = process.env.POOL_PICKER_BASELINE === '1' ? execFileSync('git', ['show', 'HEAD:app/admin-driver-pool-control.tsx'], { encoding: 'utf8' }) : await readFile('app/admin-driver-pool-control.tsx', 'utf8');
   await writeFile(path.join(dir, 'pool.js'), ts.transpileModule(source, { compilerOptions: options }).outputText);
   const entry = `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{AdminDriverPoolControl}from'./pool';
-    const roster=Array.from({length:location.pathname==='/large'?321:6},(_,i)=>({id:i+1,driver_name:'QA Driver '+(i+1),plate_number:'QA'+(i+1),vehicle_type:i===5?'VVV':'AVF',availability_status:'available'}));
+    const roster=Array.from({length:location.pathname==='/large'?321:location.pathname==='/vehicles'?8:6},(_,i)=>({id:i+1,driver_name:'QA Driver '+(i+1),plate_number:'QA'+(i+1),vehicle_type:location.pathname==='/vehicles'?['AVF','Toyota Alphard','VVV','Mercedes V-Class','Combi','E','S','Unknown'][i]:i===5?'VVV':'AVF',availability_status:'available'}));
     window.picker={loads:0,fail:location.pathname==='/failure',requests:[]};
     window.fetch=async(url,init={})=>{window.picker.requests.push({url:String(url),method:init.method||'GET',body:init.body});
       if((init.method||'GET')!=='GET')throw Error('Selection must never send');
@@ -35,6 +35,10 @@ try {
   server = createServer((req, res) => { res.setHeader('Content-Type', req.url === '/bundle.js' ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8');res.end(req.url === '/bundle.js' ? bundle : `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>`); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
+  if (process.env.POOL_BROWSER_SERVE_ONLY === 'true') {
+    console.log('Synthetic Pool picker: '+origin);
+    await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
+  } else {
   const port = Number(process.env.CHROME_DEBUG_PORT || 9248);
   chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new','--disable-gpu','--disable-background-networking','--no-first-run',`--user-data-dir=${path.join(dir,'chrome')}`,`--remote-debugging-port=${port}`,'about:blank'],{stdio:'ignore'});
   await waitForChromeDebugPort(port);client=createChromeClient((await waitForChromePageTarget(port)).webSocketDebuggerUrl);await client.ready;await client.send('Page.enable');await client.send('Runtime.enable');
@@ -45,7 +49,7 @@ try {
   const click=label=>evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)});if(!b||b.disabled)throw Error('Missing enabled button');b.click()})()`);
   for(const width of [390,412,1280]){
     await client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<768});
-    await navigate('/');await wait('document.querySelectorAll("input[type=checkbox]").length===6');
+    await navigate('/');await wait('document.querySelectorAll("input[type=checkbox]").length===5');
     await wait('!document.querySelector("input[type=checkbox]").disabled');
     assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-driver-activity]")].slice(0,4).map(e=>e.textContent)'),['Online','Last active 15 min ago','Signed out','Unknown']);
     assert.equal(await evaluate('window.picker.loads'),1,'Loads automatically once without a separate button');
@@ -61,22 +65,33 @@ try {
     await evaluate(`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(${search},'');${search}.dispatchEvent(new Event('input',{bubbles:true}))`);
     await wait('document.querySelectorAll("input[type=checkbox]:checked").length===4');
     assert.equal(await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="Send to selected drivers").disabled'),false);
-    assert.equal(await evaluate('document.querySelectorAll("input[type=checkbox]")[4].disabled&&document.querySelectorAll("input[type=checkbox]")[5].disabled'),true,'Readiness and vehicle restrictions preserved');
+    assert.equal(await evaluate('document.querySelectorAll("input[type=checkbox]")[4].disabled&&![...document.querySelectorAll("input[type=checkbox]")].some(e=>e.closest("label").textContent.includes("VVV"))'),true,'Readiness and vehicle restrictions preserved');
     assert.equal(await evaluate('window.picker.requests.every(r=>r.method==="GET")'),true,'No publish on load/search/select');
     const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-picker-'+width+'.png',Buffer.from(shot.data,'base64'));
     console.log('PASS '+width+'px auto-load, four selections across search, eligible-only controls, no mutation or overflow');
   }
-  await navigate('/large');await wait('document.querySelectorAll("input[type=checkbox]").length===321');
-  await wait('document.querySelectorAll("[data-driver-activity]")[320]?.textContent==="Online"');
+  await navigate('/large');await wait('document.querySelectorAll("input[type=checkbox]").length===320');
+  await wait('document.querySelectorAll("[data-driver-activity]")[319]?.textContent==="Online"');
   assert.equal(await evaluate('window.picker.requests.filter(r=>r.url.includes("driver_ids=")).every(r=>new URL(r.url,location.origin).searchParams.get("driver_ids").split(",").length<=200)'),true);
-  await evaluate('document.querySelectorAll("input[type=checkbox]")[320].click()');await wait('document.body.innerText.includes("1 selected")');
-  console.log('PASS 321 drivers with bounded requests, activity aggregation and final-row selection');
+  await evaluate('document.querySelectorAll("input[type=checkbox]")[319].click()');await wait('document.body.innerText.includes("1 selected")');
+  console.log('PASS 321 loaded drivers, 320 matching rows, bounded requests and final-row selection');
+  await navigate('/vehicles');await wait('document.querySelectorAll("input[type=checkbox]").length===2');
+  for(const [category,ids] of [['VVV',[3,4]],['COMBI',[5]],['S',[7]],['E / AVF',[1,2,6]],['AVF / VVV',[1,2,3,4]],['',[]]]) {
+    await evaluate(`(()=>{const s=document.querySelector('[aria-label="Driver Pool vehicle type"]');s.value=${JSON.stringify(category)};s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+    await wait(`document.querySelectorAll('input[type=checkbox]').length===${ids.length}`);
+    assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-driver-alert-status]")].map(e=>Number(e.getAttribute("data-driver-alert-status")))'),ids);
+    assert.equal(await evaluate('document.querySelectorAll("input[type=checkbox]:checked").length'),0,'Vehicle change clears selections');
+    if(ids.length)await evaluate('document.querySelector("input[type=checkbox]").click()');
+  }
+  assert.equal(await evaluate('document.body.innerText.includes("Choose a Pool vehicle to see matching drivers.")'),true);
+  assert.equal(await evaluate('window.picker.requests.every(r=>r.method==="GET")'),true,'Vehicle selection never publishes');
   await navigate('/failure');await wait('document.body.innerText.includes("Drivers could not load")');assert.equal(await evaluate('window.picker.loads'),1,'Failure does not loop');
-  await evaluate('window.picker.fail=false');await click('Retry loading drivers');await wait('document.querySelectorAll("input[type=checkbox]").length===6');assert.equal(await evaluate('window.picker.loads'),2);
-  await navigate('/empty');await wait('document.body.innerText.includes("No available drivers to select")');assert.equal(await evaluate('window.picker.loads'),1,'Empty response does not loop');
-  await navigate('/preloaded');await wait('document.querySelectorAll("input[type=checkbox]").length===6');assert.equal(await evaluate('window.picker.loads'),0,'Reuse existing roster');
+  await evaluate('window.picker.fail=false');await click('Retry loading drivers');await wait('document.querySelectorAll("input[type=checkbox]").length===5');assert.equal(await evaluate('window.picker.loads'),2);
+  await navigate('/empty');await wait('document.body.innerText.includes("No available drivers match this vehicle")');assert.equal(await evaluate('window.picker.loads'),1,'Empty response does not loop');
+  await navigate('/preloaded');await wait('document.querySelectorAll("input[type=checkbox]").length===5');assert.equal(await evaluate('window.picker.loads'),0,'Reuse existing roster');
   await navigate('/ineligible');await wait('window.picker.requests.length>=2');assert.equal(await evaluate('window.picker.loads'),0,'No auto-load for ineligible job');
   assert.deepEqual(errors,[]);
   const parent=await readFile('app/page.tsx','utf8');assert.match(parent,/onLoadDrivers=\{loadDriverAssignmentDisplayDrivers\}/,'Reuse established roster read');
   console.log('PASS clear failed/empty states, explicit retry, no reload loop, same parent reader, zero browser exceptions');
+  }
 } finally {client?.close();if(chrome)await terminateChildProcess(chrome);if(server)await new Promise(resolve=>server.close(resolve));await rm(dir,{recursive:true,force:true});}

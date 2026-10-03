@@ -268,7 +268,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
     }, 0);
     return () => window.clearTimeout(timer);
   }, [showExactControl, offerNeedsAttention, disabled, drivers.length, requestDrivers]);
-  const visibleDrivers = drivers.filter((driver) => driver.availability_status?.trim().toLowerCase() === "available" &&
+  const visibleDrivers = drivers.filter((driver) => matchesVehicle(driver) && driver.availability_status?.trim().toLowerCase() === "available" &&
     `${driver.driver_name || ""} ${driver.plate_number || ""}`.toLowerCase().includes(driverSearch.trim().toLowerCase()));
   if (!showExactControl && !attentionEnabled && !attentionFeedback && !comboEnabled) return null;
 
@@ -548,7 +548,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
                           </span>
                         </label>
                       ))}
-                      {!visibleDrivers.length ? <p className="p-2 text-sm text-slate-600" role="status">{driverListState === "loading" || (driverListState === "idle" && !drivers.length) ? "Loading drivers…" : driverListState === "failed" ? "Drivers could not load. Tap Retry loading drivers above." : driverSearch.trim() ? "No drivers match your search." : "No available drivers to select."}</p> : null}
+                      {!visibleDrivers.length ? <p className="p-2 text-sm text-slate-600" role="status">{driverListState === "loading" || (driverListState === "idle" && !drivers.length) ? "Loading drivers…" : driverListState === "failed" ? "Drivers could not load. Tap Retry loading drivers above." : !vehicleRequirement ? "Choose a Pool vehicle to see matching drivers." : driverSearch.trim() ? "No matching drivers for this vehicle and search." : "No available drivers match this vehicle."}</p> : null}
                     </div>
                   </div>
                 <p className="w-full text-xs text-slate-700">Tick one or more drivers above, then Send to selected drivers. Scroll the list for more names. Send to all drivers includes all eligible drivers matching the pool vehicle. First valid acceptance wins.</p>

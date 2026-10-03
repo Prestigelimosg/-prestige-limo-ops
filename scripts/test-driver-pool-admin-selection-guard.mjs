@@ -7,6 +7,34 @@ const adminSelector = fs.readFileSync('app/admin-driver-pool-control.tsx', 'utf8
 assert.match(adminSelector, /alertReadiness\[driver\.id\] === true \? "Alerts registered"/);
 assert.ok(adminSelector.includes('Registration does not confirm the phone is online or the job was delivered.'));
 assert.doesNotMatch(adminSelector, /Online · alerts ready|Online means job alerts/);
+// Execute the existing category matcher and displayed-list expression together.
+// Hidden categories must not change selected/all publish semantics tested below.
+{
+ const start=adminSelector.indexOf('  const vehicleCategories:');
+ const predicateEnd=adminSelector.indexOf('  const selectedReady =',start);
+ const listStart=adminSelector.indexOf('  const visibleDrivers =',predicateEnd);
+ const listEnd=adminSelector.indexOf('  if (!showExactControl',listStart);
+ assert.ok(start>=0 && predicateEnd>start && listEnd>listStart);
+ const body=ts.transpileModule(adminSelector.slice(start,predicateEnd)+adminSelector.slice(listStart,listEnd)+'\nreturn visibleDrivers;',
+  {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const roster=['AVF','Toyota Alphard','VVV','Mercedes V-Class','Combi','E','S','Unknown',null].map((vehicle_type,i)=>
+  ({id:i+1,vehicle_type,driver_name:'Driver '+(i+1),plate_number:'PLATE'+(i+1),availability_status:'available'}));
+ roster.push({...roster[0],id:10,availability_status:'busy'});
+ const visible=(vehicleRequirement,driverSearch='',drivers=roster)=>new Function('drivers','vehicleRequirement','driverSearch',body)(drivers,vehicleRequirement,driverSearch).map(d=>d.id);
+ for(const [category,ids] of Object.entries({AVF:[1,2],VVV:[3,4],COMBI:[5],S:[7],'E / AVF':[1,2,6],'AVF / VVV':[1,2,3,4],'':[]}))
+  assert.deepEqual(visible(category),ids,category+' must show only available matching vehicles');
+ assert.deepEqual(visible('VVV','driver 3'),[3]);
+ assert.deepEqual(visible('VVV','plate4'),[4]);
+ assert.deepEqual(visible('VVV','Driver 1'),[],'Search cannot reveal a different vehicle category');
+ assert.deepEqual(visible('VVV','',[]),[]);
+ const large=Array.from({length:501},(_,i)=>({...roster[2],id:i+1}));
+ assert.equal(visible('VVV','',large).length,501,'No new display cap');
+ const change=adminSelector.match(/onChange=\{\(event\) => \{ (setVehicleRequirement[\s\S]*?) \}\} value=\{vehicleRequirement\}/);
+ assert.ok(change,'Existing vehicle change handler remains');
+ let selected=[1,2],vehicle='AVF';
+ new Function('event','setVehicleRequirement','setSelectedIds',change[1])({target:{value:'VVV'}},v=>vehicle=v,v=>selected=v);
+ assert.equal(vehicle,'VVV');assert.deepEqual(selected,[],'Vehicle change clears hidden old selections');
+}
 const calls=[], sends=[], after=[];
 let rpcResult, authorized=true, verified=true;
 const actor={actor_role:'admin',actor_label:'Synthetic Admin',source_surface:'admin_api',boundary_mode:'server-session-role-surface'};

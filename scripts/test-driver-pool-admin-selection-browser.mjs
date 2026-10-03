@@ -78,9 +78,9 @@ try {
  for(const width of [390,1280]) {
   await client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width===390});
   await client.send('Page.navigate',{url:url+'/readiness'});await wait("document.querySelector('[data-driver-alert-status=\"11\"]')?.innerText==='Alerts not ready'");
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[10].disabled"),true);
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[11].disabled"),true);
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[9].disabled"),true,'Mismatched vehicle cannot be selected');
+  assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"11\"]').closest('label').querySelector('input').disabled"),true);
+  assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"12\"]').closest('label').querySelector('input').disabled"),true);
+  assert.equal(await evaluate("Boolean(document.querySelector('[data-driver-alert-status=\"10\"]'))"),false,'Mismatched vehicle is hidden');
   assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"1\"]').innerText"),'Alerts registered');
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Selection overflow at ${width}`);
   const selectedShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-direct-selected-'+width+'.png',Buffer.from(selectedShot.data,'base64'));

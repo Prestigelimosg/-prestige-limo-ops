@@ -32,6 +32,38 @@ const requiredConfidenceCategories = [
 const referenceDate = new Date(2026, 4, 13, 12, 0, 0);
 const parseBookingForTest = (input) => parseBookingMessage(input, { referenceDate });
 
+// A numbered pickup before an arrow is an address, not another pickup time.
+for (const parse of [parseBookingMessage, parseJobCardBookingMessage]) {
+  for (const separator of ['>', '->', '=>']) {
+    for (const number of ['27', '276', '1276', '276A']) {
+      const pickup = `${number} Example Drive lobby O`;
+      const result = parse(`6 Oct Tue, 0515hrs\n\n${pickup} ${separator} SQ207\n\nMs. Example.`, {
+        referenceDate: new Date(2026, 9, 4, 12),
+      });
+      assert.equal(result.pickup, pickup, `${parse.name}: ${pickup} ${separator}`);
+      assert.equal(result.dropoff, 'Changi Airport');
+      assert.equal(result.time, '0515hrs');
+      assert.equal(result.date, '2026-10-06');
+      assert.equal(result.flight, 'SQ207');
+      assert.equal(result.bookingType, 'DEP');
+    }
+  }
+  // Even a street number that resembles a valid time must survive when time is explicit elsewhere.
+  for (const number of ['1200', '0515']) {
+    const result = parse(`Date: 6 Oct 2026\nPickup time: 0515hrs\n${number} Example Drive lobby O > SQ207`, { referenceDate });
+    assert.equal(result.pickup, `${number} Example Drive lobby O`);
+    assert.equal(result.time, '0515hrs');
+  }
+  // Keep the existing explicit and compact time-prefixed route formats.
+  for (const route of ['0515hrs 276 Example Drive lobby O', '0515 hrs 276 Example Drive lobby O', '0515 276 Example Drive lobby O']) {
+    const result = parse(`6 Oct Tue\n${route} > SQ207\nMs. Example.`, { referenceDate });
+    assert.equal(result.pickup, '276 Example Drive lobby O', route);
+  }
+  assert.equal(parse('Ms Example 1430 Four Seasons > MU546', { referenceDate }).pickup, 'Four Seasons');
+  assert.equal(parse('SQ207 > 276 Example Drive lobby O', { referenceDate }).dropoff, '276 Example Drive lobby O');
+  assert.equal(parse('276 Example Drive lobby O > SQ207', { referenceDate }).pickup, '276 Example Drive lobby O');
+}
+
 // Flight narrative after a street destination must not become part of its address.
 for (const suffix of [
   '. Arriving via SQ246, ETA: 12:55am',

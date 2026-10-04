@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 
 const appPagePath = "app/page.tsx";
 const persistencePath = "lib/admin-booking-persistence.ts";
@@ -33,6 +35,116 @@ const [appPage, persistence, adapter, ledger, preactivationSuite, bookingUiBrows
   readFile(preactivationSuitePath, "utf8"),
   readFile(bookingUiBrowserPath, "utf8"),
 ]);
+
+const parserModule = { exports: {} };
+const parserCode = ts.transpileModule(await readFile("lib/booking-parser.ts", "utf8"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+new Function("module", "exports", parserCode)(parserModule, parserModule.exports);
+const { parseJobCardBookingMessage, mergeParsedBookingState } = parserModule.exports;
+
+// Execute the existing parser/reset/remote-sync functions, not a second draft lane.
+const ast = ts.createSourceFile("page.tsx", appPage, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const declarations = new Map();
+function visit(node) {
+  if (ts.isFunctionDeclaration(node) && node.name) declarations.set(node.name.text, node.getText(ast));
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) declarations.set(node.name.text, `const ${node.getText(ast)};`);
+  ts.forEachChild(node, visit);
+}
+visit(ast);
+const names = ["clean", "cleanReferenceText", "hasParsedValue", "compactParsedBooking", "createInitialBooking",
+  "parseBookingMessageForState", "mergeParsedBookingIntoForm", "adminDispatchSelectableBookingForm",
+  "adminDispatchSafeServiceTypeValue", "adminDispatchSafeVehicleTypeValue", "normalizeCompanyAccount",
+  "getPublicEmailLocalPart", "normaliseEmail", "normaliseEmailDomain", "isPublicEmailDomain",
+  "isInternalPrestigeEmailDomain", "isIgnoredAccountEmailDomain", "isInternalPrestigeAccount", "isValidEmail",
+  "publicEmailDomains", "internalPrestigeEmailDomains", "internalPrestigeAccountTokens",
+  "adminDispatchServiceTypeOptions", "adminDispatchVehicleTypeOptions",
+  "clearLoadedBookingSelectionContext", "applyParsedBookingMessage", "handleParseBookingMessage",
+  "syncLoadedBookingFromRemoteRecord"];
+const runtimeSource = ts.transpileModule(names.map(name => {
+  assert.ok(declarations.has(name), name);
+  return declarations.get(name);
+}).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const nextMessage = "AVF TRF\n7 Oct 2030, 1000hrs\n276 Example Road > Example Hotel\nPassenger: NEXT JOB\n1 pax";
+function setup(scenario = "loaded") {
+  const oldForm = { name: "OLD JOB", customerId: "163", companyId: "31", bookerId: "24", travelerId: "9",
+    driverId: "72", driverName: "Old driver", customerPriceOverride: "999", driverPayoutOverride: "888" };
+  const oldReference = scenario === "new" || scenario === "lost-identity" ? "" : "SAVED-POOL-JOB";
+  const state = { form: oldForm, message: null, step: "message", resets: 0, writes: 0, parsed: 0 };
+  const ref = current => ({ current });
+  const context = {
+    parseJobCardBookingMessage: text => {
+      state.parsed++;
+      if (scenario === "parser-error") throw Error("Synthetic parser failure");
+      if (scenario === "unrecognized") return {};
+      if (scenario === "multiple") return { multipleBookingsDetected: true, extractedBookingsPreview: [{ pickup: "A", dropoff: "B" }] };
+      return parseJobCardBookingMessage(text);
+    },
+    mergeParsedBookingState,
+    normalizeBookingType: value => value,
+    bookingMessage: scenario === "empty" ? "  " : scenario === "no-details" ? "!!!" : nextMessage,
+    activeAdminEmailAiIntakeId: scenario === "missing-email-review" ? "missing" : "",
+    adminEmailAiIntakeReadState: { records: [] },
+    adminBookingPersistenceAction: scenario === "saving" ? "save" : scenario === "updating" ? "update" : null,
+    appliedAdminBookingSnapshotReferenceRef: ref(oldReference), loadedBookingIdRef: ref(oldReference),
+    adminBookingCreateIntentRef: ref(scenario === "new"),
+    loadedAdminBookingBaselineRef: ref(oldReference ? { bookingReference: oldReference } : null),
+    driverJobLinkFormContextRevisionRef: ref(0), updateCalReturnBookingReferenceRef: ref(oldReference),
+    pendingSaveCrmBillingIdentityIntentRef: ref({ customerId: 163 }),
+    driverJobLinkHandoffFocusAppliedRef: ref(oldReference), adminDispatchCustomerAccountChooserRef: ref(null),
+    adminEmailAiCustomerRecommendationRevisionRef: ref(0), activeAdminEmailAiIntakeIdRef: ref(""),
+    bookingFormRef: ref(oldForm),
+    setBooking: updater => { state.form = typeof updater === "function" ? updater(state.form) : updater; },
+    setMessage: message => { state.message = message; },
+    setMobileDispatchBookingStep: step => { state.step = step; },
+    clearParseArtifacts: () => { state.resets++; },
+    setAdminEmailAiCustomerProfileSuggestion: () => {}, setMultiBookingNotice: value => { state.multi = value; },
+    setParsedDebugBooking: () => {}, getNeedsReviewWarnings: () => [], lookupNameMemory: async () => null,
+    fetch: () => { state.writes++; assert.fail("Create Job Card must not write or publish"); },
+  };
+  for (const setter of declarations.get("clearLoadedBookingSelectionContext").matchAll(/\b(set[A-Z]\w*)\(/g)) {
+    context[setter[1]] ??= () => {};
+  }
+  runInNewContext(runtimeSource, context);
+  return { context, state, oldForm };
+}
+for (const scenario of ["loaded", "new", "lost-identity"]) {
+  const { context, state } = setup(scenario);
+  await context.handleParseBookingMessage();
+  assert.equal(state.form.pickup, "276 Example Road", `${scenario}: Create Job Card must start the pasted job directly`);
+  assert.equal(state.form.name, "NEXT JOB");
+  for (const key of ["customerId", "companyId", "bookerId", "travelerId", "driverId", "driverName", "customerPriceOverride", "driverPayoutOverride"]) {
+    assert.equal(state.form[key], "", `${scenario}: old saved ${key} must not enter the new job`);
+  }
+  assert.equal(context.loadedBookingIdRef.current, "");
+  assert.equal(context.appliedAdminBookingSnapshotReferenceRef.current, "");
+  assert.equal(context.loadedAdminBookingBaselineRef.current, null);
+  assert.equal(context.adminBookingCreateIntentRef.current, true);
+  assert.equal(context.updateCalReturnBookingReferenceRef.current, "");
+  assert.equal(context.pendingSaveCrmBillingIdentityIntentRef.current, null);
+  assert.equal(state.step, "details");
+  assert.equal(context.syncLoadedBookingFromRemoteRecord({ booking_reference: "SAVED-POOL-JOB" }), "unchanged", "Old pending-job refresh must not overwrite the new draft");
+  assert.equal(state.writes, 0);
+}
+for (const scenario of ["empty", "no-details", "unrecognized", "parser-error", "missing-email-review", "saving", "updating"]) {
+  const { context, state, oldForm } = setup(scenario);
+  if (scenario === "parser-error") await assert.rejects(context.handleParseBookingMessage(), /Synthetic parser failure/);
+  else await context.handleParseBookingMessage();
+  assert.equal(state.form, oldForm, `${scenario}: rejected input must preserve the saved form`);
+  assert.equal(context.loadedBookingIdRef.current, "SAVED-POOL-JOB");
+  assert.equal(context.adminBookingCreateIntentRef.current, false);
+  assert.equal(state.step, "message");
+  assert.equal(state.resets, 0);
+  assert.equal(state.writes, 0);
+}
+{
+  const { context, state } = setup("multiple");
+  await context.handleParseBookingMessage();
+  assert.equal(state.multi.multipleBookingsDetected, true, "Keep existing extracted-booking review");
+  assert.equal(context.loadedBookingIdRef.current, "", "Extracted booking choices must not overwrite the previous saved booking");
+  assert.equal(state.form.customerId, "");
+  assert.equal(state.step, "message");
+}
 
 const clearMessageBlock = sectionBetween(
   appPage,
@@ -87,11 +199,11 @@ excludes(
 includes(clearMessageBlock, "clearBookingMessageInput();", "Clear Message still clears only parser text");
 
 for (const fragment of [
-  "adminBookingCreateIntentRef",
-  "explicitNewBooking",
-  "A saved booking is already loaded for editing",
+  "adminBookingPersistenceAction !== null",
+  "explicitNewBooking: true",
+  "mergeParsedBookingIntoForm(\n      createInitialBooking()",
 ]) {
-  includes(parseBookingBlock, fragment, `loaded-booking parser guard ${fragment}`);
+  includes(parseBookingBlock, fragment, `explicit new Job Card draft contract ${fragment}`);
 }
 
 includes(

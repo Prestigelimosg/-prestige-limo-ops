@@ -3483,7 +3483,12 @@ function detectRoute(text: string, flight = "") {
 
   const routeMatch = text.match(/(.+?)\s*(?:>|->|=>)\s*(.+)/i);
   if (routeMatch?.[1] && routeMatch?.[2]) {
-    const routePickup = clean(routeMatch[1].split("\n").pop() || "").replace(/^.*?\b\d{3,4}\s*(?:hrs?)?\s+/, "");
+    const routePickupLine = clean(routeMatch[1].split("\n").pop() || "");
+    // A separate pickup time leaves a bare leading route number as address evidence.
+    const hasSeparatePickupTime = /^\d{3,4}\s+(?!\s*hrs?\b)/i.test(routePickupLine) &&
+      Boolean(parseTimeFromText(text.replace(routeMatch[0], "")));
+    const routePickup = hasSeparatePickupTime ? routePickupLine :
+      routePickupLine.replace(/^.*?\b(?:[01]?\d|2[0-3])[0-5]\d\s*(?:hrs?)?\s+/i, "");
     const routeDropoff = clean(routeMatch[2].split("\n")[0] || "");
     const alternativeTerminal = detectAlternativeTerminal(text);
     const leftFlight = normalizeFlightCode(routePickup);

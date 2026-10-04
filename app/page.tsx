@@ -21526,31 +21526,15 @@ export default function Home() {
   }
 
   async function applyParsedBookingMessage(messageText: string) {
-    const loadedBookingReference =
-      cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
-      cleanReferenceText(loadedBookingIdRef.current);
-
-    if (loadedBookingReference || !adminBookingCreateIntentRef.current) {
-      setMessage({
-        tone: "error",
-        text: "A saved booking is already loaded for editing. Update its existing fields, or choose New booking before creating another Job Card.",
-      });
+    if (adminBookingPersistenceAction !== null) {
+      setMessage({ tone: "error", text: "Wait for the current booking save to finish before creating another Job Card." });
       return false;
     }
-
-    clearParseArtifacts();
-    setAdminEmailAiCustomerProfileSuggestion(null);
-    clearLoadedBookingSelectionContext({
-      explicitNewBooking: true,
-      preserveAdminEmailAiReview: true,
-    });
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
       return false;
     }
-
-    setBooking(() => createInitialBooking());
 
     const emailAiRecord = activeAdminEmailAiIntakeId
       ? adminEmailAiIntakeReadState.records.find(record => record.id === activeAdminEmailAiIntakeId && record.processing_status === "queued")
@@ -21569,13 +21553,31 @@ export default function Home() {
 
     const detectedFields = Object.entries(parsedBooking).filter(([, value]) => hasParsedValue(value)).length;
 
-    if (detectedFields === 0) {
+    const leavingSavedBooking = Boolean(
+      appliedAdminBookingSnapshotReferenceRef.current || loadedBookingIdRef.current || !adminBookingCreateIntentRef.current,
+    );
+    // Parser metadata and its default one passenger are not a new booking.
+    const hasNewBookingDetails = Object.entries(parsedBooking).some(([key, value]) =>
+      !["success", "cleanedLines", "parserWarning", "pax"].includes(key) && hasParsedValue(value),
+    );
+
+    if (detectedFields === 0 || (leavingSavedBooking && !hasNewBookingDetails)) {
       setMessage({
         tone: "error",
         text: "No booking details detected. Add labels like pickup, dropoff, date, time, name, or flight.",
       });
       return false;
     }
+
+    // Create Job Card explicitly starts a new draft. Validate before detaching the
+    // saved job; its Pool offer and persisted booking remain unchanged.
+    clearParseArtifacts();
+    setAdminEmailAiCustomerProfileSuggestion(null);
+    clearLoadedBookingSelectionContext({
+      explicitNewBooking: true,
+      preserveAdminEmailAiReview: true,
+    });
+    setBooking(() => createInitialBooking());
 
     if (parsedBooking.multipleBookingsDetected) {
       const finalForm = createInitialBooking();

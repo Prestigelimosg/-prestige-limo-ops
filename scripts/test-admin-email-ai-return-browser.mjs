@@ -68,6 +68,7 @@ const [message,setMessage]=useState(null),[aiDraft,setAiDraft]=useState(null),[a
 const [multiBookingNotice,setMultiBookingNotice]=useState(null),[parsedDebug,setParsedDebugBooking]=useState(null);
 const [aiAssistMessage,setAiAssistMessage]=useState(null),[diagnosticDisplay,setDiagnosticDisplay]=useState('Not checked');
 const appliedAdminBookingSnapshotReferenceRef=useRef(''),loadedBookingIdRef=useRef(''),adminBookingCreateIntentRef=useRef(true);
+const adminBookingPersistenceAction=null;
 const activeAdminEmailAiIntakeIdRef=useRef(''),bookingFormRef=useRef(booking),bookingMessageRef=useRef(null),adminEmailAiCustomerRecommendationRevisionRef=useRef(0);
 const adminEmailAiIntakeReadState={records:[record]},rateTravelers=[];
 const setAdminEmailAiCustomerProfileSuggestion=()=>{},setAiConversationMessages=()=>{};

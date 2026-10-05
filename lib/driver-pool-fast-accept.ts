@@ -63,6 +63,7 @@ export type DriverPoolOfferState = {
 };
 
 export type AdminDriverPoolAttentionItem = DriverPoolOfferState & {
+  service_label?: string;
   attention_status: "accepted_link_pending" | "open";
   booking_reference: string;
   pickup_at: string;
@@ -551,12 +552,13 @@ export async function loadAdminDriverPoolAttentionOffers(
   const targetCount = boundedPage * boundedLimit + 1;
   const scanChunkSize = 100;
   const attentionItems: AdminDriverPoolAttentionItem[] = [];
+  const serviceEvidence = new Map<string, UnknownRecord>();
   let rawOffset = 0;
   let rawRowsRemain = true;
 
   while (attentionItems.length < targetCount && rawRowsRemain) {
     let query = client.from("driver_job_bid_offers")
-      .select("id,booking_reference,public_booking_reference,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,pickup_at,closes_at,updated_at,safe_offer_context,safe_vehicle_label")
+      .select("id,booking_reference,public_booking_reference,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,pickup_at,closes_at,updated_at,safe_offer_context,safe_vehicle_label,safe_trip_summary")
       .in("offer_status", ["open", "assigned"]);
     if (notificationId) query = query.eq("id", notificationId.toLowerCase());
     const { data, error } = await query
@@ -612,6 +614,7 @@ export async function loadAdminDriverPoolAttentionOffers(
       const publicReference = publicBookingReference(row.public_booking_reference);
       const pickupAt = timestamp(row.pickup_at);
       if (!offer || !exactBookingReference || !publicReference || !pickupAt) continue;
+      serviceEvidence.set(offer.offer_key, row);
 
       // A notification must still name this exact current winning assignment.
       // Ordinary Pool pending-list and cancellation presentation stay unchanged.
@@ -649,11 +652,42 @@ export async function loadAdminDriverPoolAttentionOffers(
   }
 
   const start = (boundedPage - 1) * boundedLimit;
+  // Enrich only this bounded Admin page. Never export raw booking/combo context.
+  const serviceNames: Record<string, string> = {
+    MNG: "MNG — Arrival", ARRIVAL: "MNG — Arrival",
+    DEP: "DEP — Departure", DEPARTURE: "DEP — Departure",
+    TRF: "TRF — City Transfer", TRANSFER: "TRF — City Transfer", "CITY TRANSFER": "TRF — City Transfer",
+    DSP: "DSP — Hourly", HOURLY: "DSP — Hourly",
+    STANDBY: "Standby", EVENT: "Event", SEAPORT_TRANSFER: "Seaport Transfer", POINT_TO_POINT: "Point to Point",
+  };
+  const items = await Promise.all(attentionItems.slice(start, start + boundedLimit).map(async (item) => {
+    const evidence = serviceEvidence.get(item.offer_key) || {};
+    const context = asRecord(evidence.safe_offer_context);
+    const isCombo = Boolean(context.combo_id);
+    let services = [text(evidence.safe_trip_summary, 120) || ""];
+    if (isCombo) {
+      services = [];
+      try {
+        const { loadDriverCombo } = await import("./driver-job-combo");
+        const combo = await loadDriverCombo(client, item.booking_reference);
+        if (combo && combo.id === context.combo_id && combo.revision === context.combo_revision &&
+            combo.offer_key === item.offer_key && combo.primary_booking_reference === item.booking_reference &&
+            ["offered", "assigned"].includes(combo.state)) {
+          services = combo.trips.map((trip) => trip.service);
+        }
+      } catch {
+        // Optional display evidence must never disable the established offer actions.
+      }
+    }
+    const labels = services.map((service) => serviceNames[service.trim().toUpperCase()] || "Service unavailable");
+    const serviceLabel = [...new Set(labels)].join(" / ") || "Service unavailable";
+    return { ...item, service_label: `${serviceLabel}${isCombo ? " · Combo" : ""}` };
+  }));
   return {
     data: {
       enabled: true,
       has_more: attentionItems.length > start + boundedLimit,
-      items: attentionItems.slice(start, start + boundedLimit),
+      items,
       page: boundedPage,
     },
     ok: true,

@@ -265,6 +265,9 @@ async function loadFastAcceptHarness() {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     fileName: sourcePath,
   }).outputText);
+  await writeFile(path.join(tempDir, "lib/driver-job-combo.js"), ts.transpileModule(await readFile("lib/driver-job-combo.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText);
   await writeFile(serverOnlyPath, "");
   await writeFile(supabasePath, "exports.createClient = () => { throw new Error('test client injection required'); };");
   await writeFile(pushPath, "exports.sendDriverDevicePushAlertForDriverPoolOffer = async () => { globalThis.__driverPoolPushCalls += 1; return { ok: true, provider_request_count: 1 }; };");
@@ -397,6 +400,7 @@ try {
   const attentionOfferRows = [
     {
       booking_reference: "ADM-OPEN",
+      safe_trip_summary: "TRF",
       closes_at: "2027-09-05T01:00:00.000Z",
       offer_key: "1".repeat(64),
       offer_payout_sgd: 55,
@@ -469,6 +473,7 @@ try {
   assert.equal(attentionResult.data.has_more, true, "one additional actionable offer must expose Load more");
   assert.equal(attentionResult.data.items.length, 1, "the server page size must be enforced");
   assert.equal(attentionResult.data.items[0].attention_status, "open");
+  assert.equal(attentionResult.data.items[0].service_label, "TRF — City Transfer");
   const allAttentionResult = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers({
     from(table) { return attentionQuery(table); },
   }, 1, 20);
@@ -477,6 +482,64 @@ try {
     [["10921", "open"], ["10922", "accepted_link_pending"]],
     "only open offers and accepted offers without any Driver Job Link belong in the compact Admin pending list",
   );
+
+  // Use the real combo reader, keeping all writes/RPCs unavailable in this fixture.
+  const comboId = "11111111-1111-4111-8111-111111111111";
+  const comboRevision = "22222222-2222-4222-8222-222222222222";
+  const priorComboFlag = process.env.PRESTIGE_DRIVER_COMBO_ENABLED;
+  process.env.PRESTIGE_DRIVER_COMBO_ENABLED = "true";
+  let comboServices = ["TRF", "transfer"], comboFailure = false, staleCombo = false, wrongOwner = false;
+  let comboReads = 0;
+  function comboAttentionQuery(table) {
+    if (table === "driver_job_bid_offers" || table === "driver_job_links" || table === "driver_job_status_events" || table === "driver_job_bids" || table === "driver_live_location_latest_positions") return attentionQuery(table);
+    comboReads++;
+    const query = {
+      select() { return query; }, eq() { return query; }, in() { return query; }, order() { return query; }, limit() { return query; },
+      maybeSingle() { return Promise.resolve({ data: { combo_id: comboId }, error: null }); },
+      single() { return Promise.resolve({ data: { id: comboId, revision: staleCombo ? comboId : comboRevision, primary_booking_reference: "ADM-OPEN", state: "offered", offer_key: "1".repeat(64) }, error: null }); },
+      then(resolve, reject) {
+        const data = table === "driver_job_combo_members"
+          ? [{ booking_reference: "ADM-OPEN", ordinal: 0 }, { booking_reference: "ADM-SECOND", ordinal: 1 }]
+          : comboServices.map((service, index) => ({ booking_reference: index ? "ADM-SECOND" : "ADM-OPEN", customer_id: wrongOwner && index ? 2 : 1, company_id: null, booker_id: null, service_type: service }));
+        return Promise.resolve({ data, error: comboFailure && table === "driver_job_combo_members" ? { message: "Private read failure" } : null }).then(resolve, reject);
+      },
+    };
+    return query;
+  }
+  const client = { from: comboAttentionQuery };
+  attentionOfferRows[0].safe_offer_context = { combo_id: comboId, combo_revision: comboRevision };
+  for (const [services, expected] of [
+    [["TRF", "transfer"], "TRF — City Transfer · Combo"],
+    [["MNG", "DEP"], "MNG — Arrival / DEP — Departure · Combo"],
+    [["DSP", ""], "DSP — Hourly / Service unavailable · Combo"],
+  ]) {
+    comboServices = services;
+    const result = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers(client, 1, 1);
+    assert.equal(result.data.items[0].service_label, expected);
+    assert.equal(result.data.items[0].offer_key, "1".repeat(64));
+    assert.equal(JSON.stringify(result.data).includes("customer_id"), false);
+    assert.equal(JSON.stringify(result.data).includes(comboId), false);
+  }
+  for (const failure of ["read", "revision", "ownership"]) {
+    comboFailure = failure === "read"; staleCombo = failure === "revision"; wrongOwner = failure === "ownership";
+    const result = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers(client, 1, 1);
+    assert.equal(result.ok, true, "Optional service failure must retain offer actions");
+    assert.equal(result.data.items[0].service_label, "Service unavailable · Combo");
+  }
+  comboFailure = false; staleCombo = false; wrongOwner = false;
+  const readsBeforeNextPage = comboReads;
+  await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers(client, 2, 1);
+  // Existing assigned-row evidence reads are allowed; off-page combo membership reads are not.
+  assert.equal(comboReads - readsBeforeNextPage, 1);
+  delete attentionOfferRows[0].safe_offer_context;
+  for (const [service, expected] of [["MNG", "MNG — Arrival"], ["departure", "DEP — Departure"], ["hourly", "DSP — Hourly"], ["internal secret", "Service unavailable"], [null, "Service unavailable"]]) {
+    attentionOfferRows[0].safe_trip_summary = service;
+    const result = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers(client, 1, 1);
+    assert.equal(result.data.items[0].service_label, expected);
+  }
+  if (priorComboFlag === undefined) delete process.env.PRESTIGE_DRIVER_COMBO_ENABLED;
+  else process.env.PRESTIGE_DRIVER_COMBO_ENABLED = priorComboFlag;
+  console.log("Pending service labels pass single/mixed combo, unknown/read/stale/ownership fallback, pagination and privacy checks.");
 
   const exactIdempotencyKey = "12345678-1234-1234-1234-123456789abc";
   const result = await timeoutHarness.helper.publishDriverPoolOffer({

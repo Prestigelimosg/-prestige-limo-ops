@@ -47,7 +47,7 @@ try {
    if(body.action==='award')throw Error('Unexpected Admin winner selection');
    if(body.action==='widen'){offer.audience='wider';offer.recipient_count=12;} else if(!body.action){offer.offer_status='cancelled';}
   }
-  if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:offer&&['open','assigned'].includes(offer.offer_status)?[{...offer,service_label:'MNG — Arrival / DEP — Departure / TRF — City Transfer / DSP — Hourly · Combo',booking_reference:'POOL-QA',attention_status:offer.offer_status==='assigned'?'accepted_link_pending':'open'}]:[],has_more:false,page:1});
+  if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:offer&&['open','assigned'].includes(offer.offer_status)?[{...offer,service_label:'MNG / DEP / TRF / DSP · Combo',booking_reference:'POOL-QA',attention_status:offer.offer_status==='assigned'?'accepted_link_pending':'open'}]:[],has_more:false,page:1});
   const requested=new URL(String(url),'https://synthetic.invalid').searchParams.get('driver_ids')?.split(',').map(Number)||[];
   if(requested.length>200)throw Error('Readiness batch exceeded 200');
   if(test.failReadiness)return Response.json({ok:false},{status:503});
@@ -118,7 +118,7 @@ try {
   await click('Send to selected drivers');await wait("document.body.innerText.includes('Selected group')");
   assert.deepEqual(await evaluate("window.poolTest.requests.find(r=>r.method==='POST').body.selected_driver_ids"),[1,2,3,4,5,6,7,8,9,10,11]);
   await wait("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]')!==null");
-  assert.equal(await evaluate("document.querySelector('[data-admin-driver-pool-service]').textContent"), 'MNG — Arrival / DEP — Departure / TRF — City Transfer / DSP — Hourly · Combo');
+  assert.equal(await evaluate("document.querySelector('[data-admin-driver-pool-service]').textContent"), 'MNG / DEP / TRF / DSP · Combo');
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Pending service overflow at ${width}`);
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Assign')"),false);
   await wait("document.body.innerText.includes('First valid acceptance wins')");

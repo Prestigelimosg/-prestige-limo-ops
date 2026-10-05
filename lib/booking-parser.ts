@@ -2772,8 +2772,30 @@ function detectName(text: string, flight: string) {
     return cleanDetectedName(inlineName);
   }
 
-  if (!flight || isCompactJobCardWithArrowRoute(text)) {
+  if (!flight) {
     return "";
+  }
+
+  if (isCompactJobCardWithArrowRoute(text)) {
+    const lines = text.split(/\n+/).map(clean).filter(Boolean);
+    const routeIndex = lines.findIndex((line) => /\s(?:>|->|=>)\s/.test(line));
+    const paxIndex = lines.findIndex(
+      (line, index) => index > routeIndex && /^\d{1,2}\s*(?:pax|passengers?)\b/i.test(line),
+    );
+    // Only the single passenger slot before the count is name evidence.
+    // Trailing pickup/language/placard instructions keep their existing notes path.
+    if (paxIndex !== routeIndex + 2) {
+      return "";
+    }
+    const passengerLine = lines[routeIndex + 1];
+    const candidate = cleanDetectedName(passengerLine);
+    if (
+      /[:=]|\b(?:driver|chauffeur|pickup|dropoff|pick|drop|meet|meeting|placard|signboard|lobby|entrance|wait|waiting|hold|please|kindly|company|booker|contact|price|payout|paynow|billing|invoice)\b/i.test(passengerLine) ||
+      !/^[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){1,5}$/.test(candidate)
+    ) {
+      return "";
+    }
+    return looksLikePersonName(candidate) ? candidate : "";
   }
 
   const candidateNames = text

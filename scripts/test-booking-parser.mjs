@@ -1622,6 +1622,41 @@ assert.equal(
   'Supported trailing Job Card instructions must stay in the richer app booking.',
 );
 
+// Compact cards may put one unlabelled passenger between the route and pax count.
+// Keep synthetic names here; pasted customer details stay in private inspection evidence.
+for (const header of ['E / AVF - MNG', 'AVF - MNG']) {
+  for (const arrow of ['>', '->', '=>']) {
+    for (const amount of ['', ' $65', ' S$65.00']) {
+      const input = `${header}\n\n6 Oct (Tue), 1910hrs\n\nSQ254 ${arrow} Example Hotel\n\nArthur Weller SC.${amount}\n\n1 pax`;
+      for (const parse of [parseBookingMessage, parseJobCardBookingMessage]) {
+        const parsed = parse(input, { referenceDate: new Date('2026-10-05T10:00:00+08:00') });
+        assert.equal(parsed.name, 'Arthur Weller SC', 'Compact passenger before pax must survive route detection');
+        assert.equal(parsed.date, '2026-10-06');
+        assert.equal(parsed.time, '1910hrs');
+        assert.equal(parsed.flight, 'SQ254');
+        assert.equal(parsed.pickup, 'Changi Airport');
+        assert.equal(parsed.dropoff, 'Example Hotel');
+        assert.equal(parsed.pax, '1');
+        assert.equal(parsed.driverNotes, undefined);
+        assert.equal(parsed.booker, '', 'An unlabelled passenger must not become an explicit Booker');
+        if (parse === parseJobCardBookingMessage) {
+          assert.equal(parsed.customerPriceOverride, undefined, 'Keep the existing Job Card amount exclusion');
+          assert.equal(parsed.customerPriceOverrideReason, undefined);
+        }
+      }
+    }
+  }
+}
+for (const line of ['English-speaking driver', 'English Speaking Driver', 'Hold Placard', 'Meet At Lobby', 'Pickup: Level Two Lobby', 'Wait At Entrance', 'Company: Example Limited', 'Driver: Example Chauffeur', 'Arthur Weller\nAnother Guest']) {
+  const parsed = parseJobCardBookingMessage(`E / AVF - MNG\n6 Oct (Tue), 1910hrs\nSQ254 > Example Hotel\n${line}\n1 pax`);
+  assert.equal(parsed.name || '', '', `Do not infer a passenger from instructions or ambiguous lines: ${line}`);
+}
+{
+  const parsed = parseJobCardBookingMessage('E / AVF - MNG\n6 Oct (Tue), 1910hrs\nSQ254 > Example Hotel\n1 pax\nPickup: Level 2 Lobby\nEnglish-speaking driver');
+  assert.equal(parsed.name || '', '');
+  assert.equal(parsed.driverNotes, 'Pickup: Level 2 Lobby\nEnglish-speaking driver');
+}
+
 const exactPastedWaypointAirportDepartureFormMessage = `Pickup date and time	06-05-2026 8:00
 Order total amount	S$110.00
 Taxes	S$0.00 (0%)

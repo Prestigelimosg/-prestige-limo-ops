@@ -11449,6 +11449,13 @@ function adminBookingPersistenceFailureMessage(
                   ? " inside the admin booking route"
                   : "";
 
+  if (/^draft combo pickup update requires /.test(normalizedError)) {
+    return "Only the pickup date/time of an unposted, unassigned TRF combo can be amended here. Review the complete combo for other changes.";
+  }
+  if (/^draft combo pickup update could not be confirmed/.test(normalizedError)) {
+    return "The combo pickup update was not confirmed. Reopen the saved job and review its pickup/end times and current dispatch state.";
+  }
+
   if (/auth_or_key_rejected|client_init_failed|not enabled|configuration/.test(normalizedError)) {
     return `${prefix}: admin booking persistence is not enabled or configured on this server.`;
   }

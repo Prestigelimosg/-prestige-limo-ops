@@ -3133,6 +3133,55 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     const {loadDriverCombo} = await import("./driver-job-combo.ts");
     const combo = await loadDriverCombo(client, input.target_booking_reference);
     if (combo) {
+      if (!input.update_mode && !input.combo_assignment) {
+        // Only the reported TRF pickup amendment is admitted here. Preserve the
+        // existing full booking/route/service writer for ordinary bookings.
+        const savedCustomerId = dbIdentifierOrNull(existing.customer_id);
+        const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id) || savedCustomerId;
+        const savedRow = bookingToDbRow(existing, savedCustomerId, actor, { includeParserSourceReference: false });
+        const requestedRow = bookingToDbRow(input.booking, requestedCustomerId, actor, { includeParserSourceReference: false });
+        // The existing form decorates a plain account label with its passenger.
+        // Accept only that exact presentation equivalent; IDs and passenger are
+        // still compared below, and this transaction never writes the label.
+        if (savedRow.passenger_name && requestedRow.customer_display_name ===
+            `${savedRow.customer_display_name} [${savedRow.passenger_name}]`.slice(0, 220)) {
+          requestedRow.customer_display_name = savedRow.customer_display_name;
+        }
+        const fields = Object.keys(requestedRow);
+        const otherFieldsChanged = fields.some((key) => key !== "pickup_at" && (
+          key === "customer_id" ? String(savedRow.customer_id) !== String(requestedRow.customer_id) :
+          key === "dropoff_datetime" && savedRow.dropoff_datetime && requestedRow.dropoff_datetime
+            ? !bookingUpdatedAtMatches(savedRow.dropoff_datetime, requestedRow.dropoff_datetime)
+            : JSON.stringify(asRecord(savedRow)[key] ?? null) !== JSON.stringify(asRecord(requestedRow)[key] ?? null)
+        ));
+        const routeRows = input.route_points.map(point => routePointToCurrentDbRow(point, existing.id));
+        const savedRoutes = existing.route_points.map(point => routePointToCurrentDbRow(point, existing.id));
+        const serviceRows = input.service_items.map(item => JSON.stringify(serviceItemToCurrentDbRow(item, existing.id))).sort();
+        const savedServices = existing.service_items.map(item => JSON.stringify(serviceItemToCurrentDbRow(item, existing.id))).sort();
+        if (!expectedUpdatedAt || !savedCustomerId || !combo.trips.some(trip => trip.booking_reference === input.target_booking_reference) || combo.state !== "draft" || combo.driver_id || combo.offer_key ||
+            positiveSafeInteger(existing.driver_id) || requestedRow.service_type !== "TRF" || otherFieldsChanged ||
+            JSON.stringify(routeRows) !== JSON.stringify(savedRoutes) || JSON.stringify(serviceRows) !== JSON.stringify(savedServices)) {
+          return {ok:false,status:409,error:"Draft combo pickup update requires an unposted, unassigned TRF combo with only the pickup date/time changed. Review the complete combo for other amendments."};
+        }
+        // Existing membership RPC locks every trip and rechecks revision, links,
+        // offers and snapshots before changing one pickup and refreshing the group.
+        const amendment = await client.rpc("define_driver_job_combo", {
+          p_primary: combo.primary_booking_reference, p_expected_revision: combo.revision,
+          p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+          p_members: combo.trips.map(trip => ({booking_reference:trip.booking_reference,
+            updated_at:trip.booking_reference === input.target_booking_reference ? existing.updated_at : trip.updated_at,
+            ...(trip.booking_reference === input.target_booking_reference
+              ? {pickup_at:requestedRow.pickup_at} : {})})),
+        });
+        if (amendment.error || !asRecord(amendment.data).revision) {
+          return {ok:false,status:409,error:"Draft combo pickup update could not be confirmed. Reload the combo and review its pickup/end times and current dispatch state."};
+        }
+        const amended = await fetchAdminBookingById(client, existing.id);
+        if (!amended.ok) return amended;
+        const audit = await createAuditLog(client,existing.id,savedCustomerId,input.target_booking_reference,auditInput,actor,existing,amended.data);
+        if (!audit.ok) return audit;
+        return amended;
+      }
       if (input.update_mode === "driver_assignment_cancel" && combo.primary_booking_reference === input.target_booking_reference) {
         return applyAdminDriverReassignmentTransaction(client,input,actor,existing,combo);
       }

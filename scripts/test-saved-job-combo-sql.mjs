@@ -96,6 +96,17 @@ try {
     assert.equal(await value("select has_function_privilege($1,'public.publish_driver_job_combo(uuid,uuid,timestamptz,numeric,text,text,text,text,bigint[],text)','execute') result",[role]),role==='service_role');
   }
   console.log('PASS TRF migration changes only the exact publish predicate; all other functions and service-only permissions are unchanged; drift fails closed.');
+  const pickupMigration=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_draft_combo_pickup_amendment.sql'));
+  assert.ok(pickupMigration);
+  const beforePickup=await allDefinitions();
+  await sql(fs.readFileSync('supabase/migrations/'+pickupMigration,'utf8'));
+  const afterPickup=await allDefinitions();
+  assert.deepEqual(afterPickup.filter(f=>!f.signature.startsWith('define_driver_job_combo(')),beforePickup.filter(f=>!f.signature.startsWith('define_driver_job_combo(')));
+  const definitionSettings=f=>({signature:f.signature,proacl:f.proacl,prosecdef:f.prosecdef,proconfig:f.proconfig});
+  assert.deepEqual(afterPickup.map(definitionSettings),beforePickup.map(definitionSettings));
+  await sql('begin');
+  await assert.rejects(sql(fs.readFileSync('supabase/migrations/'+pickupMigration,'utf8')),/definition changed/);
+  await sql('rollback');
   const reset=async()=>{
     await sql(`truncate driver_job_combo_members,driver_job_combos,driver_job_bids,driver_job_bid_offers,
       bookings,drivers,driver_access_accounts,driver_device_push_subscriptions,driver_job_links,driver_job_status_events,driver_live_location_latest_positions,customer_driver_app_notification_outbox,audit_logs restart identity cascade;
@@ -115,6 +126,79 @@ try {
     [g.id,g.revision,randomUUID(),audience]);
   const accept=(o,id,client=db)=>client.query('select accept_driver_job_combo($1,$2,$3,$4) result',
     [o.offer.offer_key,id,o.offer.updated_at,randomUUID()]).then(r=>r.rows[0].result);
+
+  // Update + Cal must amend only the pickup of an unposted draft member.
+  const amendPickup=async(group,reference='COMBO-2',overrides={})=>{
+    const items=await members();
+    const pickup=(await rows('select pickup_at from bookings where booking_reference=$1',[reference]))[0].pickup_at;
+    return define(items.map(item=>item.booking_reference===reference
+      ? {...item,pickup_at:new Date(pickup.getTime()+7200000).toISOString(),...overrides} : item),group.revision);
+  };
+  await reset();
+  await sql("insert into booking_route_points select id,'Synthetic route' from bookings; insert into booking_service_items select id,'extra_stop' from bookings;");
+  const timeGroup=await define(await members());
+  const childSnapshot=async()=>({routes:await rows('select * from booking_route_points order by booking_id'),services:await rows('select * from booking_service_items order by booking_id')});
+  const childrenBefore=await childSnapshot();
+  const timeBefore=await rows('select * from bookings order by id');
+  const revisedTimeGroup=await amendPickup(timeGroup);
+  assert.deepEqual(await childSnapshot(),childrenBefore,'Pickup amendment must preserve every existing route/service child row');
+  assert.notEqual(revisedTimeGroup.revision,timeGroup.revision);
+  const timeAfter=await rows('select * from bookings order by id');
+  assert.equal(timeAfter[1].pickup_at.getTime(),timeBefore[1].pickup_at.getTime()+7200000);
+  assert.deepEqual(timeAfter.map((b,i)=>i===1?{...b,pickup_at:timeBefore[i].pickup_at,updated_at:timeBefore[i].updated_at}:b),timeBefore);
+  await assert.rejects(publish(timeGroup),/changed/i,'Old combo revision must not publish amended terms');
+  assert.equal((await accept(await publish(revisedTimeGroup),1)).reason,'accepted');
+  console.log('PASS draft combo pickup amendment refreshes exact snapshot/revision and continues through Pool acceptance.');
+  const amendmentSnapshot=()=>rows(`select jsonb_build_object(
+    'bookings',(select jsonb_agg(to_jsonb(b) order by id) from bookings b),
+    'groups',(select jsonb_agg(to_jsonb(g) order by id) from driver_job_combos g),
+    'members',(select jsonb_agg(to_jsonb(m) order by booking_reference) from driver_job_combo_members m)) snapshot`);
+  for(const mode of ['past','null','bad','end','service','link','report','offered','assigned','members','remove','extra','stale']){
+    await reset();
+    if(mode==='end')await sql("update bookings set dropoff_datetime=pickup_at+interval '1 hour' where booking_reference='COMBO-2'");
+    if(mode==='service')await sql("update bookings set service_type='DSP' where booking_reference='COMBO-2'");
+    const group=await define(await members());
+    if(mode==='link')await sql("alter table driver_job_links disable trigger combo_link_write_guard; insert into driver_job_links(booking_reference,link_status) values('COMBO-2','revoked'); alter table driver_job_links enable trigger combo_link_write_guard;");
+    if(mode==='report')await sql("insert into driver_job_status_events(booking_reference) values('COMBO-2')");
+    if(mode==='offered'||mode==='assigned'){const offer=await publish(group);if(mode==='assigned')await accept(offer,1);}
+    let items=await members();
+    items=items.map(item=>item.booking_reference==='COMBO-2'?{...item,pickup_at:new Date(Date.now()+7*86400000).toISOString()}:item);
+    if(mode==='past')items[1].pickup_at=new Date(Date.now()-86400000).toISOString();
+    if(mode==='null')items[1].pickup_at=null;
+    if(mode==='bad')items[1].pickup_at='invalid';
+    if(mode==='members')items=items.slice(0,2);
+    if(mode==='remove')items=[{...items[0],pickup_at:new Date(Date.now()+7*86400000).toISOString()}];
+    if(mode==='extra')items[1].customer_price=999;
+    if(mode==='stale')items[1].updated_at=new Date(Date.now()-86400000).toISOString();
+    const saved=await amendmentSnapshot();
+    await assert.rejects(define(items,group.revision),undefined,mode+' must reject without any partial update');
+    assert.deepEqual(await amendmentSnapshot(),saved,mode+' rollback');
+  }
+  await reset();const rollbackGroup=await define(await members());
+  const rollbackBefore=await amendmentSnapshot();
+  await sql(`create function reject_combo_member_fixture() returns trigger language plpgsql as $$begin raise exception 'synthetic member failure'; end;$$;
+    create trigger reject_combo_member_fixture before insert on driver_job_combo_members for each row execute function reject_combo_member_fixture();`);
+  await assert.rejects(amendPickup(rollbackGroup),/synthetic member failure/);
+  assert.deepEqual(await amendmentSnapshot(),rollbackBefore,'A member refresh failure rolls back the already attempted pickup update');
+  await sql('drop trigger reject_combo_member_fixture on driver_job_combo_members; drop function reject_combo_member_fixture();');
+  for(const firstAction of ['amend','publish']){
+    await reset();const group=await define(await members());const items=await members();
+    const originalPickup=(await rows("select pickup_at from bookings where booking_reference='COMBO-2'"))[0].pickup_at;
+    items[1].pickup_at=new Date(originalPickup.getTime()+7200000).toISOString();
+    const clients=[pg.getPgClient('postgres',dir),pg.getPgClient('postgres',dir)];await Promise.all(clients.map(c=>c.connect()));
+    const amend=c=>c.query("select define_driver_job_combo('COMBO-1',$1::jsonb,$2,'admin','Synthetic QA') result",[JSON.stringify(items),group.revision]);
+    const post=c=>c.query("select publish_driver_job_combo($1,$2,(select updated_at from bookings where booking_reference='COMBO-1'),90,$3,'admin','Synthetic QA','AVF',array[1]::bigint[]) result",[group.id,group.revision,randomUUID()]);
+    try{
+      await clients[0].query('begin');await (firstAction==='amend'?amend:post)(clients[0]);
+      const blocked=(firstAction==='amend'?post:amend)(clients[1]).then(()=>({ok:true}),error=>({ok:false,error}));
+      await clients[0].query('commit');const loser=await blocked;
+      assert.equal(loser.ok,false);assert.equal(loser.error.code,'PT409');
+      const final=(await rows("select pickup_at from bookings where booking_reference='COMBO-2'"))[0].pickup_at;
+      assert.equal(final.getTime(),originalPickup.getTime()+(firstAction==='amend'?7200000:0));
+    }finally{await Promise.all(clients.map(c=>c.end()));}
+  }
+  console.log('PASS pickup amendment failures roll back completely; stale/malformed/posted/assigned/linked/reported/membership edits fail closed; both publish race orders preserve one coherent package.');
+
 
   // A transfer pickup is not evidence of a 90-minute trip duration. These are
   // synthetic copies of the reported 18:20 / 18:35 same-combo schedule.

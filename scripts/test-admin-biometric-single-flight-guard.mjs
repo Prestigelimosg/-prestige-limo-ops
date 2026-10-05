@@ -55,7 +55,7 @@ const {
   finishAdminBiometricAttempt,
   transitionAdminBiometricAppState,
 } = lifecycleModule;
-assert.equal(ADMIN_BIOMETRIC_RETURN_GRACE_MS, 60_000);
+assert.equal(ADMIN_BIOMETRIC_RETURN_GRACE_MS, 300_000);
 
 function beginSingleAttempt(state, label) {
   const attempt = beginAdminBiometricAttempt(state);
@@ -88,9 +88,11 @@ for (const promptResolutionOrder of ["before-active", "after-active"]) {
 }
 
 for (const [elapsedMs, expected] of [
-  [59_000, "reveal"],
-  [60_000, "unlock"],
-  [61_000, "unlock"],
+  [60_000, "reveal"],
+  [180_000, "reveal"],
+  [299_999, "reveal"],
+  [300_000, "unlock"],
+  [300_001, "unlock"],
 ]) {
   const state = createAdminBiometricLifecycle("active");
   assert.equal(
@@ -175,6 +177,11 @@ for (const invalidReturnTime of [Number.NaN, 9_999]) {
   assert.equal(finishAdminBiometricAttempt(state, attempt + 1), false);
   assert.equal(beginAdminBiometricAttempt(state), null);
   assert.equal(finishAdminBiometricAttempt(state, attempt), true);
+}
+
+{
+  const fresh = createAdminBiometricLifecycle("background");
+  assert.equal(transitionAdminBiometricAppState(fresh, "active", true, 1_000, false), "unlock", "Cold start has no previous unlocked window");
 }
 
 console.log("Admin biometric single-flight guard passed.");

@@ -1,4 +1,4 @@
-export const CUSTOMER_BIOMETRIC_RETURN_GRACE_MS = 60_000;
+export const CUSTOMER_BIOMETRIC_RETURN_GRACE_MS = 300_000;
 
 export type CustomerBiometricLifecycleAction =
   | "ignore"

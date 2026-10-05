@@ -43,7 +43,7 @@ const compiledLifecycle = stripTypeScriptTypes(lifecycleSource, { mode: "transfo
 const lifecycle = new Function(
   `${compiledLifecycle}\nreturn { DRIVER_BIOMETRIC_RETURN_GRACE_MS, beginDriverBiometricAttempt, createDriverBiometricLifecycle, finishDriverBiometricAttempt, transitionDriverBiometricAppState };`,
 )();
-assert.equal(lifecycle.DRIVER_BIOMETRIC_RETURN_GRACE_MS, 180_000);
+assert.equal(lifecycle.DRIVER_BIOMETRIC_RETURN_GRACE_MS, 300_000);
 
 function beginSingleAttempt(state, label) {
   const attempt = lifecycle.beginDriverBiometricAttempt(state);
@@ -67,9 +67,11 @@ for (const resolutionOrder of ["before-active", "after-active"]) {
 }
 
 for (const [elapsedMs, expected] of [
-  [179_999, "reveal"],
-  [180_000, "unlock"],
-  [180_001, "unlock"],
+  [60_000, "reveal"],
+  [180_000, "reveal"],
+  [299_999, "reveal"],
+  [300_000, "unlock"],
+  [300_001, "unlock"],
 ]) {
   const state = lifecycle.createDriverBiometricLifecycle("active");
   assert.equal(lifecycle.transitionDriverBiometricAppState(state, "inactive", true, 1_000, true), "lock");
@@ -109,4 +111,9 @@ for (const invalidNow of [Number.NaN, 9_999]) {
   assert.equal(lifecycle.finishDriverBiometricAttempt(state, attempt), true);
 }
 
-console.log("Driver biometric 180-second single-flight guard passed.");
+{
+  const fresh = lifecycle.createDriverBiometricLifecycle("background");
+  assert.equal(lifecycle.transitionDriverBiometricAppState(fresh, "active", true, 1_000, false), "unlock", "Cold start has no previous unlocked window");
+}
+
+console.log("Driver biometric five-minute single-flight guard passed.");

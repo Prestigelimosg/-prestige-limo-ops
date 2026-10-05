@@ -1,4 +1,4 @@
-export const ADMIN_BIOMETRIC_RETURN_GRACE_MS = 60_000;
+export const ADMIN_BIOMETRIC_RETURN_GRACE_MS = 300_000;
 
 export type AdminBiometricLifecycleAction =
   | "ignore"

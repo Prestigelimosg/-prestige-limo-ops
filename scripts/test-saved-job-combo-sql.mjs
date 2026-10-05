@@ -75,6 +75,27 @@ try {
   await sql('rollback');
   assert.deepEqual(await comboDefinitions(),afterConflicts);
   console.log('PASS unavailable combo returns PT409; eight exact function definitions retain all behavior and permissions; migration fails closed on drift.');
+  const trfMigrationName=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_combo_trf_pickup_sequence.sql'));
+  assert.ok(trfMigrationName,'The TRF timing repair must ship as a forward migration');
+  const trfMigration=fs.readFileSync('supabase/migrations/'+trfMigrationName,'utf8');
+  const oldTiming=trfMigration.match(/\$before\$([\s\S]*?)\$before\$/)[1];
+  const newTiming=trfMigration.match(/\$after\$([\s\S]*?)\$after\$/)[1];
+  const allDefinitions=()=>rows(`select p.oid::regprocedure::text signature,p.prosrc,p.proacl::text,p.prosecdef,p.proconfig
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' order by 1`);
+  const beforeTiming=await allDefinitions();
+  await sql(trfMigration);
+  const afterTiming=await allDefinitions();
+  assert.deepEqual(afterTiming,beforeTiming.map(f=>f.signature.startsWith('publish_driver_job_combo(')
+    ? {...f,prosrc:f.prosrc.replace(oldTiming,newTiming)} : f),
+    'Only the existing combo publish timing predicate may change; all other functions, privileges and security settings stay identical');
+  await sql('begin');
+  await assert.rejects(sql(trfMigration),/definition changed/);
+  await sql('rollback');
+  assert.deepEqual(await allDefinitions(),afterTiming,'Refuse to overwrite a changed function');
+  for(const role of ['anon','authenticated','service_role']){
+    assert.equal(await value("select has_function_privilege($1,'public.publish_driver_job_combo(uuid,uuid,timestamptz,numeric,text,text,text,text,bigint[],text)','execute') result",[role]),role==='service_role');
+  }
+  console.log('PASS TRF migration changes only the exact publish predicate; all other functions and service-only permissions are unchanged; drift fails closed.');
   const reset=async()=>{
     await sql(`truncate driver_job_combo_members,driver_job_combos,driver_job_bids,driver_job_bid_offers,
       bookings,drivers,driver_access_accounts,driver_device_push_subscriptions,driver_job_links,driver_job_status_events,driver_live_location_latest_positions,customer_driver_app_notification_outbox,audit_logs restart identity cascade;
@@ -94,6 +115,65 @@ try {
     [g.id,g.revision,randomUUID(),audience]);
   const accept=(o,id,client=db)=>client.query('select accept_driver_job_combo($1,$2,$3,$4) result',
     [o.offer.offer_key,id,o.offer.updated_at,randomUUID()]).then(r=>r.rows[0].result);
+
+  // A transfer pickup is not evidence of a 90-minute trip duration. These are
+  // synthetic copies of the reported 18:20 / 18:35 same-combo schedule.
+  const shortTransfers=async(reverse=false,count=2)=>{
+    await reset();
+    await sql(`update bookings set pickup_at=date_trunc('day',now())+interval '2 days 10 hours 20 minutes'
+      + ((substring(booking_reference from '[0-9]+$')::int-1)*interval '15 minutes'),dropoff_datetime=null`);
+    if(reverse) await sql(`update bookings set pickup_at=pickup_at+case booking_reference
+      when 'COMBO-1' then interval '15 minutes' else interval '-15 minutes' end
+      where booking_reference in ('COMBO-1','COMBO-2')`);
+    return Array.from({length:count},(_,i)=>'COMBO-'+(i+1));
+  };
+  for(const audience of [[1,2],[]]) for(const reverse of [false,true]){
+    const refs=await shortTransfers(reverse);
+    const saved=await rows('select booking_reference,pickup_at,dropoff_datetime,customer_price from bookings order by id');
+    const group=await define(await members(refs)); const offer=await publish(group,audience);
+    assert.equal((await accept(offer,2)).reason,'accepted','Consecutive TRF pickups must publish and accept as one combo');
+    assert.deepEqual((await rows('select driver_id from bookings where booking_reference=any($1) order by id',[refs])).map(b=>Number(b.driver_id)),[2,2]);
+    assert.deepEqual(await rows('select booking_reference,pickup_at,dropoff_datetime,customer_price from bookings order by id'),saved,
+      'Do not invent an end time, shift pickups or change customer prices');
+    assert.equal((await rows('select sum(driver_payout_override) amount from bookings'))[0].amount,'123.45');
+    assert.equal((await accept(offer,2)).reason,'already_accepted');
+    assert.notEqual((await accept(offer,1)).ok,true);
+  }
+  for(const mutation of [
+    "pickup_at=(select pickup_at from bookings where booking_reference='COMBO-1')",
+    "service_type='MNG'", "service_type='DEP'", "service_type='DSP'", "service_type=null",
+    "dropoff_datetime=pickup_at", "dropoff_datetime=pickup_at-interval '1 minute'",
+  ]){
+    const refs=await shortTransfers();
+    await sql("update bookings set "+mutation+" where booking_reference='COMBO-2'");
+    const group=await define(await members(refs));
+    await assert.rejects(publish(group),/Combo trip times overlap/);
+    assert.equal((await rows('select count(*)::int n from driver_job_bid_offers'))[0].n,0);
+    assert.equal((await rows('select state from driver_job_combos'))[0].state,'draft');
+  }
+  for(const reverse of [false,true]) for(const minutes of [0,-1,16,90]){
+    const refs=await shortTransfers(reverse);
+    await sql(`update bookings set dropoff_datetime=pickup_at+interval '${minutes} minutes'
+      where booking_reference='${reverse?'COMBO-2':'COMBO-1'}'`);
+    await assert.rejects(publish(await define(await members(refs))),/Combo trip times overlap/);
+    assert.equal((await rows('select count(*)::int n from driver_job_bid_offers'))[0].n,0);
+  }
+  // Real saved ends at/before the next pickup still work; later valid ends
+  // do not turn an earlier missing TRF end into an inferred 90-minute block.
+  for(const earlyEnd of [null,14,15]){
+    const refs=await shortTransfers();
+    if(earlyEnd!==null) await sql(`update bookings set dropoff_datetime=pickup_at+interval '${earlyEnd} minutes' where booking_reference='COMBO-1'`);
+    await sql("update bookings set dropoff_datetime=pickup_at+interval '30 minutes' where booking_reference='COMBO-2'");
+    assert.equal((await accept(await publish(await define(await members(refs))),1)).reason,'accepted');
+  }
+  const shortRefs=await shortTransfers(false,3);
+  const shortGroup=await define(await members(shortRefs)); const shortOffer=await publish(shortGroup);
+  await sql("update bookings set pickup_at=(select pickup_at+interval '85 minutes' from bookings where booking_reference='COMBO-3'),driver_id=1 where booking_reference='COMBO-4'");
+  assert.equal((await accept(shortOffer,1)).reason,'schedule_conflict','Keep 90-minute protection against other bookings, including the last member');
+  assert.equal((await rows('select count(*)::int n from bookings where booking_reference=any($1) and driver_id is not null',[shortRefs]))[0].n,0);
+  assert.equal((await accept(shortOffer,2)).reason,'accepted');
+  assert.equal((await rows('select count(*)::int n from bookings where booking_reference=any($1) and driver_id=2',[shortRefs]))[0].n,3);
+  console.log('PASS short TRF combo selected/all publish and atomic acceptance, pickup order, explicit ends, simultaneous/non-TRF/invalid-end rejection, other-job conflicts and unchanged schedules/prices.');
 
   await reset();
   const before=await rows('select * from bookings order by id');
@@ -143,7 +223,8 @@ try {
   assert.equal(Date.parse(earlierOffer.offer.closes_at),(await rows("select pickup_at from bookings where booking_reference='COMBO-3'"))[0].pickup_at.getTime());
   console.log('PASS offer expiry follows the earliest trip even when another saved trip was selected first.');
 
-  await reset(); const racingGroup=await define(await members()); const racingOffer=await publish(racingGroup);
+  const racingRefs=await shortTransfers(false,3);
+  const racingGroup=await define(await members(racingRefs)); const racingOffer=await publish(racingGroup);
   const clients=[pg.getPgClient('postgres',dir),pg.getPgClient('postgres',dir)];
   await Promise.all(clients.map(c=>c.connect()));
   try {
@@ -178,6 +259,14 @@ try {
   }));
   const createLinks=(g,items)=>value("select apply_admin_driver_job_combo_links($1,$2,$3,'admin','Synthetic Combo QA') result",[g.id,g.revision,JSON.stringify(items)]);
   const ack=(link,driver=1)=>value("select acknowledge_current_driver_job_combo($1,$2,$3,$4,'Synthetic QA 1','00000001','QATEST1','AVF') result",[link.booking_reference,link.id,link.token_hash,driver]);
+  const linkedShortRefs=await shortTransfers();
+  const linkedShortGroup=await define(await members(linkedShortRefs));
+  assert.equal((await accept(await publish(linkedShortGroup),1)).reason,'accepted');
+  const linkedShort=await createLinks(linkedShortGroup,(await prepareLinks()).filter(item=>linkedShortRefs.includes(item.booking_reference)));
+  assert.equal(linkedShort.links.length,2);
+  assert.equal((await ack(linkedShort.links[0].link)).id,linkedShort.links[0].link.id);
+  assert.equal((await rows("select count(*)::int n from driver_job_links where safe_link_context ? 'driver_acknowledged_at'"))[0].n,2);
+  console.log('PASS accepted short TRF combo continues through the existing two-member Create Link and atomic ACK path.');
   await reset();
   await sql("update bookings set driver_payout_override=60,driver_payout_reason='Existing override' where booking_reference='COMBO-2'");
   const defaultGroup=await define(await members()); await direct(defaultGroup,1,null);

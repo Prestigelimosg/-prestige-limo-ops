@@ -15,7 +15,7 @@ const context = { exports, window: undefined, require: name => {
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, context);
 const { AndroidAppUpdate, androidAppReleases, readAndroidAppUpdateState } = exports;
 assert.deepEqual(['driver', 'admin', 'customer'].map(role => androidAppReleases[role].build),
-  [14, 6, 6], 'Only Admin advances to the published, hash-verified exact-alert update');
+  [16, 7, 7], 'All three roles point to their published, hash-verified five-minute Android release');
 assert.equal(readAndroidAppUpdateState('driver'), 'hidden', 'SSR has no native state');
 const installation = '11111111-1111-4111-8111-111111111111';
 for (const role of ['driver', 'admin', 'customer']) {

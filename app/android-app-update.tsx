@@ -7,9 +7,9 @@ type AndroidAppRole = "driver" | "admin" | "customer";
 // Advance only after the exact signed APK is published and its anonymous download verified.
 // These are APK versionCodes, never web commits or iOS/Expo runtime versions.
 export const androidAppReleases = {
-  driver: { build: 14, name: "Driver", url: "https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download" },
-  admin: { build: 6, name: "Admin", url: "https://drive.usercontent.google.com/uc?id=1zofh8u_QY0-xAsqkM8eN6G7IYp9chqw2&export=download" },
-  customer: { build: 6, name: "Customer", url: "https://drive.usercontent.google.com/uc?id=1a2uhL39Fn1JyxaPz8zPfNo9RjnQPJnPa&export=download" },
+  driver: { build: 16, name: "Driver", url: "https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download" },
+  admin: { build: 7, name: "Admin", url: "https://drive.usercontent.google.com/uc?id=1zofh8u_QY0-xAsqkM8eN6G7IYp9chqw2&export=download" },
+  customer: { build: 7, name: "Customer", url: "https://drive.usercontent.google.com/uc?id=1a2uhL39Fn1JyxaPz8zPfNo9RjnQPJnPa&export=download" },
 } as const;
 
 type UpdateWindow = Window & {

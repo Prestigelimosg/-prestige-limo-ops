@@ -1,4 +1,4 @@
-export const DRIVER_BIOMETRIC_RETURN_GRACE_MS = 180_000;
+export const DRIVER_BIOMETRIC_RETURN_GRACE_MS = 300_000;
 
 export type DriverBiometricLifecycleAction =
   | "ignore"

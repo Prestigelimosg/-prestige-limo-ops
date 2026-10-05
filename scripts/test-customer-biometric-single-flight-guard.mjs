@@ -82,7 +82,7 @@ const {
   finishCustomerBiometricAttempt,
   transitionCustomerBiometricAppState,
 } = lifecycleModule.exports;
-assert.equal(CUSTOMER_BIOMETRIC_RETURN_GRACE_MS, 60_000);
+assert.equal(CUSTOMER_BIOMETRIC_RETURN_GRACE_MS, 300_000);
 
 function expectSingleAttempt(state, label) {
   const first = beginCustomerBiometricAttempt(state);
@@ -126,9 +126,11 @@ function expectSingleAttempt(state, label) {
 }
 
 for (const [elapsedMs, expected] of [
-  [59_000, "reveal"],
-  [60_000, "unlock"],
-  [61_000, "unlock"],
+  [60_000, "reveal"],
+  [180_000, "reveal"],
+  [299_999, "reveal"],
+  [300_000, "unlock"],
+  [300_001, "unlock"],
 ]) {
   const state = createCustomerBiometricLifecycle("active");
   assert.equal(
@@ -213,6 +215,11 @@ for (const invalidReturnTime of [Number.NaN, 9_999]) {
   assert.equal(finishCustomerBiometricAttempt(state, attempt + 1), false);
   assert.equal(beginCustomerBiometricAttempt(state), null);
   assert.equal(finishCustomerBiometricAttempt(state, attempt), true);
+}
+
+{
+  const fresh = createCustomerBiometricLifecycle("background");
+  assert.equal(transitionCustomerBiometricAppState(fresh, "active", true, 1_000, false), "unlock", "Cold start has no previous unlocked window");
 }
 
 console.log("Customer biometric single-flight guard passed.");

@@ -654,10 +654,10 @@ export async function loadAdminDriverPoolAttentionOffers(
   const start = (boundedPage - 1) * boundedLimit;
   // Enrich only this bounded Admin page. Never export raw booking/combo context.
   const serviceNames: Record<string, string> = {
-    MNG: "MNG — Arrival", ARRIVAL: "MNG — Arrival",
-    DEP: "DEP — Departure", DEPARTURE: "DEP — Departure",
-    TRF: "TRF — City Transfer", TRANSFER: "TRF — City Transfer", "CITY TRANSFER": "TRF — City Transfer",
-    DSP: "DSP — Hourly", HOURLY: "DSP — Hourly",
+    MNG: "MNG", ARRIVAL: "MNG",
+    DEP: "DEP", DEPARTURE: "DEP",
+    TRF: "TRF", TRANSFER: "TRF", "CITY TRANSFER": "TRF",
+    DSP: "DSP", HOURLY: "DSP",
     STANDBY: "Standby", EVENT: "Event", SEAPORT_TRANSFER: "Seaport Transfer", POINT_TO_POINT: "Point to Point",
   };
   const items = await Promise.all(attentionItems.slice(start, start + boundedLimit).map(async (item) => {

@@ -473,7 +473,7 @@ try {
   assert.equal(attentionResult.data.has_more, true, "one additional actionable offer must expose Load more");
   assert.equal(attentionResult.data.items.length, 1, "the server page size must be enforced");
   assert.equal(attentionResult.data.items[0].attention_status, "open");
-  assert.equal(attentionResult.data.items[0].service_label, "TRF — City Transfer");
+  assert.equal(attentionResult.data.items[0].service_label, "TRF");
   const allAttentionResult = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers({
     from(table) { return attentionQuery(table); },
   }, 1, 20);
@@ -509,9 +509,9 @@ try {
   const client = { from: comboAttentionQuery };
   attentionOfferRows[0].safe_offer_context = { combo_id: comboId, combo_revision: comboRevision };
   for (const [services, expected] of [
-    [["TRF", "transfer"], "TRF — City Transfer · Combo"],
-    [["MNG", "DEP"], "MNG — Arrival / DEP — Departure · Combo"],
-    [["DSP", ""], "DSP — Hourly / Service unavailable · Combo"],
+    [["TRF", "transfer"], "TRF · Combo"],
+    [["MNG", "DEP"], "MNG / DEP · Combo"],
+    [["DSP", ""], "DSP / Service unavailable · Combo"],
   ]) {
     comboServices = services;
     const result = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers(client, 1, 1);
@@ -532,7 +532,7 @@ try {
   // Existing assigned-row evidence reads are allowed; off-page combo membership reads are not.
   assert.equal(comboReads - readsBeforeNextPage, 1);
   delete attentionOfferRows[0].safe_offer_context;
-  for (const [service, expected] of [["MNG", "MNG — Arrival"], ["departure", "DEP — Departure"], ["hourly", "DSP — Hourly"], ["internal secret", "Service unavailable"], [null, "Service unavailable"]]) {
+  for (const [service, expected] of [["MNG", "MNG"], ["departure", "DEP"], ["hourly", "DSP"], ["internal secret", "Service unavailable"], [null, "Service unavailable"]]) {
     attentionOfferRows[0].safe_trip_summary = service;
     const result = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers(client, 1, 1);
     assert.equal(result.data.items[0].service_label, expected);

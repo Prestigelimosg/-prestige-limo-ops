@@ -1,3 +1,8 @@
+## Admin Driver Pool Service Short Forms (2026-10-05; local verified before release)
+
+- Owner confirmed the deployed service display and requested short forms only. This supersedes only the expanded labels in PR668. Existing service mapping now renders MNG, DEP, TRF and DSP. Same-service and mixed-service combos retain the Combo marker and distinct codes. Unknown/service-unavailable fallback and other saved service names remain unchanged.
+- Only four label values and their aliases changed in the established Admin attention loader. No query, verification, response field, UI action, route, persistence, privacy, sender, Calendar or native-app logic changed. Updated existing server/browser fixtures; short-form assertion failed before the change and passes after it. Focused Pool guard and lint passed; deployment/browser results are recorded in the release handoff. Protected dirty root preserved.
+
 ## Admin Driver Pool Pending Service Display (2026-10-05; local verified, not released)
 
 - Owner requested service type beside the existing job number and Singapore pickup date/time in Driver Pool pending. Inspection matched the screenshot to the existing row and confirmed that the established attention read omitted the offer's saved service summary. Existing focused Pool guard passed; test-first service-label assertion failed before this repair.

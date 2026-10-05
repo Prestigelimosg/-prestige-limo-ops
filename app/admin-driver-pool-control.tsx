@@ -35,6 +35,7 @@ export type AssignedDriverPoolAdminOffer = DriverPoolAdminOffer & {
 };
 
 type AdminDriverPoolAttentionItem = DriverPoolAdminOffer & {
+  service_label?: string;
   attention_status: "accepted_link_pending" | "open";
   booking_reference: string;
   pickup_at: string;
@@ -582,6 +583,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
                   <button className="min-w-0 flex-1 text-left text-xs disabled:text-slate-400" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void openPendingBooking(item)} type="button">
                     <span className="font-semibold text-slate-950">Job {item.public_booking_reference}</span>
                     <span className="ml-2 text-slate-500">{pickupLabel(item.pickup_at)}</span>
+                    <span className="ml-2 text-slate-700" data-admin-driver-pool-service="true">{item.service_label || "Service unavailable"}</span>
                     <span className={`ml-2 font-semibold ${item.attention_status === "open" ? "text-sky-800" : "text-emerald-800"}`}>
                       {item.attention_status === "open" ? `${item.audience === "selected" ? "Selected group" : "Wider pool"} · SGD ${item.offer_payout_sgd.toFixed(2)} · ${item.selection_mode === "admin" ? "View responses" : "First acceptance wins"}` : "Accepted · Job Link pending"}
                     </span>

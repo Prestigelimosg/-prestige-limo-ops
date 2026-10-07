@@ -66,6 +66,7 @@ class QueryBuilder {
   select() { return this; }
   eq(field, value) { this.filters.push({ field, type: "eq", value }); return this; }
   is(field, value) { this.filters.push({ field, type: "is", value }); return this; }
+  or(value) { this.filters.push({type:"or",value}); return this; }
   lte(field, value) { this.filters.push({ field, type: "lte", value }); return this; }
   in(field, value) { this.filters.push({ field, type: "in", value }); return this; }
   order() { return this; }
@@ -81,7 +82,7 @@ const recentLinkId = "33333333-3333-4333-8333-333333333333";
 const acknowledgedLinkId = "44444444-4444-4444-8444-444444444444";
 const now = new Date("2026-08-30T10:30:00.000Z");
 
-function createClient({ linkError = null, outboxError = null, extraEligible = 0 } = {}) {
+function createClient({ linkError = null, outboxError = null, extraEligible = 0, amendmentPending = false } = {}) {
   const links = [
     {
       booking_reference: "AUTO-ACK-FIRST",
@@ -127,6 +128,7 @@ function createClient({ linkError = null, outboxError = null, extraEligible = 0 
       revoked_at: null,
       safe_link_context: {
         driver_acknowledged_at: "2026-08-30T10:05:00.000Z",
+        driver_amendment_ack_pending: amendmentPending,
         native_handoff_ciphertext: "v1.opaque.server.only",
       },
     },
@@ -145,6 +147,8 @@ function createClient({ linkError = null, outboxError = null, extraEligible = 0 
     from(table) { return new QueryBuilder(this, table); },
     resolve(query) {
       if (query.table === "driver_job_links") {
+        assert.ok(query.filters.some(f=>f.type==='or' && f.value==='safe_link_context->>driver_acknowledged_at.is.null,safe_link_context->>driver_amendment_ack_pending.eq.true'),
+          'Candidate read must include original ACKs with a pending amendment');
         return { data: linkError ? null : links.slice(query.start,query.end+1), error: linkError };
       }
       if (query.table === "customer_driver_app_notification_outbox") {
@@ -157,6 +161,11 @@ function createClient({ linkError = null, outboxError = null, extraEligible = 0 
 
 try {
   const helper = createRequire(import.meta.url)(helperPath);
+  const amendedCandidates=[];
+  await helper.runDriverAckAutoRemindersWithClient(createClient({amendmentPending:true}),{
+    now,sendReminder:async(_client,input)=>{amendedCandidates.push(input.driver_job_link_id);return {ok:false,status:409,reason:'cooldown'};},
+  });
+  assert.ok(amendedCandidates.includes(acknowledgedLinkId),'An original ACK does not suppress the existing amendment reminder lane');
   const calls = [];
   const result = await helper.runDriverAckAutoRemindersWithClient(createClient(), {
     now,

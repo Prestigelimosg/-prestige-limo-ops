@@ -112,7 +112,7 @@ function eligibleCandidate(link: UnknownRecord, nowMs: number): boolean {
       expiresAtMs !== null &&
       expiresAtMs > nowMs &&
       (!context.combo_id || context.combo_primary_reference === link.booking_reference) &&
-      !text(context.driver_acknowledged_at, 80) &&
+      (!text(context.driver_acknowledged_at, 80) || context.driver_amendment_ack_pending === true) &&
       text(context.native_handoff_ciphertext, 1200),
   );
 }
@@ -143,7 +143,7 @@ export async function runDriverAckAutoRemindersWithClient(
     const linkRead = await client.from("driver_job_links")
       .select("id, booking_reference, driver_id, link_status, issued_at, expires_at, revoked_at, safe_link_context, created_at")
       .eq("link_status", "active").is("revoked_at", null)
-      .is("safe_link_context->>driver_acknowledged_at", null)
+      .or("safe_link_context->>driver_acknowledged_at.is.null,safe_link_context->>driver_amendment_ack_pending.eq.true")
       .lte("issued_at", dueBefore).gt("expires_at", now.toISOString())
       .order("issued_at", { ascending: true }).order("id", { ascending: true })
       .range(offset, offset + candidatePageSize - 1);

@@ -27,9 +27,10 @@ await writeFile(
   "exports.sendDriverNativePendingAckReminder = async () => ({ ok: false });\n",
 );
 // Execute real expiry validation, including the server-stored combo window.
-for (const name of ["driver-job-link", "driver-job-status-workflow"]) {
+for (const name of ["driver-job-link", "driver-job-status-workflow", "driver-job-remark"]) {
   const dependency = (await readFile(`lib/${name}.ts`, "utf8"))
-    .replaceAll('./driver-job-status-workflow.ts', './driver-job-status-workflow.js');
+    .replaceAll('./driver-job-status-workflow.ts', './driver-job-status-workflow.js')
+    .replaceAll('./driver-job-remark.ts', './driver-job-remark.js');
   await writeFile(path.join(tempDir, `${name}.js`), ts.transpileModule(dependency, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText);
@@ -190,6 +191,13 @@ try {
   assert.match(reservation.args.p_request_id,/^[a-f0-9-]{36}$/);
   assert.equal(JSON.stringify(reservation.args).includes('token'),false);
   assert.equal(happyClient.calls.some(call=>call.operation==='insert'),false,'Only the transaction may reserve the audit');
+  let amendmentSends=0;
+  const amendment=await helper.createAdminDriverAckReminder(createMockClient({linkOverrides:{safe_link_context:{
+    native_handoff_ciphertext:'v1.opaque.server.only',driver_acknowledged_at:now.toISOString(),driver_amendment_ack_pending:true,
+  }}}),{booking_reference:bookingReference,driver_job_link_id:linkId},actor,{now,sendNativeReminder:async()=>{
+    amendmentSends++;return {native_provider_accepted:true,native_provider_request_count:1,ok:true,reason:'send_succeeded'};
+  }});
+  assert.equal(amendment.ok,true);assert.equal(amendmentSends,1,'Pending amendment reuses the existing exact-link reminder');
 
   sendCount = 0;
   const earlyClient = createMockClient({ issuedAt: "2026-08-30T10:20:00.000Z" });

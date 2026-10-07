@@ -30,6 +30,7 @@ import {
 } from "./driver-portal-session.ts";
 
 export type ProductionDriverJobDetailsUpdateInput = {
+  expectedRevision?: unknown;
   devicePushSubscription?: unknown;
   driverInstallationId?: unknown;
   driverPortalCookieHeader?: string | null;
@@ -208,6 +209,7 @@ export async function getProductionDriverJobPayloadForToken(
 // verified job token. It does not expose pricing, payout, provider, GPS, or
 // billing fields, and it does not send customer/provider messages.
 export async function applyProductionDriverJobDetailsUpdate({
+  expectedRevision,
   devicePushSubscription,
   driverInstallationId,
   driverPortalCookieHeader,
@@ -230,6 +232,7 @@ export async function applyProductionDriverJobDetailsUpdate({
   });
 
   const detailsResult = await saveDriverJobDetailsThroughStatusPersistence({
+    expectedRevision,
     client: clientResult.client,
     driverContact,
     driverName,

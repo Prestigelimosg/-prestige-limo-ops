@@ -237,6 +237,12 @@ class MockSupabaseClient {
     const l=this.tables.driver_job_links.find(x=>x.id===p.p_link_id && x.booking_reference===p.p_booking_reference && x.token_hash===p.p_token_hash);
     const b=this.tables.bookings.find(x=>x.booking_reference===p.p_booking_reference);
     if(!l || !b || (b.driver_id && b.driver_id!==p.p_driver_id)) return {data:null,error:{code:'assignment'}};
+    if (p.p_expected_revision && p.p_expected_revision !== (l.safe_link_context.driver_ack_required_revision || l.safe_link_context.job_card_revision)) {
+      return {data:null,error:{code:'P0002'}};
+    }
+    if (l.safe_link_context.driver_acknowledged_at) {
+      return {data:{...l,safe_link_context:{...l.safe_link_context,driver_amendment_ack_pending:false}},error:null};
+    }
     const payload={...l.safe_link_context.driver_job_payload,
       assigned_driver_name:p.p_name,assigned_driver_contact:p.p_contact,assigned_driver_plate:p.p_plate,assigned_driver_vehicle_model:p.p_vehicle,
       driver_name:p.p_name,driver_contact:p.p_contact,driver_plate_number:p.p_plate,driver_vehicle_model:p.p_vehicle};
@@ -720,6 +726,27 @@ const harness = await loadHarness();
 ({ PATCH } = harness.statusRoute);
 
 try {
+  {
+    const client = createSeededClient({bookings:[{booking_reference:'DRV-JOB-API-001',driver_id:7,status:'assigned'}]});
+    const link = client.tables.driver_job_links[0];
+    link.driver_id=7;
+    Object.assign(link.safe_link_context,{driver_amendment_ack_pending:true,driver_ack_required_revision:'d'.repeat(64)});
+    const originalAck=link.safe_link_context.driver_acknowledged_at;
+    const loaded=await loadDriverJobPayloadThroughStatusPersistence({client,now,token:validToken});
+    assert.equal(loaded.ok,true);assert.equal(loaded.payload.acknowledged,true);
+    assert.equal(loaded.payload.amendmentAckPending,true);
+    assert.equal(loaded.payload.acknowledgementRevision,'d'.repeat(64));
+    const input={client,now,token:validToken,driverName:'Safe Driver One',driverContact:'+65 8000 1001',
+      driverPlateNumber:'SLA1234X',driverVehicleModel:'Mercedes V Class'};
+    assert.equal((await saveDriverJobDetailsThroughStatusPersistence(input)).reason,'stale_revision');
+    assert.equal((await saveDriverJobDetailsThroughStatusPersistence({...input,expectedRevision:'c'.repeat(64)})).reason,'stale_revision');
+    const accepted=await saveDriverJobDetailsThroughStatusPersistence({...input,expectedRevision:'d'.repeat(64)});
+    assert.equal(accepted.ok,true);assert.equal(accepted.payload.acknowledged,true);
+    assert.equal(accepted.payload.amendmentAckPending,false);
+    assert.equal(link.safe_link_context.driver_acknowledged_at,originalAck);
+    assert.equal(client.operations.length,0,'Revision ACK must not invoke profile, assignment, supersession or status writers');
+    assertNoDriverJobLeaks(accepted);
+  }
   assert.equal(
     driverJobStatusPersistenceVersion,
     "stage-driver-job-status-production-adapter-v1",

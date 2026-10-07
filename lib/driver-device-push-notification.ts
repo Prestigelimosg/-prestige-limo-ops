@@ -1342,7 +1342,7 @@ export async function sendDriverNativePendingAckReminder(
     !linkId ||
     !driverId ||
     linkDriverId !== driverId ||
-    linkWasAcknowledged(link) ||
+    (linkWasAcknowledged(link) && asRecord(link.safe_link_context).driver_amendment_ack_pending !== true) ||
     !nativeHandoffAvailable ||
     !(await driverHasActiveOnePhoneAccount(client, driverId))
   ) {

@@ -981,6 +981,8 @@ type AdminDriverJobLinkRecord = {
       last_sent_at: string | null;
     };
     acknowledged: boolean;
+    amendment_ack_pending?: boolean;
+    amendment_issued_at?: string | null;
     acknowledged_at: string | null;
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
@@ -32563,7 +32565,7 @@ export default function Home() {
 
             return link?.link_status === "active" &&
               (!link.safe_summary.combo || link.safe_summary.combo.primary_reference===bookingReference) &&
-              !link.safe_summary.acknowledged &&
+              (!link.safe_summary.acknowledged || link.safe_summary.amendment_ack_pending === true) &&
               !link.safe_summary.ack_alert_closed
               ? {
                   bookingReference,
@@ -32584,7 +32586,10 @@ export default function Home() {
                     link.safe_summary.ack_reminder?.last_provider_accepted ?? null,
                   reminderLastSentAt: link.safe_summary.ack_reminder?.last_sent_at ?? null,
                   publicReference: link.safe_summary.combo ? `${link.safe_summary.combo.vehicle} Combo · ${link.safe_summary.combo.trip_count} trips` : bookingPublicReference(bookingRecord),
-                  waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
+                  waitingMinutes: adminDriverJobLinkWaitingMinutes(
+                    link.safe_summary.amendment_ack_pending ? link.safe_summary.amendment_issued_at || link.issued_at : link.issued_at,
+                    currentTimeMs,
+                  ),
                 }
               : null;
           })

@@ -543,7 +543,8 @@ async function runChromeTest() {
                 method === "POST"
                   ? { action: "saved", ok: true, status: "cal_saved" }
                   : window.__sameLinkAmendment
-                    ? { action: "status", connected: true, ok: true, status: "update_calendar" }
+                    ? { action: "status", connected: true, ok: true, status:
+                        window.__calendarStatusStaleUntilAck && !window.__amendmentAcknowledged ? "cal_saved" : "update_calendar" }
                     : driverCalendarReturnState === "saved"
                     ? { action: "status", connected: true, ok: true, status: "cal_saved" }
                     : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
@@ -1876,18 +1877,19 @@ async function runChromeTest() {
       return afterState;
     };
 
-    const verifyAmendmentAcknowledgement = async () => {
+    const verifyAmendmentAcknowledgement = async (staleCalendar = false) => {
     await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
     await saveDriverJobGoogleCalendar();
     const writesBeforeAmendment=await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`);
-    await evaluate(`window.__sameLinkAmendment=true; window.dispatchEvent(new Event('focus')); true`);
-    await waitForCondition(()=>evaluate(`document.body.innerText.includes('Same Link Amended Pickup') && document.body.innerText.includes('Update needed')`),12000,'same-token amendment refresh and existing Calendar status');
+    await evaluate(`window.__sameLinkAmendment=true; window.__calendarStatusStaleUntilAck=${staleCalendar}; window.dispatchEvent(new Event('focus')); true`);
+    await waitForCondition(()=>evaluate(`document.body.innerText.includes('Same Link Amended Pickup') && document.body.innerText.includes('${staleCalendar ? "Calendar saved" : "Update needed"}')`),12000,'same-token amendment refresh and existing Calendar status');
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-driver-job-acknowledged-state="true"]'))`),true,'Same-link refresh preserves acknowledged state');
     assert.deepEqual(await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`),writesBeforeAmendment,'Amendment refresh must not write Calendar, ACK, reports or GPS');
     assert.equal(await evaluate(`document.querySelector('[data-driver-job-save-acknowledge="true"]')?.textContent.trim()`),'Acknowledge amended job');
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-driver-job-detail-name="true"]'))`),false,'Amendment ACK does not reopen driver identity editing');
     await evaluate(`document.querySelector('[data-driver-job-save-acknowledge="true"]').click();true`);
     await waitForCondition(()=>evaluate(`window.__amendmentAcknowledged===true && !document.querySelector('[data-driver-job-save-acknowledge="true"]')`),12000,'latest amendment acknowledged through the existing control');
+    await waitForCondition(()=>evaluate(`document.body.innerText.includes('Update needed') && Boolean(document.querySelector('[data-driver-job-calendar-action="true"]'))`),12000,'amendment ACK refreshes Calendar status without reopening');
     assert.deepEqual(await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`),
       [...writesBeforeAmendment,`PATCH /api/driver-job/${mockDriverJobTokens.workflowOrder}`],
       'One existing ACK request, no personal Calendar, status or GPS write');
@@ -1903,6 +1905,7 @@ async function runChromeTest() {
       });
       assert.equal(seedAck.ok,true,"Seed only the local mock job's original acceptance");
       await verifyAmendmentAcknowledgement();
+      await verifyAmendmentAcknowledgement(true);
       assert.equal(await evaluate("document.documentElement.scrollWidth > window.innerWidth"),false);
       assert.deepEqual(browserErrors,[]);assert.deepEqual(browserConsoleErrors,[]);
       const screenshot=await client.send("Page.captureScreenshot",{format:"png"});

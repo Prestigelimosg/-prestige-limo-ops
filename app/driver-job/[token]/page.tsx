@@ -1858,6 +1858,9 @@ export default function DriverJobPage() {
   async function saveAndAcknowledgeJob() {
     if(accountActivationRequired && !accountActivationPassed)return;
     const nextDetails = cleanDriverDetails(driverDetails);
+    const refreshAmendedCalendar = acknowledged && pageState.kind === "ready" &&
+      pageState.job.amendmentAckPending === true && driverCalendar.action === "idle";
+    const calendarRevision = driverCalendarActionRevisionRef.current;
 
     setDriverDetails(nextDetails);
 
@@ -1989,6 +1992,30 @@ export default function DriverJobPage() {
           : defaultAcknowledgedDetailsFeedback,
       );
       addActivity("Job acknowledged", "Driver and vehicle details were confirmed for this assigned job.");
+      // A saved amendment must not leave an old Calendar saved badge hiding the
+      // existing update action. Read status only; the driver still saves explicitly.
+      if (refreshAmendedCalendar && loadedDriverJobTokenRef.current === token &&
+          calendarRevision === driverCalendarActionRevisionRef.current) {
+        const statusRevision = ++driverCalendarActionRevisionRef.current;
+        try {
+          const calendarResponse = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`, {
+            cache: "no-store",
+          });
+          const calendarResult = await calendarResponse.json() as DriverCalendarApiResponse;
+          if (loadedDriverJobTokenRef.current !== token || statusRevision !== driverCalendarActionRevisionRef.current) return;
+          if (!calendarResponse.ok || !calendarResult.ok) throw new Error("Calendar status unavailable");
+          setDriverCalendar((current) => current.action !== "idle" ? current : ({
+            ...current, status: calendarResult.status, connected: calendarResult.connected === true,
+            feedback: null,
+          }));
+        } catch {
+          if (loadedDriverJobTokenRef.current !== token || statusRevision !== driverCalendarActionRevisionRef.current) return;
+          setDriverCalendar((current) => current.action !== "idle" ? current : ({
+            ...current, status: "unavailable",
+            feedback: { tone: "error", text: "Job acknowledged. Calendar status could not be checked. Try Add / Update Calendar when connected." },
+          }));
+        }
+      }
     } catch {
       setSavedDriverDetails(null);
       setDetailsFeedback({

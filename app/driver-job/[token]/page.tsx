@@ -2164,7 +2164,7 @@ export default function DriverJobPage() {
 
     try {
       const position = await new Promise<DriverLiveLocationBrowserPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, driverLiveLocationPositionOptions);
+        navigator.geolocation.getCurrentPosition(resolve, reject, { ...driverLiveLocationPositionOptions, maximumAge: 0 });
       });
 
       setDriverLiveLocation((currentState) => ({

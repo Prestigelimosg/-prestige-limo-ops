@@ -28,6 +28,99 @@ const [eventHelper, googleHelper, persistence, route, callback, nativeStart, pag
     readFile(suitePath, "utf8"),
   ]);
 
+// Execute the real ACK callback with an already-open page's stale saved status.
+// Replace only network and React setters; no copied acknowledgement logic.
+const ackTree = ts.createSourceFile(pagePath, page, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let ackNode;
+let refreshNode;
+function findAck(node) {
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "saveAndAcknowledgeJob") ackNode = node;
+  if (ts.isVariableDeclaration(node) && node.name.getText(ackTree) === "refreshDriverAppUpdates") refreshNode = node.initializer.arguments[0];
+  ts.forEachChild(node, findAck);
+}
+findAck(ackTree);
+assert.ok(ackNode);
+const ackRuntime = ts.transpileModule(`${ackNode.getText(ackTree)}\nconst refresh = ${refreshNode.getText(ackTree)};\nreturn {run:saveAndAcknowledgeJob,refresh};`, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+}).outputText;
+function ackHarness(options = {}) {
+  const details = {name:"QA Driver",contact:"00000000",plate:"QA",vehicleModel:"QA car"};
+  const env = {
+    accountActivationRequired:false, accountActivationPassed:true, driverDetails:details,
+    cleanDriverDetails:v=>v, embeddedDriverApp:true, acknowledged:true, token:"qa-calendar-ack",
+    pageState:{kind:"ready",job:{amendmentAckPending:true,acknowledgementRevision:"a".repeat(64)}},
+    driverCalendar:{action:"idle",status:"cal_saved",connected:true,feedback:{tone:"success",text:"Old saved feedback"}},
+    emptyDriverCalendarState:{action:"idle",status:"unavailable",connected:false,feedback:null},
+    loadedDriverJobTokenRef:{current:"qa-calendar-ack"}, driverCalendarActionRevisionRef:{current:0},
+    driverAppUpdatesRequestSequenceRef:{current:0}, driverAppUpdatesAbortControllerRef:{current:null},
+    driverAmendmentRefreshKeyRef:{current:""}, reportDriverActivity:()=>{},
+    currentEmbeddedDriverInstallationId:()=>"qa-installation", driverDeviceAlertReadiness:{ready:false},
+    requestEmbeddedNativeNotificationsOnce:()=>false, addActivity:()=>{},
+    defaultAcknowledgedDetailsFeedback:{tone:"success",text:"Acknowledged"},
+    normalizeBlockedReason:()=>"unavailable", blockedMessages:{unavailable:"ACK failed"},
+    ...options,
+  };
+  for (const key of ["DriverDetails","SavedDriverDetails","DriverDetailsEditorOpen","Acknowledged","DriverCalendar","DriverAppUpdates","StatusFeedback","WorkflowStatus","PageState","DriverPortalEnrolled","DetailsFeedback","SavingDriverDetails"]) {
+    const state = key[0].toLowerCase()+key.slice(1);
+    env[`set${key}`] = value => { env[state] = typeof value === "function" ? value(env[state]) : value; };
+  }
+  env.calls=[];
+  env.fetch=async (url, init={}) => {
+    env.calls.push([init.method || "GET",url]);
+    if(url.includes("/notifications")) return {ok:true,json:async()=>({ok:true,notifications:[{id:"qa-amendment",workflow_area:"driver_job_link_delivery"}]})};
+    if(!url.endsWith("/calendar") && !init.method) return {ok:true,json:async()=>({ok:true,payload:{...env.pageState.job,acknowledged:true}})};
+    if(init.method === "PATCH") return {ok:!env.ackFails,json:async()=>env.ackFails
+      ? {ok:false,reason:"unavailable"}
+      : {ok:true,payload:{assignedDriver:details,acknowledged:true,amendmentAckPending:false,status:"assigned"}}};
+    assert.equal(url,"/api/driver-job/qa-calendar-ack/calendar");
+    assert.equal(init.cache,"no-store");
+    if(env.duringRead) env.duringRead();
+    if(env.readThrows) throw Error("offline");
+    return {ok:!env.readFails,json:async()=>env.readFails ? {ok:false} : {ok:true,connected:true,status:env.returnStatus || "update_calendar"}};
+  };
+  Object.assign(env,new Function("env",`with(env){${ackRuntime}}`)(env));
+  return env;
+}
+const staleAck = ackHarness();
+await staleAck.run();
+assert.equal(staleAck.driverCalendar.status,"update_calendar","Successful amendment ACK must refresh a stale Calendar saved status without reopening");
+assert.equal(staleAck.driverCalendar.feedback,null,"Old saved feedback must not survive the amendment status read");
+assert.deepEqual(staleAck.calls,[["PATCH","/api/driver-job/qa-calendar-ack"],["GET","/api/driver-job/qa-calendar-ack/calendar"]],"ACK only reads Calendar; never auto-writes the provider");
+for (const options of [{readFails:true},{readThrows:true}]) {
+  const h=ackHarness(options); await h.run();
+  assert.equal(h.acknowledged,true); assert.ok(h.savedDriverDetails);
+  assert.equal(h.detailsFeedback.tone,"success","Calendar read failure must not report the saved ACK as failed");
+  assert.equal(h.driverCalendar.status,"unavailable","Failed status read must not preserve a stale saved badge");
+  assert.equal(h.driverCalendar.feedback.tone,"error");
+}
+for (const options of [{ackFails:true},{acknowledged:false},{pageState:{kind:"ready",job:{amendmentAckPending:false}}}]) {
+  const h=ackHarness(options); await h.run(); assert.equal(h.calls.length,1,"No new read for failed ACK, first ACK or ordinary details save");
+}
+for (const mode of ["token","calendarAction"]) {
+  const h=ackHarness(); const before=h.driverCalendar;
+  h.duringRead=()=>{if(mode==="token")h.loadedDriverJobTokenRef.current="another-job";else h.driverCalendarActionRevisionRef.current++;};
+  await h.run(); assert.equal(h.driverCalendar,before,"Late status read cannot overwrite another job or newer Calendar action");
+}
+const alreadyCurrent=ackHarness({returnStatus:"cal_saved"}); await alreadyCurrent.run();
+assert.equal(alreadyCurrent.driverCalendar.status,"cal_saved","Use server status, never assume every amendment changes the event");
+const lateBackground=ackHarness();
+const normalFetch=lateBackground.fetch;
+let releaseOldRead, signalOldRead;
+const oldReadStarted=new Promise(resolve=>{signalOldRead=resolve;});
+let calendarReads=0;
+lateBackground.fetch=async (url,init)=>{
+  if(url.endsWith("/calendar") && ++calendarReads===1){
+    signalOldRead();
+    return new Promise(resolve=>{releaseOldRead=()=>resolve({ok:true,json:async()=>({ok:true,connected:true,status:"cal_saved"})});});
+  }
+  return normalFetch(url,init);
+};
+const backgroundRead=lateBackground.refresh({preserveContent:true});
+await oldReadStarted;
+await lateBackground.run();
+releaseOldRead(); await backgroundRead;
+assert.equal(lateBackground.driverCalendar.status,"update_calendar","Actual delayed background refresh cannot restore a stale saved badge after ACK");
+
 for (const fragment of [
   "buildDriverJobGoogleCalendarEvent",
   'timeZone: "Asia/Singapore"',

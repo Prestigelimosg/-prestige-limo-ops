@@ -32,6 +32,7 @@ const driverBetaTestFlightUrl = "https://testflight.apple.com/join/m3sjGfd3";
 type DriverJobApiBlockedReason =
   | "acknowledgement_required"
   | "already_acknowledged"
+  | "stale_revision"
   | "already_completed"
   | "expired"
   | "invalid_details"
@@ -393,6 +394,7 @@ const driverLiveLocationPositionOptions: PositionOptions = {
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   acknowledgement_required: "Acknowledge this job before updating status.",
   already_acknowledged: "This Job Link is already locked to the driver who saved and acknowledged it.",
+  stale_revision: "The job changed again. Reload and review the latest details before acknowledging.",
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
   invalid_details: "Driver details were not accepted. Check the name and contact dispatch if this continues.",
@@ -422,6 +424,7 @@ type PreparedDriverOtsPhoto = {
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
   return value === "acknowledgement_required" ||
     value === "already_acknowledged" ||
+    value === "stale_revision" ||
     value === "already_completed" ||
     value === "expired" ||
     value === "revoked" ||
@@ -1099,6 +1102,7 @@ export default function DriverJobPage() {
     () => Boolean(savedDriverDetails && driverDetailsMatch(driverDetails, savedDriverDetails)),
     [driverDetails, savedDriverDetails],
   );
+  const amendmentAckPending = pageState.kind === "ready" && pageState.job.amendmentAckPending === true;
 
   useEffect(() => {
     const embeddedDetectionFrame = window.requestAnimationFrame(() => {
@@ -1893,6 +1897,7 @@ export default function DriverJobPage() {
       const nativeInstallationId = currentEmbeddedDriverInstallationId();
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
         body: JSON.stringify({
+          expected_revision: pageState.kind === "ready" ? pageState.job.acknowledgementRevision : undefined,
           driver_contact: nextDetails.contact,
           driver_name: nextDetails.name,
           driver_plate_number: nextDetails.plate,
@@ -1912,7 +1917,7 @@ export default function DriverJobPage() {
       if (!response.ok || !result.ok) {
         const blockedReason = result.ok ? "unavailable" : normalizeBlockedReason(result.reason);
 
-        setSavedDriverDetails(null);
+        if (!acknowledged) setSavedDriverDetails(null);
         setDetailsFeedback({
           tone: "error",
           text: blockedMessages[blockedReason],
@@ -1931,7 +1936,7 @@ export default function DriverJobPage() {
       setSavedDriverDetails(confirmedDetails);
       setDriverDetailsEditorOpen(false);
       setAcknowledged(true);
-      setDriverCalendar(emptyDriverCalendarState);
+      if (!acknowledged) setDriverCalendar(emptyDriverCalendarState);
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
@@ -3073,25 +3078,26 @@ export default function DriverJobPage() {
                   className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-acknowledged-state="true"
                 >
-                  {acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
+                  {amendmentAckPending ? "Job amended — review the latest details and acknowledge." : acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
                 </p>
-                {!acknowledged ? (
+                {!acknowledged || amendmentAckPending ? (
                 <details
                   className="group"
                   data-driver-job-details-editor="true"
                   onToggle={(event) => setDriverDetailsEditorOpen(event.currentTarget.open)}
-                  open={driverDetailsEditorOpen || !driverDetailsSavedAndUnchanged}
+                  open={amendmentAckPending || driverDetailsEditorOpen || !driverDetailsSavedAndUnchanged}
                 >
                   <summary
                     className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2 text-sm font-semibold text-slate-900 ring-1 ring-slate-200"
                     data-driver-job-details-editor-summary="true"
                   >
-                    <span>{driverDetailsSavedAndUnchanged ? "Confirmed driver details" : "Enter driver details"}</span>
+                    <span>{amendmentAckPending ? "Confirm amended job" : driverDetailsSavedAndUnchanged ? "Confirmed driver details" : "Enter driver details"}</span>
                     <span className="shrink-0 text-xs font-bold text-slate-600">
-                      {driverDetailsSavedAndUnchanged ? "Edit" : acknowledged ? "Review" : "Required"}
+                      {amendmentAckPending ? "Required" : driverDetailsSavedAndUnchanged ? "Edit" : acknowledged ? "Review" : "Required"}
                     </span>
                   </summary>
                   <div className="mt-2.5 space-y-2.5">
+                {!acknowledged ? <>
                 <div className="grid gap-2">
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Paste Driver Details</span>
@@ -3169,17 +3175,20 @@ export default function DriverJobPage() {
                     />
                   </label>
                 </div>
+                </> : null}
                 <div className="space-y-2">
                   <button
                     className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     data-driver-job-save-acknowledge="true"
                     data-driver-primary-step="save-acknowledge"
-                    disabled={savingDriverDetails || driverDetailsSavedAndUnchanged || (accountActivationRequired && !accountActivationPassed)}
+                    disabled={savingDriverDetails || (driverDetailsSavedAndUnchanged && !amendmentAckPending) || (accountActivationRequired && !accountActivationPassed)}
                     onClick={saveAndAcknowledgeJob}
                     type="button"
                   >
                     {savingDriverDetails
                       ? "Saving..."
+                      : amendmentAckPending
+                        ? "Acknowledge amended job"
                       : driverDetailsSavedAndUnchanged
                         ? "Saved & Acknowledged"
                         : "Save & Acknowledge Job"}

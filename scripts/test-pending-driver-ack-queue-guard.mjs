@@ -43,6 +43,17 @@ assert.deepEqual(projectIds("loaded", {
   ...retainedLinks, "ACK-ONE": { ...firstLink, safe_summary: { acknowledged: true } },
 }), ["link-two"], "A fresh acknowledgement must still clear only its exact row.");
 assert.deepEqual(projectIds("loaded", {
+  ...retainedLinks, "ACK-ONE": { ...firstLink, safe_summary: { acknowledged: true, amendment_ack_pending: true } },
+}), ["link-one", "link-two"], "An original ACK must not hide the new amendment on the same link.");
+assert.deepEqual(projectIds("loaded", {
+  ...retainedLinks, "ACK-ONE": { ...firstLink, safe_summary: { acknowledged: true, amendment_ack_pending: false } },
+}), ["link-two"], "Acknowledging the current amendment clears only its exact existing row.");
+const amendedAt="2026-10-07T01:00:00Z";
+assert.equal(projectQueue({status:"loaded",linksByReference:{"ACK-ONE":{...firstLink,safe_summary:{
+  acknowledged:true,amendment_ack_pending:true,amendment_issued_at:amendedAt,
+}}}},queueBookings,b=>b.reference,b=>b.reference,issued=>issued,0,cleanDisplayText,savedBookerName)[0].waitingMinutes,
+amendedAt,"Amendment waiting time starts at the amendment, not the original job acceptance");
+assert.deepEqual(projectIds("loaded", {
   ...retainedLinks, "ACK-ONE": { ...firstLink, safe_summary: { ack_alert_closed: true } },
 }), ["link-two"], "A fresh exact-link Close must still clear its row.");
 assert.deepEqual(projectIds("error", {}), [], "Existing failed-read behavior is preserved.");

@@ -30,6 +30,7 @@ type DriverJobRouteContext = {
 const blockedStatusByReason = {
   acknowledgement_required: 409,
   already_acknowledged: 409,
+  stale_revision: 409,
   already_completed: 409,
   expired: 410,
   invalid_details: 400,
@@ -116,6 +117,7 @@ function readDriverDetailsBody(body: unknown) {
 
   return {
     devicePushSubscription: record.device_push_subscription,
+    expectedRevision: record.expected_revision,
     driverContact: record.driver_contact ?? record.driverContact,
     driverName: record.driver_name ?? record.driverName,
     driverPlateNumber: record.driver_plate_number ?? record.driverPlateNumber ?? record.driverPlate,

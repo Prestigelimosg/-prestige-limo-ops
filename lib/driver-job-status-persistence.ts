@@ -32,6 +32,7 @@ export type DriverJobPersistenceBlockedReason =
 
 export type DriverJobDetailsBlockedReason =
   | DriverJobPersistenceBlockedReason
+  | "stale_revision"
   | "already_acknowledged";
 
 export type DriverJobProductionPayloadResult =
@@ -132,6 +133,7 @@ type SaveDriverJobStatusPersistenceInput = LoadDriverJobPersistenceInput & {
 };
 
 type SaveDriverJobDetailsPersistenceInput = LoadDriverJobPersistenceInput & {
+  expectedRevision?: unknown;
   driverContact?: unknown;
   driverName?: unknown;
   driverPlateNumber?: unknown;
@@ -846,6 +848,8 @@ function safePayloadRecordFromLink(link: DriverJobLinkPersistenceRow) {
     driver_remark: source.driver_remark,
     booking_type: readFirstText(source, ["booking_type", "bookingType"]),
     driver_acknowledged_at: safeTextFromDb(context.driver_acknowledged_at, 80),
+    driver_amendment_ack_pending: context.driver_amendment_ack_pending === true,
+    driver_ack_required_revision: context.driver_ack_required_revision || context.job_card_revision,
     driver_contact: readFirstText(source, [
       "driver_contact",
       "driverContact",
@@ -994,6 +998,8 @@ function payloadForLink(
     ...safePayloadRecord,
     ...scheduleSource,
     driver_acknowledged_at: safePayloadRecord.driver_acknowledged_at,
+    driver_amendment_ack_pending: safePayloadRecord.driver_amendment_ack_pending,
+    driver_ack_required_revision: safePayloadRecord.driver_ack_required_revision,
     status: statusOverride || readFirstText(scheduleSource, ["status"]) || safePayloadRecord.status,
     statusHistory: statusHistory.map((event) => ({
       occurredAt: event.occurred_at,
@@ -1477,6 +1483,25 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
       return detailsBlockedResult("already_acknowledged");
     }
 
+    const context = asRecord(resolvedLink.link.safe_link_context);
+    if (context.driver_amendment_ack_pending === true || input.expectedRevision != null) {
+      if (typeof input.expectedRevision !== "string" || !/^[a-f0-9]{64}$/.test(input.expectedRevision)) {
+        return detailsBlockedResult("stale_revision");
+      }
+      const { data, error } = await input.client.rpc(
+        context.combo_id ? "acknowledge_current_driver_job_combo" : "acknowledge_current_driver_job_link",
+        {
+          p_booking_reference: resolvedLink.link.booking_reference, p_link_id: resolvedLink.link.id,
+          p_token_hash: safeHashToken(input.token), p_driver_id: resolvedLink.link.driver_id,
+          p_name: nextDetails.name, p_contact: nextDetails.contact, p_plate: nextDetails.plate,
+          p_vehicle: nextDetails.vehicleModel, p_expected_revision: input.expectedRevision,
+        },
+      );
+      const updated = toLinkPersistenceRow(asRecord(data));
+      if (error || !updated) return detailsBlockedResult(error?.code === "P0002" ? "stale_revision" : "not_configured");
+      resolvedLink.link = updated;
+    }
+
     const currentSafeSchedule = await loadCurrentSafeBookingSchedule(
       input.client,
       resolvedLink.link,
@@ -1531,10 +1556,11 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
       p_booking_reference: resolvedLink.link.booking_reference, p_link_id: resolvedLink.link.id,
       p_token_hash: safeHashToken(input.token), p_driver_id: verifiedDriverId,
       p_name: nextDetails.name, p_contact: nextDetails.contact, p_plate: nextDetails.plate, p_vehicle: nextDetails.vehicleModel,
+      ...(input.expectedRevision != null ? {p_expected_revision: input.expectedRevision} : {}),
     },
   );
   const updatedLink = toLinkPersistenceRow(asRecord(acknowledgedData));
-  if (acknowledgeError || !updatedLink) return detailsBlockedResult("not_configured");
+  if (acknowledgeError || !updatedLink) return detailsBlockedResult(acknowledgeError?.code === "P0002" ? "stale_revision" : "not_configured");
 
   const supersessionSaved = await expireOlderDifferentDriverLinksAfterAcknowledgement({
     acknowledgedAt,

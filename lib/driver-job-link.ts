@@ -18,6 +18,8 @@ export type DriverJobBookingLike = Record<string, unknown>;
 export type SafeDriverJobPayload = {
   driverRemark?: string;
   acknowledged: boolean;
+  amendmentAckPending?: boolean;
+  acknowledgementRevision?: string;
   reference: string;
   pickupDate: string;
   pickupTime: string;
@@ -195,6 +197,9 @@ export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike):
   return {
     ...(normalizeDriverRemark(booking.driver_remark) ? { driverRemark: normalizeDriverRemark(booking.driver_remark)! } : {}),
     acknowledged: Boolean(stringField(booking, "driver_acknowledged_at", "driverAcknowledgedAt")),
+    amendmentAckPending: booking.driver_amendment_ack_pending === true,
+    acknowledgementRevision: /^[a-f0-9]{64}$/.test(String(booking.driver_ack_required_revision || ""))
+      ? String(booking.driver_ack_required_revision) : undefined,
     reference: stringField(booking, "public_reference", "driver_job_reference", "reference"),
     pickupDate,
     pickupTime,

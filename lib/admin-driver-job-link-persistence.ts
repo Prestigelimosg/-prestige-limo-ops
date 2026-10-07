@@ -70,6 +70,8 @@ export type AdminDriverJobLinkRecord = {
       last_sent_at: string | null;
     };
     acknowledged: boolean;
+    amendment_ack_pending?: boolean;
+    amendment_issued_at?: string | null;
     acknowledged_at: string | null;
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
@@ -954,12 +956,14 @@ function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecor
       last_sent_at: null,
     },
     acknowledged: Boolean(acknowledgedAt),
+    amendment_ack_pending: Boolean(acknowledgedAt) && context.driver_amendment_ack_pending === true,
+    amendment_issued_at: validDateText(context.driver_amendment_issued_at),
     acknowledged_at: acknowledgedAt,
     assigned_driver: safeText(payload.assigned_driver_name) || null,
     assigned_driver_contact: safeText(payload.assigned_driver_contact) || null,
     assigned_driver_plate: safeText(payload.assigned_driver_plate) || null,
     job_card_kind:
-      jobCardKind && allowedJobCardKinds.has(jobCardKind)
+      context.driver_amendment_ack_pending === true ? "amendment" : jobCardKind && allowedJobCardKinds.has(jobCardKind)
         ? (jobCardKind as AdminDriverJobCardKind)
         : null,
     pickup_datetime: safeText(payload.pickup_datetime) || null,

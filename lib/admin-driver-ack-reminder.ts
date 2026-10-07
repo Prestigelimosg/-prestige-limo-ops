@@ -110,7 +110,8 @@ function linkIsActive(link: UnknownRecord): boolean {
 }
 
 function linkWasAcknowledged(link: UnknownRecord): boolean {
-  return Boolean(text(record(link.safe_link_context).driver_acknowledged_at, 80));
+  const context = record(link.safe_link_context);
+  return Boolean(text(context.driver_acknowledged_at, 80)) && context.driver_amendment_ack_pending !== true;
 }
 
 function bookingIsTerminal(booking: UnknownRecord): boolean {

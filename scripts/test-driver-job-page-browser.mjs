@@ -23,6 +23,7 @@ const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9228);
 const browserErrors = [];
 const browserConsoleErrors = [];
 const otsPreviewOnly = process.env.OTS_PREVIEW_ONLY === "1";
+const amendmentAckOnly = process.env.AMENDMENT_ACK_ONLY === "1";
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
@@ -720,9 +721,18 @@ async function runChromeTest() {
                   result.payload.statusLabel = "admin_review_required";
                   result.payload.pickupDateTime = "2026-09-14T12:00";
                 }
-                if (method === "GET" && window.__sameLinkAmendment) {
+                if (window.__sameLinkAmendment && result.payload) {
                   result.payload.pickupLocation = "Same Link Amended Pickup";
                   result.payload.route = "Same Link Amended Pickup > Mock Workflow Dropoff";
+                  result.payload.amendmentAckPending = !window.__amendmentAcknowledged;
+                  result.payload.acknowledgementRevision = "d".repeat(64);
+                }
+                if (method === "PATCH" && window.__sameLinkAmendment) {
+                  const posted=JSON.parse(args[1].body);
+                  if(posted.expected_revision!=="d".repeat(64)) throw new Error("Expected the reviewed amendment revision");
+                  window.__amendmentAcknowledged=true;
+                  result.payload.amendmentAckPending=false;
+                  result.payload.acknowledgementRevision="d".repeat(64);
                 }
                 if (method === "GET" && embeddedDriverMode === "account-profile") {
                   result.driver_account_profile = {
@@ -1012,7 +1022,7 @@ async function runChromeTest() {
       return state;
     };
 
-    if (!otsPreviewOnly) {
+    if (!otsPreviewOnly && !amendmentAckOnly) {
     // A first-time Android browser stays on its exact private job while downloading.
     await client.send("Emulation.setDeviceMetricsOverride", {
       width: 390, height: 844, deviceScaleFactor: 1, mobile: true,
@@ -1866,6 +1876,41 @@ async function runChromeTest() {
       return afterState;
     };
 
+    const verifyAmendmentAcknowledgement = async () => {
+    await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
+    await saveDriverJobGoogleCalendar();
+    const writesBeforeAmendment=await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`);
+    await evaluate(`window.__sameLinkAmendment=true; window.dispatchEvent(new Event('focus')); true`);
+    await waitForCondition(()=>evaluate(`document.body.innerText.includes('Same Link Amended Pickup') && document.body.innerText.includes('Update needed')`),12000,'same-token amendment refresh and existing Calendar status');
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-driver-job-acknowledged-state="true"]'))`),true,'Same-link refresh preserves acknowledged state');
+    assert.deepEqual(await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`),writesBeforeAmendment,'Amendment refresh must not write Calendar, ACK, reports or GPS');
+    assert.equal(await evaluate(`document.querySelector('[data-driver-job-save-acknowledge="true"]')?.textContent.trim()`),'Acknowledge amended job');
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-driver-job-detail-name="true"]'))`),false,'Amendment ACK does not reopen driver identity editing');
+    await evaluate(`document.querySelector('[data-driver-job-save-acknowledge="true"]').click();true`);
+    await waitForCondition(()=>evaluate(`window.__amendmentAcknowledged===true && !document.querySelector('[data-driver-job-save-acknowledge="true"]')`),12000,'latest amendment acknowledged through the existing control');
+    assert.deepEqual(await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`),
+      [...writesBeforeAmendment,`PATCH /api/driver-job/${mockDriverJobTokens.workflowOrder}`],
+      'One existing ACK request, no personal Calendar, status or GPS write');
+    };
+
+    if (amendmentAckOnly) {
+      assert.ok(["localhost", "127.0.0.1"].includes(new URL(appUrl).hostname), "Amendment fixture is local-only");
+      await resetMockDriverJobData();
+      await client.send("Emulation.setDeviceMetricsOverride", {width:390,height:844,deviceScaleFactor:1,mobile:true});
+      const seedAck=await fetch(driverJobApiUrl(mockDriverJobTokens.workflowOrder),{
+        method:"PATCH",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({driver_name:"Synthetic Driver",driver_contact:"00000000",driver_plate_number:"QA7",driver_vehicle_model:"QA car"}),
+      });
+      assert.equal(seedAck.ok,true,"Seed only the local mock job's original acceptance");
+      await verifyAmendmentAcknowledgement();
+      assert.equal(await evaluate("document.documentElement.scrollWidth > window.innerWidth"),false);
+      assert.deepEqual(browserErrors,[]);assert.deepEqual(browserConsoleErrors,[]);
+      const screenshot=await client.send("Page.captureScreenshot",{format:"png"});
+      await writeFile("/private/tmp/prestige-amendment-ack-browser.png",Buffer.from(screenshot.data,"base64"));
+      console.log("Amendment ACK browser passed: original acceptance, same-link refresh, one revision ACK, read-only identity, preserved Calendar and no overflow.");
+      return;
+    }
+
     if (otsPreviewOnly) {
       assert.ok(["localhost", "127.0.0.1"].includes(new URL(appUrl).hostname), "Focused photo fixture is local-only");
       await resetMockDriverJobData();
@@ -2280,13 +2325,7 @@ async function runChromeTest() {
       "Embedded notification enrollment must not repeat Save & Acknowledge or add another writer.",
     );
     assertNoSensitiveText(embeddedAcknowledgedReloadState);
-    await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
-    await saveDriverJobGoogleCalendar();
-    const writesBeforeAmendment=await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`);
-    await evaluate(`window.__sameLinkAmendment=true; window.dispatchEvent(new Event('focus')); true`);
-    await waitForCondition(()=>evaluate(`document.body.innerText.includes('Same Link Amended Pickup') && document.body.innerText.includes('Update needed')`),12000,'same-token amendment refresh and existing Calendar status');
-    assert.equal(await evaluate(`Boolean(document.querySelector('[data-driver-job-acknowledged-state="true"]'))`),true,'Same-link refresh preserves acknowledged state');
-    assert.deepEqual(await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`),writesBeforeAmendment,'Amendment refresh must not write Calendar, ACK, reports or GPS');
+    await verifyAmendmentAcknowledgement();
     await verifyDriverCalendarCallbackFeedback({
       expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
       expectedSaved: true,

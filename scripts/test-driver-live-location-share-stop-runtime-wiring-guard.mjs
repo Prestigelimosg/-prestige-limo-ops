@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -278,5 +279,29 @@ assertExcludes(
   /customer_price|driver_payout|customer_rates|driver_payout_rules|paynow|billing|invoice|payment|payout/i,
   "driver live-location share/stop runtime wiring without safety denylist",
 );
+
+// Exercise the actual initial-capture function with a browser cache containing
+// a pre-stop point. An explicit restart must acquire a new capture.
+const captureStart = driverJobPage.indexOf("async function requestDriverLiveLocationPosition() {");
+const captureEnd = driverJobPage.indexOf("async function postDriverLiveLocationPosition(", captureStart);
+assert.ok(captureStart >= 0 && captureEnd > captureStart);
+const captureJavaScript = ts.transpileModule(driverJobPage.slice(captureStart, captureEnd), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const cachedPosition = { timestamp: 1000, coords: { latitude: 1, longitude: 1 } };
+const freshPosition = { timestamp: 6000, coords: { latitude: 1, longitude: 1 } };
+const watcherOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 };
+let captureState = {};
+const capture = new Function("navigator", "setDriverLiveLocation", "driverLiveLocationPositionOptions",
+  `${captureJavaScript}; return requestDriverLiveLocationPosition;`)(
+  { geolocation: { getCurrentPosition(resolve, _reject, options) {
+    resolve(options.maximumAge === 0 ? freshPosition : cachedPosition);
+  } } },
+  (update) => { captureState = update(captureState); },
+  watcherOptions,
+);
+assert.equal(await capture(), freshPosition, "Share Location Again must not reuse a pre-stop cached GPS capture");
+assert.equal(captureState.permissionState, "granted");
+assert.equal(watcherOptions.maximumAge, 5000, "continuous watcher options remain unchanged");
 
 console.log("Driver live-location Share/Stop runtime wiring guard passed");

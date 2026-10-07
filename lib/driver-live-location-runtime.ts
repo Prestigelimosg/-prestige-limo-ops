@@ -25,6 +25,7 @@ type DriverLiveLocationBlockedReason =
   | "driver_live_location_capture_gate_closed"
   | "driver_live_location_config_not_ready"
   | "driver_live_location_invalid_position"
+  | "driver_live_location_position_before_stop"
   | "driver_live_location_job_not_assigned_active"
   | "driver_live_location_job_not_allowlisted"
   | "driver_live_location_runtime_mode_closed"
@@ -34,6 +35,7 @@ type DriverLiveLocationBlockedReason =
   | "driver_live_location_write_failed";
 
 type DriverLiveLocationClient = Pick<SupabaseClient, "from">;
+type DriverLiveLocationWriteClient = DriverLiveLocationClient & Pick<SupabaseClient, "rpc">;
 
 type DriverJobLinkRow = {
   booking_reference: string;
@@ -88,10 +90,10 @@ const terminalBookingStatuses = new Set([
   "job_completed",
 ]);
 
-let driverLiveLocationClientForTests: DriverLiveLocationClient | null = null;
+let driverLiveLocationClientForTests: DriverLiveLocationWriteClient | null = null;
 
 export function setDriverLiveLocationRuntimeClientForTests(
-  client: DriverLiveLocationClient | null,
+  client: DriverLiveLocationWriteClient | null,
 ) {
   driverLiveLocationClientForTests = client;
 }
@@ -664,10 +666,9 @@ function parsePositionPayload(body: UnknownRecord): DriverLiveLocationPosition |
     return null;
   }
 
-  const capturedAt =
-    cleanText(body.captured_at, 80) && Number.isFinite(new Date(String(body.captured_at)).getTime())
-      ? new Date(String(body.captured_at)).toISOString()
-      : new Date().toISOString();
+  const captureText = cleanText(body.captured_at, 80);
+  if (!captureText || !Number.isFinite(Date.parse(captureText))) return null;
+  const capturedAt = new Date(captureText).toISOString();
 
   return {
     accuracy_meters: boundedOptionalNumber(body.accuracy_meters, 0, 10000),
@@ -766,6 +767,8 @@ export async function handleDriverLiveLocationRuntimeRequest({
   request: Request;
   token: string;
 }) {
+  // Trusted server admission time, never taken from the browser/native payload.
+  const requestStartedAt = new Date().toISOString();
   if (!driverLiveLocationRuntimeGateOpen(env)) {
     return blockedResult(
       readDriverLiveLocationScaffoldGateState(env).capture_gate_configured
@@ -820,26 +823,15 @@ export async function handleDriverLiveLocationRuntimeRequest({
   }
 
   if (action === "stop") {
-    const { error: deleteError } = await clientResult.client
-      .from(latestPositionsTable)
-      .delete()
-      .eq("driver_job_link_id", resolved.link.id);
-
-    if (deleteError) {
-      return blockedResult("driver_live_location_write_failed", 503);
-    }
-
-    const auditInserted = await insertAuditEvent({
-      actorRole: "driver",
-      bookingReference: resolved.link.booking_reference,
-      client: clientResult.client,
-      driverJobLinkId: resolved.link.id,
-      env,
-      eventType: "share_stopped",
-      sourceSurface: "driver_job_api",
+    const { data, error } = await clientResult.client.rpc("persist_driver_live_location", {
+      p_action: "stop",
+      p_driver_job_link_id: resolved.link.id,
+      p_booking_reference: resolved.link.booking_reference,
+      p_position: null,
+      p_evidence_reference: evidenceReference(env),
+      p_request_started_at: requestStartedAt,
     });
-
-    if (!auditInserted) {
+    if (error || data !== "stopped") {
       return blockedResult("driver_live_location_write_failed", 503);
     }
 
@@ -868,40 +860,20 @@ export async function handleDriverLiveLocationRuntimeRequest({
   ).toISOString();
   const labels = labelsFromLink(resolved.link);
 
-  const { error } = await clientResult.client.from(latestPositionsTable).upsert(
-    {
-      ...labels,
-      ...position,
-      booking_reference: resolved.link.booking_reference,
-      driver_job_link_id: resolved.link.id,
-      evidence_reference: evidenceReference(env),
-      sharing_state: "active",
-      source_surface: "driver_job_api",
-      stale_after: staleAfter,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "driver_job_link_id",
-    },
-  );
-
-  if (error) {
-    return blockedResult("driver_live_location_write_failed", 503);
-  }
-
-  const auditInserted = await insertAuditEvent({
-    actorRole: "driver",
-    bookingReference: resolved.link.booking_reference,
-    client: clientResult.client,
-    driverJobLinkId: resolved.link.id,
-    env,
-    eventType: "position_updated",
-    sourceSurface: "driver_job_api",
+  const { data, error } = await clientResult.client.rpc("persist_driver_live_location", {
+    p_action: "share",
+    p_driver_job_link_id: resolved.link.id,
+    p_booking_reference: resolved.link.booking_reference,
+    p_position: { ...labels, ...position, stale_after: staleAfter },
+    p_evidence_reference: evidenceReference(env),
+    p_request_started_at: requestStartedAt,
   });
-
-  if (!auditInserted) {
-    return blockedResult("driver_live_location_write_failed", 503);
+  if (error) return blockedResult("driver_live_location_write_failed", 503);
+  if (data === "ignored") {
+    // Nonterminal: a late callback must not stop a freshly restarted native job.
+    return blockedResult("driver_live_location_position_before_stop", 409);
   }
+  if (data !== "stored") return blockedResult("driver_live_location_write_failed", 503);
 
   return {
     body: {

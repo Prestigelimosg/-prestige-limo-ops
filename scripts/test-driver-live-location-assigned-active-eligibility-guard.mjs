@@ -31,6 +31,7 @@ async function loadRuntimeHarness() {
   );
   const files = [
     "lib/driver-job-link.ts",
+    "lib/driver-job-remark.ts",
     "lib/driver-job-status-workflow.ts",
     "lib/driver-live-location-scaffold.ts",
     runtimeHelperPath,
@@ -57,7 +58,7 @@ async function loadRuntimeHarness() {
       const compiled = transpile(await readFile(file, "utf8")).replaceAll(
         'require("./driver-job-status-workflow.ts")',
         'require("./driver-job-status-workflow.js")',
-      );
+      ).replaceAll('require("./driver-job-remark.ts")', 'require("./driver-job-remark.js")');
       await writeFile(output, compiled);
     }),
   ]);
@@ -73,6 +74,9 @@ async function loadRuntimeHarness() {
 function createRuntimeClient(booking) {
   const state = {
     audits: [],
+    rpcCalls: [],
+    rpcResult: null,
+    rpcError: null,
     booking,
     deletes: 0,
     upserts: [],
@@ -137,6 +141,16 @@ function createRuntimeClient(booking) {
 
   return {
     client: {
+      async rpc(name, args) {
+        assert.equal(name, "persist_driver_live_location");
+        state.rpcCalls.push(args);
+        if (state.rpcError) return { data: null, error: state.rpcError };
+        if (state.rpcResult === "ignored") return { data: "ignored", error: null };
+        if (args.p_action === "stop") state.deletes += 1;
+        else state.upserts.push(args.p_position);
+        state.audits.push({ event_type: args.p_action === "stop" ? "share_stopped" : "position_updated" });
+        return { data: args.p_action === "stop" ? "stopped" : "stored", error: null };
+      },
       from(table) {
         return queryFor(table);
       },
@@ -302,6 +316,28 @@ try {
   assert.equal(assignedShare.status, 200);
   assert.equal(assigned.state.upserts.length, 1);
   assert.equal(assigned.state.audits.length, 1);
+  assert.equal(assigned.state.rpcCalls.length, 1, "GPS write must use atomic persistence RPC");
+  assert.equal(assigned.state.rpcCalls[0].p_driver_job_link_id, "11111111-1111-4111-8111-111111111111");
+  assert.equal(assigned.state.rpcCalls[0].p_booking_reference, bookingReference);
+  assert.ok(Number.isFinite(Date.parse(assigned.state.rpcCalls[0].p_request_started_at)));
+  for (const captured_at of [undefined, "bad-date", null]) {
+    const payload = await shareRequest().json();
+    if (captured_at === undefined) delete payload.captured_at; else payload.captured_at = captured_at;
+    const invalid = await harness.runtime.handleDriverLiveLocationRuntimeRequest({ action: "share", env: runtimeEnv(), token,
+      request: new Request("https://example.invalid", { method: "POST", body: JSON.stringify(payload) }) });
+    assert.equal(invalid.status, 400, "Do not fabricate freshness for missing/invalid capture time");
+  }
+  assigned.state.rpcResult = "ignored";
+  const stale = await harness.runtime.handleDriverLiveLocationRuntimeRequest({ action: "share", env: runtimeEnv(), token, request: shareRequest() });
+  assert.equal(stale.status, 409, "Old upload rejection must be nonterminal for native tracking");
+  assert.equal(stale.body.reason, "driver_live_location_position_before_stop");
+  assigned.state.rpcResult = null;
+  assigned.state.rpcError = new Error("synthetic persistence failure");
+  const unavailable = await harness.runtime.handleDriverLiveLocationRuntimeRequest({ action: "share", env: runtimeEnv(), token, request: shareRequest() });
+  assert.equal(unavailable.status, 503);
+  assert.equal(assigned.state.upserts.length, 1, "No fallback direct write after failed atomic RPC");
+  assigned.state.rpcError = null;
+
 
   const terminal = createRuntimeClient({
     admin_internal_status: "completed",

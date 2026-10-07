@@ -78,6 +78,7 @@ export type AdminSavedBookingRecord = {
   driver_payout_unit: string | null;
   driver_plate_number: string | null;
   dropoff_address: string | null;
+  dropoff_datetime: string | null;
   dropoff_location: string | null;
   extra_stop_count: number | null;
   extra_stop_payout: number | null;
@@ -448,7 +449,14 @@ async function loadAdminSavedBookingsWithSchemaFallback<T>(
 ): Promise<SavedBookingSelectResult<T>> {
   let lastResult: SavedBookingSelectResult<T> | null = null;
 
-  for (const selectedColumns of adminSavedBookingReadSelects) {
+  // Keep the saved planned end across every supported schema shape, while
+  // retaining the existing reads for older schemas without that optional column.
+  const compatibleSelects = [
+    ...adminSavedBookingReadSelects.map((columns) => `${columns}, dropoff_datetime`),
+    ...adminSavedBookingReadSelects,
+  ];
+
+  for (const selectedColumns of compatibleSelects) {
     const result = await buildQuery(selectedColumns);
 
     if (!result.error || !isColumnMissingFailure(result.error)) {
@@ -685,6 +693,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     driver_payout_unit: textOrNull(row.driver_payout_unit, 80),
     driver_plate_number: textOrNull(row.driver_plate_number, 120),
     dropoff_address: textOrNull(row.dropoff_address, 1000),
+    dropoff_datetime: textOrNull(row.dropoff_datetime, 120),
     dropoff_location: textOrNull(row.dropoff_location, 1000),
     extra_stop_count:
       normalizedServiceItemCount(row.booking_service_items, "extra_stop") ??

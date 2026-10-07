@@ -468,6 +468,41 @@ const seed = {
 
 const harness = await loadHarness();
 
+// Exercise the established Dispatch mapper and save formatter with the actual
+// route response. Unrelated display helpers are fixed synthetic fixture values.
+const pageSource = await readFile("app/page.tsx", "utf8");
+const pageAst = ts.createSourceFile("page.tsx", pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const dispatchFunctionNames = [
+  "bookingRecordToOperationalFormFields",
+  "singaporePickupDateTimePartsFromTimestamp",
+  "formatAdminBookingDspEndDateTime",
+];
+const dispatchFunctions = pageAst.statements.filter(
+  (node) => ts.isFunctionDeclaration(node) && dispatchFunctionNames.includes(node.name?.text),
+);
+assert.equal(dispatchFunctions.length, dispatchFunctionNames.length);
+const clean = (value) => value == null ? "" : String(value).trim();
+const dispatchBindings = {
+  clean,
+  getRoutePoints: (row) => [row.pickup_location, row.dropoff_location].filter(Boolean),
+  adminDriverJobLinkCanonicalOperationalRoute: clean,
+  normalizeExtraStopCount: (value) => Number(value) || 0,
+  normalizePickupTimeForStorage: clean,
+  formatPickupTimeFromRecord: () => "1800",
+  safeDriverVehicleModelFromBookingRecord: () => "Combi",
+  getBookingCustomerAccountDisplayName: () => "Fixture company",
+  getBookingDateKey: () => "2026-10-07",
+  getBookerName: () => "Fixture booker",
+  getBookingName: (row) => row.passenger_name,
+  safeAdminBookingPersistenceCount: () => null,
+  normalizeChildSeatCount: () => 0,
+};
+const dispatch = new Function(...Object.keys(dispatchBindings), transpileTypescript(
+  dispatchFunctions.map((node) => node.getText(pageAst)).join("\n") +
+    `\nreturn { ${dispatchFunctionNames.join(", ")} };`,
+  "dispatch-dsp-end-fixture.ts",
+))(...Object.values(dispatchBindings));
+
 try {
   const { reader, route } = harness;
 
@@ -533,6 +568,48 @@ try {
   );
 
   setEnv(enabledEnv());
+
+  for (const [storedEnd, expectedDate, expectedTime] of [
+    ["2026-10-07T12:00:00+00:00", "2026-10-07", "2000"],
+    ["2026-10-07T18:30:00+00:00", "2026-10-08", "0230"],
+    [null, "", ""],
+  ]) {
+    const dspMock = installMockClient({ bookings: [{
+      ...seed.bookings[0], service_type: "DSP", booking_type: "DSP",
+      pickup_at: "2026-10-07T10:00:00Z", dropoff_datetime: storedEnd,
+    }] });
+    for (const query of ["?limit=100", "?scope=monitorable", "?id=save-read-1"]) {
+      const result = await routeJson(await route.GET(new Request(
+        `http://localhost/api/admin-saved-bookings${query}`, { headers: sessionHeaders() },
+      )));
+      assert.equal(result.status, 200);
+      const record = result.body.booking || result.body.bookings[0];
+      assert.equal(record.dropoff_datetime, storedEnd,
+        "Admin read must carry the saved DSP end into Open / Edit, including a genuinely blank end.");
+      const form = dispatch.bookingRecordToOperationalFormFields(record);
+      assert.equal(form.dspEndDate, expectedDate);
+      assert.equal(form.dspEndTime, expectedTime);
+      // A pickup-only amendment must not erase the end loaded from persistence.
+      const nextEnd = dispatch.formatAdminBookingDspEndDateTime({ ...form, time: "1815" });
+      assert.equal(nextEnd ? Date.parse(nextEnd) : null, storedEnd ? Date.parse(storedEnd) : null);
+      assertNoUnsafeResponse(result, "DSP planned end read");
+    }
+    assertNoWrites(dspMock, "DSP planned end read-to-form");
+  }
+
+  const noEndColumnMock = installMockClient(seed, {
+    failures: { "select:bookings": ({ selectedColumns }) =>
+      selectedColumns.split(", ").includes("dropoff_datetime")
+        ? { code: "42703", message: "column bookings.dropoff_datetime does not exist" } : null },
+  });
+  const noEndColumnResult = await routeJson(await route.GET(new Request(
+    "http://localhost/api/admin-saved-bookings?id=save-read-1", { headers: sessionHeaders() },
+  )));
+  assert.equal(noEndColumnResult.status, 200, "Older schemas must retain the established read fallback.");
+  assert.equal(noEndColumnResult.body.booking.dropoff_datetime, null);
+  assert.equal(noEndColumnResult.body.booking.customer_price_amount, 88);
+  assert.equal(noEndColumnResult.body.booking.driver_payout_amount, 55);
+  assertNoWrites(noEndColumnMock, "older schema without planned end");
 
   const mixedSchemaMock = installMockClient({ bookings: [
     { ...seed.bookings[0], status: "completed", admin_internal_status: "draft" },
@@ -832,6 +909,7 @@ try {
       bookings: [
         {
           id: "current-schema-booking",
+          dropoff_datetime: "2026-07-03T05:00:00+00:00",
           admin_internal_status: "draft",
           booking_reference: "ADM-20260630160450",
           booker_id: 11,
@@ -906,6 +984,7 @@ try {
   assert.equal(currentSchemaResult.body.booking.id, "current-schema-booking");
   assert.equal(currentSchemaResult.body.booking.booking_reference, "ADM-20260630160450");
   assert.equal(currentSchemaResult.body.booking.pickup_at, "2026-07-03T03:00:00+00:00");
+  assert.equal(currentSchemaResult.body.booking.dropoff_datetime, "2026-07-03T05:00:00+00:00");
   assert.equal(currentSchemaResult.body.booking.service_type, "TRF");
   assert.equal(currentSchemaResult.body.booking.contact_display_name, null);
   assert.equal(
@@ -955,7 +1034,9 @@ try {
     ["legacy schema fallback", "booking_service_items", 3],
     ["current schema without public reference", "public_booking_reference", 2],
   ]) {
-    const compatibilityMock = installMockClient(seed, {
+    const compatibilityMock = installMockClient({ bookings: [{
+      ...seed.bookings[0], dropoff_datetime: "2026-10-07T12:00:00+00:00",
+    }] }, {
       failures: {
         "select:bookings": ({ selectedColumns }) =>
           selectedColumns.split(", ").some((column) => column === rejectedColumn || column.startsWith(`${rejectedColumn}(`))
@@ -970,6 +1051,7 @@ try {
     ));
     assert.equal(compatibilityResult.status, 200, label);
     assert.equal(compatibilityResult.body.booking.id, "save-read-1", label);
+    assert.equal(compatibilityResult.body.booking.dropoff_datetime, "2026-10-07T12:00:00+00:00", label);
     assert.equal(compatibilityMock.client.selectHistory.length, expectedQueries, label);
     const successfulSelect = compatibilityMock.client.selectHistory.at(-1).selectedColumns;
     assert.equal(successfulSelect.split(", ").includes(rejectedColumn), false, label);
@@ -1009,6 +1091,7 @@ try {
       bookings: [
         {
           id: "foundation-schema-booking",
+          dropoff_datetime: "2026-07-03T05:00:00+00:00",
           booking_reference: "LEGACY-FOUNDATION-1",
           booking_type: "DEP",
           created_at: "2026-06-30T15:00:00.000Z",
@@ -1054,6 +1137,7 @@ try {
   assert.equal(foundationFallbackResult.status, 200);
   assert.equal(foundationFallbackResult.body.ok, true);
   assert.equal(foundationFallbackResult.body.booking.id, "foundation-schema-booking");
+  assert.equal(foundationFallbackResult.body.booking.dropoff_datetime, "2026-07-03T05:00:00+00:00");
   assert.equal(foundationFallbackResult.body.booking.booking_reference, "LEGACY-FOUNDATION-1");
   assert.equal(foundationFallbackResult.body.booking.booking_type, "DEP");
   assert.equal(foundationFallbackResult.body.booking.pickup_time, "1100");

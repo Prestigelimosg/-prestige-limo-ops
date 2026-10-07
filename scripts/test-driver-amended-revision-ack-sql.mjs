@@ -28,6 +28,16 @@ try {
   }
   const combo=read('supabase/migrations/20260923024634_saved_job_combo.sql');
   await db.query(combo.slice(combo.indexOf('create function public.apply_admin_driver_job_combo_links('),combo.indexOf('create function public.assign_admin_driver_job_combo(')));
+  // Optional read-only Production export: rehearse only the five reviewed writers locally.
+  if (process.env.DRIVER_ACK_BASELINE_FUNCTIONS) {
+    const definitions=JSON.parse(read(process.env.DRIVER_ACK_BASELINE_FUNCTIONS));
+    assert.equal(definitions.length,5);
+    for(const item of definitions) {
+      assert.equal(item.prosecdef,false);
+      assert.match(item.definition,/^CREATE OR REPLACE FUNCTION public\.(acknowledge_current_driver_job_(link|combo)|apply_admin_driver_job_(link|combo_links)|reserve_driver_job_link_delivery)\(/);
+      await db.query(item.definition);
+    }
+  }
   const payload={booking_type:'DEP',pickup_location:'Synthetic pickup',dropoff_location:'Synthetic airport',
     assigned_driver_name:'Synthetic Driver',assigned_driver_contact:'00000000',assigned_driver_plate:'QA7',assigned_driver_vehicle_model:'QA car'};
   const state={driver_name:null,driver_contact:null,driver_plate_number:null,vehicle_type_or_category:null};

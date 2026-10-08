@@ -393,7 +393,7 @@ for (const [name,change] of [
   const f=emergencyFixture();change(f);await run(f.db,f.options);
   assert.equal(emergencySends(f).length,0,name);
 }
-for (const status of ['otw','ots']) {
+for (const status of ['ots']) {
   const f=emergencyFixture();f.db.tables.driver_job_status_events.push({booking_reference:ref,status_value:status,occurred_at:'2026-09-10T05:24:00Z'});
   await run(f.db,f.options);assert.equal(emergencySends(f).length,1,`${status} without fresh GPS is not location evidence`);
 }
@@ -445,3 +445,70 @@ for (const failure of ['bookings','driver_job_links','driver_job_status_events',
   assert.equal(f.db.tables.driver_job_status_events.length,0);
 }
 console.log('Admin T-35 escalation passed: boundary/catch-up, late assignment, concurrency, GPS stop/recovery, exact assignment, overlap, failed evidence and Admin-only targeting.');
+
+// Owner rule: successfully persisted OTW closes only Admin location alerts.
+function addOtw(f, reference=ref, linkId=link, status='driver_otw') {
+  f.db.tables.driver_job_status_events.push({booking_reference:reference,driver_job_link_id:linkId,status_value:status,occurred_at:'2026-09-10T05:01:00Z'});
+}
+for (const status of ['driver_otw','otw']) {
+  for (const stale of [false,true]) {
+    const f=emergencyFixture();addOtw(f,ref,link,status);if(stale) fresh(f);
+    const before=JSON.stringify([f.db.tables.bookings,f.db.tables.driver_job_links,f.db.tables.driver_job_status_events,f.db.tables.driver_live_location_latest_positions]);
+    await run(f.db,f.options);
+    assert.equal(emergencies(f).length,0,'OTW must suppress T-35 even without fresh GPS');
+    assert.equal(emergencySends(f).length,0);
+    assert.equal(JSON.stringify([f.db.tables.bookings,f.db.tables.driver_job_links,f.db.tables.driver_job_status_events,f.db.tables.driver_live_location_latest_positions]),before);
+  }
+}
+{
+  const f=fixture();addOtw(f);
+  await run(f.db,f.options);
+  await run(f.db,{...f.options,now:new Date('2026-09-10T05:10:00Z')});
+  assert.equal(f.sends.filter(s=>s[0]==='admin').length,0,'OTW suppresses Admin five-minute warning');
+  assert.equal(f.db.tables.admin_app_notification_outbox.length,0);
+  assert.equal(f.sends.filter(s=>s[0]==='driver').length,2,'Driver reminder rules are unchanged');
+}
+for(const initial of ['followup','emergency']) {
+  const f=initial==='followup'?fixture():emergencyFixture();await run(f.db,f.options);
+  const alert=f.db.tables.admin_app_notification_outbox[0];assert.ok(alert);
+  const priorSends=f.sends.filter(s=>s[0]==='admin').length;
+  const unrelated={id:'unrelated',workflow_area:'other',notification_status:'queued'};
+  f.db.tables.admin_app_notification_outbox.push(unrelated);addOtw(f);
+  await run(f.db,{...f.options,now:new Date('2026-09-10T05:26:00Z')});
+  assert.equal(alert.notification_status,'archived','saved OTW closes existing Admin location warning');
+  assert.equal(unrelated.notification_status,'queued');
+  assert.equal(f.sends.filter(s=>s[0]==='admin').length,priorSends);
+}
+for(const [reference,linkId] of [['OTHER',link],[ref,'22222222-2222-4222-8222-222222222222']]) {
+  const f=emergencyFixture();addOtw(f,reference,linkId);
+  await run(f.db,f.options);assert.equal(emergencySends(f).length,1,'other job or unverified link OTW cannot suppress');
+}
+{
+  const f=emergencyFixture();const oldLink='22222222-2222-4222-8222-222222222222';
+  f.db.tables.driver_job_links.push({...f.db.tables.driver_job_links[0],id:oldLink,driver_id:9,created_at:'2026-09-09T03:00:00Z'});
+  addOtw(f,ref,oldLink);await run(f.db,f.options);
+  assert.equal(emergencySends(f).length,1,'previous driver OTW cannot suppress current driver warning');
+}
+{
+  const f=emergencyFixture();f.db.beforeQuery=q=>{
+    if(q.table==='admin_app_notification_outbox'&&q.op==='insert'&&q.payload.safe_context?.escalation==='pickup_35m') {
+      addOtw(f);
+      f.db.tables.driver_job_status_events.at(-1).occurred_at=new Date(f.options.now.getTime()+1000).toISOString();
+    }
+  };
+  await run(f.db,f.options);
+  assert.equal(emergencySends(f).length,0,'OTW during emergency reservation cancels push');
+  assert.equal(emergencies(f)[0].notification_status,'archived');
+}
+{
+  const f=fixture();f.db.beforeQuery=q=>{
+    if(q.table==='customer_driver_app_notification_outbox'&&q.op==='insert') {
+      addOtw(f);
+      f.db.tables.driver_job_status_events.at(-1).occurred_at=new Date(f.options.now.getTime()+1000).toISOString();
+    }
+  };
+  await run(f.db,f.options);
+  assert.equal(f.sends.filter(s=>s[0]==='admin').length,0,'OTW before followup dispatch cancels Admin push');
+  assert.equal(f.db.tables.admin_app_notification_outbox[0].notification_status,'archived');
+}
+console.log('Saved OTW stops Admin T-35 and five-minute warnings; Driver reminders, exact ownership and source records preserved.');

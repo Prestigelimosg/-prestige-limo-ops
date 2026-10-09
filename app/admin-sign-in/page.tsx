@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 
 import { adminAccountAuthIsEnabled } from "../../lib/admin-account-session.ts";
 import { AdminSignInForm } from "./admin-sign-in-form";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  robots: { index: false },
+};
 
 export default async function AdminSignInPage({
   searchParams,

@@ -38,6 +38,29 @@ const entries = await Promise.all(
 );
 const source = Object.fromEntries(entries);
 
+// The public login document must stay out of Search without changing auth or
+// applying a robots rule to unrelated app routes through the root layout.
+const loginPageAst = ts.createSourceFile(
+  files.loginPage, source.loginPage, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
+);
+const metadataStatement = loginPageAst.statements.find((statement) =>
+  ts.isVariableStatement(statement) &&
+  statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) &&
+  statement.declarationList.declarations.some((declaration) =>
+    ts.isIdentifier(declaration.name) && declaration.name.text === "metadata"),
+);
+const metadataInitializer = metadataStatement?.declarationList.declarations.find(
+  (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === "metadata",
+)?.initializer;
+assert.ok(metadataInitializer, "Admin sign-in must export page-scoped indexing metadata");
+const metadataModule = ts.transpileModule(
+  `export default ${metadataInitializer.getText(loginPageAst)};`,
+  { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+).outputText;
+const metadataExports = {};
+new Function("exports", metadataModule)(metadataExports);
+assert.deepEqual(metadataExports.default, { robots: { index: false } });
+
 const sessionImplementation = `${source.boundary}\n${source.session}`;
 
 for (const phrase of [

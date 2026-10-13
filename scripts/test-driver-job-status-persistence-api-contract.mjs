@@ -804,7 +804,7 @@ try {
 
   process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = "true";
 
-  for (const [previous, next] of [["driver_otw", "OTS"], ["ots", "POB"], ["pob", "Job Completed"]]) {
+  for (const [previous, next] of [["ots", "POB"], ["pob", "Job Completed"]]) {
     let release;
     const probe = { after: [], events: [], delivery: new Promise(resolve => { release = resolve; }) };
     globalThis.__otwDeliveryProbe = probe;
@@ -820,40 +820,45 @@ try {
     assert.equal(probe.events.length, 3);
   }
 
-  {
+  for (const [previous, status, event] of [["", "OTW", "driver_otw"], ["driver_otw", "OTS", "driver_ots"]]) {
     const probe = { after: [], events: [], delivery: Promise.resolve() };
     globalThis.__otwDeliveryProbe = probe;
-    setDriverJobProductionSupabaseClientForTests(createSeededClient({ latestStatus: "" }));
+    setDriverJobProductionSupabaseClientForTests(createSeededClient({ latestStatus: previous }));
     try {
       const result = await applyProductionDriverJobStatusUpdate({
-        token: validToken, status: "OTW", afterResponse: () => { throw new Error("Unsupported host"); },
+        token: validToken, status, afterResponse: () => { throw new Error("Unsupported host"); },
       });
       assert.equal(result.ok, true);
-      assert.deepEqual(probe.events, ["outbox-saved", "customer-push", "driver_otw"], "Host registration failure must preserve both notifications");
+      assert.deepEqual(probe.events, ["outbox-saved", "customer-push", event], "Host registration failure must preserve both notifications");
     } finally { delete globalThis.__otwDeliveryProbe; }
   }
 
   // Actual route + production wrapper + persistence: a slow provider must not
-  // hold an accepted OTW response, and its existing notifications must still run.
-  {
+  // hold accepted OTW/OTS responses, and their existing notifications must still run.
+  for (const [previous, status, persisted, event, bookingType] of [
+    ["", "OTW", "driver_otw", "driver_otw", "DEP"],
+    ["driver_otw", "OTS", "ots", "driver_ots", "DEP"],
+    ["driver_otw", "OTS", "ots", "driver_ots", "DSP"],
+  ]) {
     let release;
     const probe = { after: [], events: [], delivery: new Promise(resolve => { release = resolve; }) };
     globalThis.__otwDeliveryProbe = probe;
-    const client = createSeededClient({ latestStatus: "" });
+    const client = createSeededClient({ latestStatus: previous, bookingType });
     setDriverJobProductionSupabaseClientForTests(client);
-    const pending = patchDriverJobStatus(validToken, "OTW");
+    const pending = patchDriverJobStatus(validToken, status);
     const early = await Promise.race([pending, new Promise(resolve => setTimeout(() => resolve("blocked"), 200))]);
     release();
     try {
-      assert.notEqual(early, "blocked", "Saved OTW response must not await push delivery");
+      assert.notEqual(early, "blocked", `Saved ${status} response must not await push delivery`);
       assert.equal(early.body.ok, true);
-      assertInsertedStatusEvent(client, "driver_otw");
+      assertInsertedStatusEvent(client, persisted, { totalOperations: bookingType === "DSP" ? 2 : 1 });
+      if (bookingType === "DSP") assertInsertedActualTimeEvent(client, "dsp_start", "ots", "dsp");
       assert.deepEqual(probe.events, ["outbox-saved"]);
       assert.equal(probe.after.length, 1);
       await probe.after[0]();
-      assert.deepEqual(probe.events, ["outbox-saved", "customer-push", "driver_otw"]);
+      assert.deepEqual(probe.events, ["outbox-saved", "customer-push", event]);
       const count = probe.after.length;
-      assert.equal((await patchDriverJobStatus(validToken, "OTW")).body.reason, "out_of_order");
+      assert.equal((await patchDriverJobStatus(validToken, status)).body.reason, "out_of_order");
       assert.equal(probe.after.length, count, "Rejected repeat must not schedule delivery");
     } finally {
       await pending;

@@ -125,7 +125,7 @@ type LoadDriverJobPersistenceInput = {
 };
 
 type SaveDriverJobStatusPersistenceInput = LoadDriverJobPersistenceInput & {
-  deferOtwPush?: (send: () => Promise<void>) => void;
+  deferStatusPush?: (send: () => Promise<void>) => void;
   completionNote?: unknown;
   exceptionReason?: unknown;
   safeStatusContext?: unknown;
@@ -1690,7 +1690,7 @@ export async function saveDriverJobStatusThroughStatusPersistence(
       bookingReference: resolvedLink.link.booking_reference,
       driverJobLinkId: resolvedLink.link.id,
       status: nextStatus,
-    }, nextStatus === "driver_otw" ? input.deferOtwPush : undefined);
+    }, nextStatus === "driver_otw" || nextStatus === "ots" ? input.deferStatusPush : undefined);
   } catch {
     customerNotification = customerInAppNotificationSkippedResult;
   }

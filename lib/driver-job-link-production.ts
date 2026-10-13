@@ -340,7 +340,7 @@ export async function applyProductionDriverJobStatusUpdate({
 
   const pendingPushes: Array<() => Promise<void>> = [];
   const result = await saveDriverJobStatusThroughStatusPersistence({
-    deferOtwPush: afterResponse ? (send) => { pendingPushes.push(send); } : undefined,
+    deferStatusPush: afterResponse ? (send) => { pendingPushes.push(send); } : undefined,
     client: clientResult.client,
     completionNote,
     exceptionReason,
@@ -361,7 +361,7 @@ export async function applyProductionDriverJobStatusUpdate({
         // A saved driver status must not fail because Admin device push is unavailable.
       }
     };
-    if (result.status === "driver_otw" && afterResponse) {
+    if ((result.status === "driver_otw" || result.status === "ots") && afterResponse) {
       // Status and the existing customer outbox row are already persisted.
       // Keep both existing senders in order, under the request's supported lifetime.
       const deliver = async () => {

@@ -914,8 +914,8 @@ try {
           mock.client, {bookingReference:"QA-OTW-DEFER", driverJobLinkId:null, status}, task => scheduled.push(task));
         assert.equal(result.ok, true);
         assert.equal(mock.client.tables[notificationTable].length, 1, "Persist exactly one outbox row before delivery");
-        assert.equal(scheduled.length, status === "driver_otw" ? 1 : 0);
-        assert.equal(sent.length, status === "driver_otw" ? 0 : 1);
+        assert.equal(scheduled.length, ["driver_otw", "ots"].includes(status) ? 1 : 0);
+        assert.equal(sent.length, ["driver_otw", "ots"].includes(status) ? 0 : 1);
         if (scheduled.length) await scheduled[0]();
         assert.equal(sent.length, 1, "Attempt original customer push exactly once even if it fails");
         assert.equal(sent[0].booking_reference, "QA-OTW-DEFER");

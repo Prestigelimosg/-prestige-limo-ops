@@ -3592,7 +3592,7 @@ export async function queueDriverStatusCustomerInAppNotification(
     driverJobLinkId: string | null;
     status: DriverStatusCustomerInAppStatus;
   },
-  deferOtwPush?: (send: () => Promise<void>) => void,
+  deferStatusPush?: (send: () => Promise<void>) => void,
 ): Promise<DriverStatusCustomerInAppFanoutResult> {
   const bookingReference = safeIdentifier(
     input.bookingReference,
@@ -3621,7 +3621,7 @@ export async function queueDriverStatusCustomerInAppNotification(
       actor_role: "driver",
       source_surface: "driver_api",
     },
-    input.status === "driver_otw" ? deferOtwPush : undefined,
+    input.status === "driver_otw" || input.status === "ots" ? deferStatusPush : undefined,
   );
 
   if (!created.ok) {

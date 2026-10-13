@@ -3300,6 +3300,7 @@ async function insertQuickReplyNotification(
     customer_display_sender_name?: string | null;
     source_surface: CustomerDriverAppNotificationRecord["source_surface"];
   },
+  deferCustomerPush?: (send: () => Promise<void>) => void,
 ): Promise<AdminBookingResult<CustomerDriverAppNotificationSafeRecord>> {
   const payload = {
     actor_label: actor.actor_label,
@@ -3375,14 +3376,18 @@ async function insertQuickReplyNotification(
   }
 
   if (notification.delivery_surface === "customer_app") {
-    try {
-      const { sendCustomerDevicePushAlertForAppUpdate } = await import(
-        "./customer-device-push-notification"
-      );
-      await sendCustomerDevicePushAlertForAppUpdate(client, notification);
-    } catch {
-      // A saved customer app notification must not fail because Customer device push is unavailable.
-    }
+    const sendCustomerAlert = async () => {
+      try {
+        const { sendCustomerDevicePushAlertForAppUpdate } = await import(
+          "./customer-device-push-notification"
+        );
+        await sendCustomerDevicePushAlertForAppUpdate(client, notification);
+      } catch {
+        // A saved customer app notification must not fail because Customer device push is unavailable.
+      }
+    };
+    if (deferCustomerPush) deferCustomerPush(sendCustomerAlert);
+    else await sendCustomerAlert();
   }
 
   return {
@@ -3587,6 +3592,7 @@ export async function queueDriverStatusCustomerInAppNotification(
     driverJobLinkId: string | null;
     status: DriverStatusCustomerInAppStatus;
   },
+  deferOtwPush?: (send: () => Promise<void>) => void,
 ): Promise<DriverStatusCustomerInAppFanoutResult> {
   const bookingReference = safeIdentifier(
     input.bookingReference,
@@ -3615,6 +3621,7 @@ export async function queueDriverStatusCustomerInAppNotification(
       actor_role: "driver",
       source_surface: "driver_api",
     },
+    input.status === "driver_otw" ? deferOtwPush : undefined,
   );
 
   if (!created.ok) {

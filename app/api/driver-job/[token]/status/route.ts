@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { applyDriverJobStatusUpdateContract } from "../../../../../lib/driver-job-link-contract.ts";
 import { applyProductionDriverJobStatusUpdate } from "../../../../../lib/driver-job-link-production.ts";
 import {
@@ -50,6 +51,7 @@ export async function PATCH(request: Request, context: DriverJobStatusRouteConte
 
   if (isProductionDriverJobLinkMode()) {
     const result = await applyProductionDriverJobStatusUpdate({
+      afterResponse: after,
       completionNote,
       exceptionReason,
       safeStatusContext,

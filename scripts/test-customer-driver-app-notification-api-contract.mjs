@@ -309,6 +309,7 @@ async function loadHarness() {
       path.join(tempDir, "app/api/driver-job/[token]/quick-replies/route.js"),
     ),
     driverRoute: require(path.join(tempDir, "app/api/driver-job/[token]/notifications/route.js")),
+    customerPush: require(path.join(tempDir, "lib/customer-device-push-notification.js")),
     notificationPersistence: require(
       path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
     ),
@@ -895,10 +896,32 @@ try {
     driverQuickReplyRoute,
     driverRoute,
     notificationPersistence,
+    customerPush,
     tripUpdatesAdapter,
   } = await loadHarness();
 
   try {
+    // Real outbox writer must finish before deferred delivery, retaining the
+    // same notification payload and synchronous behavior for other statuses.
+    const originalCustomerPush = customerPush.sendCustomerDevicePushAlertForAppUpdate;
+    try {
+      for (const status of ["driver_otw", "ots", "pob", "completed"]) {
+        const mock = installMockClient({bookings: [{booking_reference: "QA-OTW-DEFER", customer_id: "192"}]});
+        const scheduled = [];
+        const sent = [];
+        customerPush.sendCustomerDevicePushAlertForAppUpdate = async (_client, record) => { sent.push(record); throw new Error("Provider unavailable"); };
+        const result = await notificationPersistence.queueDriverStatusCustomerInAppNotification(
+          mock.client, {bookingReference:"QA-OTW-DEFER", driverJobLinkId:null, status}, task => scheduled.push(task));
+        assert.equal(result.ok, true);
+        assert.equal(mock.client.tables[notificationTable].length, 1, "Persist exactly one outbox row before delivery");
+        assert.equal(scheduled.length, ["driver_otw", "ots"].includes(status) ? 1 : 0);
+        assert.equal(sent.length, ["driver_otw", "ots"].includes(status) ? 0 : 1);
+        if (scheduled.length) await scheduled[0]();
+        assert.equal(sent.length, 1, "Attempt original customer push exactly once even if it fails");
+        assert.equal(sent[0].booking_reference, "QA-OTW-DEFER");
+        assert.equal(sent[0].delivery_surface, "customer_app");
+      }
+    } finally { customerPush.sendCustomerDevicePushAlertForAppUpdate = originalCustomerPush; }
     const maximumStoredCustomerMessage = "A".repeat(1000);
     const mappedLongMessageCentre = tripUpdatesAdapter.mapCustomerNotificationCentrePayload({
       alert_count: 1,

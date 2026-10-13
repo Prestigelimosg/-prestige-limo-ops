@@ -50,6 +50,7 @@ export type ProductionDriverJobDetailsUpdateResult =
   | DriverJobLinkDisabledResult;
 
 export type ProductionDriverJobStatusUpdateInput = {
+  afterResponse?: (send: () => Promise<void>) => void;
   completionNote?: unknown;
   exceptionReason?: unknown;
   safeStatusContext?: unknown;
@@ -321,6 +322,7 @@ export async function applyProductionDriverJobDetailsUpdate({
 // marker after completion. No Driver Database access, pricing, payout,
 // provider send, proof, or customer tracking path.
 export async function applyProductionDriverJobStatusUpdate({
+  afterResponse,
   completionNote,
   exceptionReason,
   safeStatusContext,
@@ -336,7 +338,9 @@ export async function applyProductionDriverJobStatusUpdate({
     return clientResult;
   }
 
+  const pendingPushes: Array<() => Promise<void>> = [];
   const result = await saveDriverJobStatusThroughStatusPersistence({
+    deferStatusPush: afterResponse ? (send) => { pendingPushes.push(send); } : undefined,
     client: clientResult.client,
     completionNote,
     exceptionReason,
@@ -347,13 +351,33 @@ export async function applyProductionDriverJobStatusUpdate({
   });
 
   if (result.ok) {
-    try {
-      const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
-      await sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status], {
-        vehiclePlate: result.payload.assignedDriver.plate,
-      });
-    } catch {
-      // A saved driver status must not fail because Admin device push is unavailable.
+    const sendAdminAlert = async () => {
+      try {
+        const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
+        await sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status], {
+          vehiclePlate: result.payload.assignedDriver.plate,
+        });
+      } catch {
+        // A saved driver status must not fail because Admin device push is unavailable.
+      }
+    };
+    if ((result.status === "driver_otw" || result.status === "ots") && afterResponse) {
+      // Status and the existing customer outbox row are already persisted.
+      // Keep both existing senders in order, under the request's supported lifetime.
+      const deliver = async () => {
+        for (const send of pendingPushes) {
+          try { await send(); } catch { /* A customer push failure must not skip Admin. */ }
+        }
+        await sendAdminAlert();
+      };
+      try {
+        afterResponse(deliver);
+      } catch {
+        // Preserve delivery if a host cannot register post-response work.
+        await deliver();
+      }
+    } else {
+      await sendAdminAlert();
     }
   }
 

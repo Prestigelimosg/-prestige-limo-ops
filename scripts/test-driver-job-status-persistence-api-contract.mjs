@@ -84,6 +84,29 @@ async function writeMockModules(tempDir) {
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  const nextPath = path.join(tempDir, "node_modules/next/server.js");
+  await mkdir(path.dirname(nextPath), { recursive: true });
+  await writeFile(nextPath, `exports.after = task => {
+    const probe = globalThis.__otwDeliveryProbe;
+    if (probe) probe.after.push(task);
+  };`);
+  await mkdir(path.join(tempDir, "lib"), { recursive: true });
+  await writeFile(path.join(tempDir, "lib/customer-driver-app-notification-persistence.ts"), `
+    exports.queueDriverStatusCustomerInAppNotification = async (client, input, deferPush) => {
+      const probe = globalThis.__otwDeliveryProbe;
+      if (!probe) throw new Error('Notification fixture unavailable');
+      probe.events.push('outbox-saved');
+      const send = async () => { probe.events.push('customer-push'); await probe.delivery; };
+      if (deferPush) deferPush(send); else await send();
+      return { ok: true, data: {} };
+    };`);
+  await writeFile(path.join(tempDir, "lib/admin-device-push-notification.ts"), `
+    exports.sendAdminDevicePushAlert = async event => {
+      const probe = globalThis.__otwDeliveryProbe;
+      if (!probe) throw new Error('Push fixture unavailable');
+      probe.events.push(event); await probe.delivery;
+    };`);
+
   await writeFile(
     webPushPath,
     "module.exports = { sendNotification: async () => undefined, setVapidDetails: () => undefined };",
@@ -780,6 +803,69 @@ try {
   });
 
   process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = "true";
+
+  for (const [previous, next] of [["ots", "POB"], ["pob", "Job Completed"]]) {
+    let release;
+    const probe = { after: [], events: [], delivery: new Promise(resolve => { release = resolve; }) };
+    globalThis.__otwDeliveryProbe = probe;
+    setDriverJobProductionSupabaseClientForTests(createSeededClient({ latestStatus: previous }));
+    const pending = patchDriverJobStatus(validToken, next);
+    const early = await Promise.race([pending, new Promise(resolve => setTimeout(() => resolve("blocked"), 30))]);
+    release();
+    const result = await pending;
+    delete globalThis.__otwDeliveryProbe;
+    assert.equal(early, "blocked", `${next} keeps its existing delivery timing`);
+    assert.equal(result.body.ok, true);
+    assert.equal(probe.after.length, 0);
+    assert.equal(probe.events.length, 3);
+  }
+
+  for (const [previous, status, event] of [["", "OTW", "driver_otw"], ["driver_otw", "OTS", "driver_ots"]]) {
+    const probe = { after: [], events: [], delivery: Promise.resolve() };
+    globalThis.__otwDeliveryProbe = probe;
+    setDriverJobProductionSupabaseClientForTests(createSeededClient({ latestStatus: previous }));
+    try {
+      const result = await applyProductionDriverJobStatusUpdate({
+        token: validToken, status, afterResponse: () => { throw new Error("Unsupported host"); },
+      });
+      assert.equal(result.ok, true);
+      assert.deepEqual(probe.events, ["outbox-saved", "customer-push", event], "Host registration failure must preserve both notifications");
+    } finally { delete globalThis.__otwDeliveryProbe; }
+  }
+
+  // Actual route + production wrapper + persistence: a slow provider must not
+  // hold accepted OTW/OTS responses, and their existing notifications must still run.
+  for (const [previous, status, persisted, event, bookingType] of [
+    ["", "OTW", "driver_otw", "driver_otw", "DEP"],
+    ["driver_otw", "OTS", "ots", "driver_ots", "DEP"],
+    ["driver_otw", "OTS", "ots", "driver_ots", "DSP"],
+  ]) {
+    let release;
+    const probe = { after: [], events: [], delivery: new Promise(resolve => { release = resolve; }) };
+    globalThis.__otwDeliveryProbe = probe;
+    const client = createSeededClient({ latestStatus: previous, bookingType });
+    setDriverJobProductionSupabaseClientForTests(client);
+    const pending = patchDriverJobStatus(validToken, status);
+    const early = await Promise.race([pending, new Promise(resolve => setTimeout(() => resolve("blocked"), 200))]);
+    release();
+    try {
+      assert.notEqual(early, "blocked", `Saved ${status} response must not await push delivery`);
+      assert.equal(early.body.ok, true);
+      assertInsertedStatusEvent(client, persisted, { totalOperations: bookingType === "DSP" ? 2 : 1 });
+      if (bookingType === "DSP") assertInsertedActualTimeEvent(client, "dsp_start", "ots", "dsp");
+      assert.deepEqual(probe.events, ["outbox-saved"]);
+      assert.equal(probe.after.length, 1);
+      await probe.after[0]();
+      assert.deepEqual(probe.events, ["outbox-saved", "customer-push", event]);
+      const count = probe.after.length;
+      assert.equal((await patchDriverJobStatus(validToken, status)).body.reason, "out_of_order");
+      assert.equal(probe.after.length, count, "Rejected repeat must not schedule delivery");
+    } finally {
+      await pending;
+      delete globalThis.__otwDeliveryProbe;
+    }
+  }
+
 
   {
     const client = createSeededClient({

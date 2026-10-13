@@ -8,10 +8,11 @@ const mappings = {
   "app/api/admin-saved-bookings/route.ts": "app/api/admin-saved-bookings/route.ts",
   "app/api/admin-driver-job-links/route.ts": "app/api/admin-driver-job-links/route.ts",
   "app/api/driver-job/*/route.ts": "app/api/driver-job/[token]/route.ts",
+  "app/api/driver-job/*/status/route.ts": "app/api/driver-job/[token]/status/route.ts",
 };
 assert.equal(config.regions, undefined, "Keep the project-wide region unchanged");
 assert.deepEqual(Object.keys(config.functions).sort(), Object.keys(mappings).sort(),
-  "Only the existing Driver Pool function and three proven routes may override regions");
+  "Only the established four functions and the exact status function may override regions");
 const routes = [];
 function collect(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -35,4 +36,4 @@ assert.deepEqual(config.crons, [
   { path: "/api/cron/codex-monthly-invoice-drafts", schedule: "0 0 1 * *" },
   { path: "/api/cron/ots-photo-retention", schedule: "15 19 * * *" },
 ], "The regional change must preserve every existing cron");
-console.log("Proven function region scope guard passed: three new routes, existing Driver Pool and crons preserved.");
+console.log("Proven function region scope guard passed: exact status route added; established regions and crons preserved.");

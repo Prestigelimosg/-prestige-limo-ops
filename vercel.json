@@ -12,6 +12,9 @@
     },
     "app/api/driver-job/*/route.ts": {
       "regions": ["sin1"]
+    },
+    "app/api/driver-job/*/status/route.ts": {
+      "regions": ["sin1"]
     }
   },
   "crons": [

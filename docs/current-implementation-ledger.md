@@ -1,3 +1,9 @@
+### Status Function Singapore QA Comparison (2026-10-13; local candidate, Production unchanged)
+
+- Owner approved a protected QA comparison after direct Production requests on QA11142 measured OTW 2679.1ms and OTS 2142.3ms without Mirroring. Deployed status lambda and response headers confirmed iad1 while Supabase is ap-southeast-1; the earlier private-job read override deliberately excluded this nested route.
+- Only vercel.json adds app/api/driver-job/*/status/route.ts placement in sin1. This matches one existing shared function; its GET/PATCH, token/transition checks, persistence, customer outbox, OTW/OTS after-response sends, synchronous POB/JC notifications, JC link expiry/GPS cleanup and explicit Admin completion boundary remain unchanged. No global region, other function, cron, route, handler, native, schema, Calendar or billing changes.
+- The existing region guard first fails on the missing status mapping, then locks the exact five-function map, one matching status route and unchanged cron schedules. Status and customer notification contracts passed before the configuration edit. Protected QA timings and notification/POB/JC acceptance remain pending; passing source guards alone are not runtime acceptance. No Production release is claimed.
+
 ### OTW And OTS Responses Do Not Wait For Push Delivery (2026-10-13; Safari QA accepted)
 
 - Owner approved the narrow OTW repair, then explicitly extended it to OTS after actual driver SPE2541B booking11130 showed 4.419s from saved OTW to Admin push acceptance and 3.933s for OTS. Production d725a1ea awaits customer notification/push and Admin push after the status is already saved. The Driver page waits for that response before clearing Saving; OTW also delays its established GPS handoff. These are observed post-save waits, not complete tap-to-screen measurements or proof of all-app latency.

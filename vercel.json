@@ -3,6 +3,15 @@
   "functions": {
     "app/api/admin-driver-job-bid-offers/route.ts": {
       "regions": ["sin1"]
+    },
+    "app/api/admin-saved-bookings/route.ts": {
+      "regions": ["sin1"]
+    },
+    "app/api/admin-driver-job-links/route.ts": {
+      "regions": ["sin1"]
+    },
+    "app/api/driver-job/*/route.ts": {
+      "regions": ["sin1"]
     }
   },
   "crons": [

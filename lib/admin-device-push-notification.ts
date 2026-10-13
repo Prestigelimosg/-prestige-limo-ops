@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { after } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webPush, { type PushSubscription } from "web-push";
@@ -34,6 +35,30 @@ const adminBrowserPushSubscriptionSource = "admin_dashboard";
 const expoPushEndpoint = "https://exp.host/--/api/v2/push/send";
 const expoPushReceiptEndpoint = "https://exp.host/--/api/v2/push/getReceipts";
 const adminNativeDeviceLabelPrefix = "admin-native-ios:";
+// QA registrations are permanently distinct, even after temporary policy removal.
+const adminQaNativeDeviceLabelPrefix = "admin-native-ios-qa:";
+const adminQaStatusEvents = new Set(["driver_otw", "driver_ots", "driver_pob", "driver_completed"]);
+
+function adminInstallationHash(installationId: string) {
+  return createHash("sha256").update(installationId).digest("hex");
+}
+
+function adminQaPushPolicy(env: EnvInput) {
+  try {
+    const value = JSON.parse(env.PRESTIGE_ADMIN_QA_PUSH_POLICY || "null");
+    if (!value || typeof value.installationHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.installationHash) ||
+      typeof value.bookingReference !== "string" || !/^[0-9]{1,12}$/.test(value.bookingReference) ||
+      typeof value.expiresAt !== "string") return null;
+    const remaining = Date.parse(value.expiresAt) - Date.now();
+    if (!(remaining > 0 && remaining <= 4 * 60 * 60 * 1000)) return null;
+    return { installationHash: value.installationHash, bookingReference: value.bookingReference };
+  } catch { return null; }
+}
+
+function isQaNativeLabel(value: unknown) {
+  return typeof value === "string" && value.startsWith(adminQaNativeDeviceLabelPrefix);
+}
 
 const requiredEnvNames = [
   adminDevicePushNotificationEnvGateName,
@@ -195,6 +220,8 @@ export type AdminDevicePushSender = (
 ) => Promise<void>;
 
 type AdminDevicePushAlertOptions = {
+  // Server-only routing evidence from the confirmed status result; never payload copy.
+  qaBookingReference?: string;
   pickupLocationState?: "missing" | "overlap";
   alertTarget?: unknown;
   pickupEmergencyMinutes?: number;
@@ -249,6 +276,7 @@ type LoadedAdminDevicePushSubscription = {
   endpoint: string;
   webSubscription: PushSubscription | null;
   supportsAlertTarget?: boolean;
+  qaInstallationHash?: string;
 };
 
 function cleanEnvValue(env: EnvInput, key: string): string | null {
@@ -500,9 +528,13 @@ export async function registerAdminDevicePushSubscription(
   }
 
   const supabase = createSupabaseClient(config);
+  const qaPolicy = adminQaPushPolicy(env);
+  const qaRegistration = parsed.channel === "native_ios" &&
+    qaPolicy?.installationHash === adminInstallationHash(parsed.installationId);
   const nativeDeviceLabel = parsed.channel === "native_ios"
-    ? adminNativeDeviceLabel(parsed.installationId)
+    ? qaRegistration ? `${adminQaNativeDeviceLabelPrefix}${parsed.installationId}` : adminNativeDeviceLabel(parsed.installationId)
     : null;
+  let mainNativeRow: { endpoint: string; device_label: string; actor_label: string } | null = null;
 
   if (parsed.channel === "native_ios") {
     const { data: activeNativeRows, error: activeNativeError } = await supabase
@@ -510,14 +542,28 @@ export async function registerAdminDevicePushSubscription(
       .select("endpoint, device_label, actor_label")
       .eq("source_surface", adminNativePushSubscriptionSource)
       .eq("subscription_status", "active")
-      .limit(3);
+      .limit(25);
     const rows = Array.isArray(activeNativeRows) ? activeNativeRows : [];
-    const existing = rows[0];
-    if (activeNativeError || rows.length > 1 || (existing && (
+    const mainRows = rows.filter((row) => !isQaNativeLabel(row.device_label));
+    const qaRows = rows.filter((row) => isQaNativeLabel(row.device_label));
+    const existing = mainRows[0];
+    mainNativeRow = existing || null;
+    const qaMismatch = qaRegistration && (
+      mainRows.length !== 1 || existing.actor_label !== actor.actor_label ||
+      existing.endpoint === parsed.endpoint || existing.device_label === adminNativeDeviceLabel(parsed.installationId) ||
+      qaRows.length > 1 || qaRows.some((row) => row.endpoint !== parsed.endpoint ||
+        row.device_label !== nativeDeviceLabel || row.actor_label !== actor.actor_label)
+    );
+    const mainMismatch = !qaRegistration && (mainRows.length > 1 || (existing && (
       existing.endpoint !== parsed.endpoint ||
       existing.device_label !== nativeDeviceLabel ||
       existing.actor_label !== actor.actor_label
-    ))) {
+    )) || qaRows.some((row) => row.endpoint === parsed.endpoint ||
+      row.device_label === `${adminQaNativeDeviceLabelPrefix}${parsed.installationId}`));
+    if (activeNativeError || rows.length >= 25 || qaMismatch || mainMismatch) {
+      // Identify a rejected device for explicit owner-approved QA enrollment, never its token.
+      console.info("[admin-native-push]", { event: "admin_native_registration_conflict",
+        installation_hash: adminInstallationHash(parsed.installationId) });
       return blockedSubscriptionResult(
         "invalid_subscription", 409,
         "The approved native Admin notification installation does not match.",
@@ -561,12 +607,17 @@ export async function registerAdminDevicePushSubscription(
       .select("endpoint, device_label, actor_label")
       .eq("source_surface", adminNativePushSubscriptionSource)
       .eq("subscription_status", "active")
-      .limit(3);
+      .limit(25);
     const confirmedRows = Array.isArray(confirmedNativeRows) ? confirmedNativeRows : [];
-    if (confirmedNativeError || confirmedRows.length !== 1 ||
-      confirmedRows[0]?.endpoint !== parsed.endpoint ||
-      confirmedRows[0]?.device_label !== nativeDeviceLabel ||
-      confirmedRows[0]?.actor_label !== actor.actor_label) {
+    const confirmedMain = confirmedRows.filter((row) => !isQaNativeLabel(row.device_label));
+    const confirmedQa = confirmedRows.filter((row) => isQaNativeLabel(row.device_label));
+    const ownRows = qaRegistration ? confirmedQa : confirmedMain;
+    if (confirmedNativeError || confirmedRows.length >= 25 || ownRows.length !== 1 ||
+      ownRows[0]?.endpoint !== parsed.endpoint || ownRows[0]?.device_label !== nativeDeviceLabel ||
+      ownRows[0]?.actor_label !== actor.actor_label || (qaRegistration && (
+        confirmedMain.length !== 1 || confirmedMain[0]?.endpoint !== mainNativeRow?.endpoint ||
+        confirmedMain[0]?.device_label !== mainNativeRow?.device_label ||
+        confirmedMain[0]?.actor_label !== mainNativeRow?.actor_label))) {
       const now = new Date().toISOString();
       await supabase.from("admin_device_push_subscriptions").update({
         subscription_status: "revoked", revoked_at: now, updated_at: now,
@@ -653,7 +704,8 @@ export async function revokeAdminDevicePushSubscription(
   if (parsed.channel === "native_ios") {
     revokeQuery = revokeQuery
       .eq("source_surface", adminNativePushSubscriptionSource)
-      .eq("device_label", adminNativeDeviceLabel(parsed.installationId))
+      .in("device_label", [adminNativeDeviceLabel(parsed.installationId),
+        `${adminQaNativeDeviceLabelPrefix}${parsed.installationId}`])
       .eq("actor_label", actor.actor_label);
   }
   const { data, error } = await revokeQuery
@@ -926,15 +978,18 @@ function loadedAdminDevicePushSubscription(
 
   if (row.source_surface === adminNativePushSubscriptionSource) {
     const deviceLabel = safeText(row.device_label, 80);
-    const installationId = deviceLabel?.startsWith(adminNativeDeviceLabelPrefix)
-      ? parseAdminInstallationId(deviceLabel.slice(adminNativeDeviceLabelPrefix.length))
+    const qa = isQaNativeLabel(deviceLabel);
+    const prefix = qa ? adminQaNativeDeviceLabelPrefix : adminNativeDeviceLabelPrefix;
+    const installationId = deviceLabel?.startsWith(prefix)
+      ? parseAdminInstallationId(deviceLabel.slice(prefix.length))
       : null;
     return parseExpoPushToken(endpoint) &&
       row.p256dh === adminNativePushSubscriptionSentinel &&
       row.auth === adminNativePushSubscriptionSentinel &&
       installationId &&
       safeText(row.actor_label, 160)
-      ? { channel: "native_ios", endpoint, webSubscription: null, supportsAlertTarget: row.supports_alert_target === true }
+      ? { channel: "native_ios", endpoint, webSubscription: null, supportsAlertTarget: row.supports_alert_target === true,
+          ...(qa ? { qaInstallationHash: adminInstallationHash(installationId) } : {}) }
       : null;
   }
 
@@ -1387,14 +1442,19 @@ export async function sendAdminDevicePushAlert(
   }
 
   const nativeSubscriptionCount = subscriptions.filter(
-    (subscription) => subscription.channel === "native_ios",
+    (subscription) => subscription.channel === "native_ios" && !subscription.qaInstallationHash,
   ).length;
+  const qaPolicy = adminQaPushPolicy(env);
+  const qaSubscriptions = subscriptions.filter((subscription) => subscription.qaInstallationHash);
+  const qaEligible = nativeSubscriptionCount === 1 && qaSubscriptions.length === 1 &&
+    qaPolicy && qaSubscriptions[0].qaInstallationHash === qaPolicy.installationHash &&
+    options.qaBookingReference === qaPolicy.bookingReference && adminQaStatusEvents.has(eventType);
   const nativeEventType = eventType;
   const eligibleSubscriptions = subscriptions.filter(
     (subscription) =>
       subscription.channel === "web" ||
-      nativeSubscriptionCount === 1,
-  );
+      (subscription.qaInstallationHash ? Boolean(qaEligible) : nativeSubscriptionCount === 1),
+  ).sort((a, b) => Number(Boolean(a.qaInstallationHash)) - Number(Boolean(b.qaInstallationHash)));
   if (eligibleSubscriptions.length === 0) {
     return blockedAlertResult("no_active_subscriptions", true);
   }

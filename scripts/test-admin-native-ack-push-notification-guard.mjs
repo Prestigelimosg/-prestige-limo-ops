@@ -260,6 +260,7 @@ try {
         assert.equal(table, "admin_device_push_subscriptions");
         const chain = {
           eq() { return chain; },
+          in() { return chain; },
           limit() { return Promise.resolve(plans.shift()); },
           maybeSingle() { return Promise.resolve(plans.shift()); },
           select() { return chain; },

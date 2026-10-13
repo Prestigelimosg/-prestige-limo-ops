@@ -356,6 +356,7 @@ export async function applyProductionDriverJobStatusUpdate({
         const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
         await sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status], {
           vehiclePlate: result.payload.assignedDriver.plate,
+          qaBookingReference: result.payload.reference,
         });
       } catch {
         // A saved driver status must not fail because Admin device push is unavailable.

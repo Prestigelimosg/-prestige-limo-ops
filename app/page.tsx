@@ -15425,7 +15425,8 @@ export default function Home() {
   const [bookingGoogleCalendarPayouts, setBookingGoogleCalendarPayouts] =
     useState<Record<string, string | null>>({});
   const [bookingGoogleCalendarStatusMessage, setBookingGoogleCalendarStatusMessage] =
-    useState<Message | null>(null);
+    useState<(Message & { bookingPayloads?: Record<string, string> }) | null>(null);
+  const bookingGoogleCalendarSyncedPayloadsRef = useRef<Record<string, { payload: string }>>({});
   const [bookingDriverDetailsDeliveryStatuses, setBookingDriverDetailsDeliveryStatuses] =
     useState<Record<string, AdminBookingDriverDetailsDeliveryStatus>>({});
   const [bookingDriverDetailsDeliveryStatusMessage, setBookingDriverDetailsDeliveryStatusMessage] =
@@ -20327,6 +20328,15 @@ export default function Home() {
   bookingGoogleCalendarStatusSourceRef.current = activeTab === "completed" ? visibleCompletedBookings : operationalBookings;
   const filteredCompletedBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
+  // A list-level read failure must not implicate a different displayed booking/revision.
+  const visibleBookingGoogleCalendarStatusMessage = bookingGoogleCalendarStatusMessage?.bookingPayloads
+    ? visibleRecentBookingDisplayItems.some(({ bookingRecord }) => {
+        const payload = buildSavedBookingCalendarEventPayload(bookingRecord);
+        return bookingGoogleCalendarStatusMessage.bookingPayloads?.[
+          cleanReferenceText(payload.booking_reference).toLowerCase()
+        ] === JSON.stringify(payload);
+      }) ? bookingGoogleCalendarStatusMessage : null
+    : bookingGoogleCalendarStatusMessage;
   const bookingInvoiceSentReadKey = JSON.stringify(
     (activeTab === "bookings" ? visibleRecentBookingDisplayItems.map(item => item.bookingRecord)
       : activeTab === "completed" ? visibleCompletedBookings : []).map(record => ({
@@ -20494,6 +20504,19 @@ export default function Home() {
 
     setBookingGoogleCalendarPayouts({});
     const sourceBookings = bookingGoogleCalendarStatusSourceRef.current;
+    const sourcePayloads = Object.fromEntries(sourceBookings.map((record) => {
+      const payload = buildSavedBookingCalendarEventPayload(record);
+      return [cleanReferenceText(payload.booking_reference).toLowerCase(), JSON.stringify(payload)];
+    }));
+    if (activeTab === "bookings") {
+      // An amendment cannot inherit a previous itinerary's successful sync feedback.
+      setBookingGoogleCalendarStatuses((current) => Object.fromEntries(
+        Object.entries(current).filter(([reference]) => {
+          const synced = bookingGoogleCalendarSyncedPayloadsRef.current[reference];
+          return !synced || synced.payload === sourcePayloads[reference];
+        }),
+      ));
+    }
     const requestRevision = bookingGoogleCalendarStatusRequestRevisionRef.current + 1;
     bookingGoogleCalendarStatusRequestRevisionRef.current = requestRevision;
 
@@ -20506,6 +20529,7 @@ export default function Home() {
     let cancelled = false;
 
     async function loadConfiguredGoogleCalendarStatuses() {
+      const syncedAtReadStart = { ...bookingGoogleCalendarSyncedPayloadsRef.current };
       const nextPayouts: Record<string, string | null> = {};
       const nextStatuses: Record<string, AdminBookingGoogleCalendarStatusValue> = {};
 
@@ -20555,6 +20579,19 @@ export default function Home() {
         return;
       }
 
+      if (activeTab === "bookings") {
+        for (const [reference, payload] of Object.entries(sourcePayloads)) {
+          const synced = bookingGoogleCalendarSyncedPayloadsRef.current[reference];
+          if (synced?.payload !== payload) continue;
+          if (synced !== syncedAtReadStart[reference]) {
+            // This read started before the successful write; it cannot undo that success.
+            nextStatuses[reference] = "cal_saved";
+          } else if (nextStatuses[reference] && nextStatuses[reference] !== "cal_saved") {
+            // A subsequent successful provider read remains authoritative.
+            delete bookingGoogleCalendarSyncedPayloadsRef.current[reference];
+          }
+        }
+      }
       setBookingGoogleCalendarPayouts(nextPayouts);
       setBookingGoogleCalendarStatuses(nextStatuses);
       setBookingGoogleCalendarStatusMessage(null);
@@ -20573,14 +20610,25 @@ export default function Home() {
           return;
         }
 
-        setBookingGoogleCalendarStatuses({});
-        setBookingGoogleCalendarStatusMessage({
+        const retainedStatuses: Record<string, AdminBookingGoogleCalendarStatusValue> = {};
+        const unresolvedPayloads = { ...sourcePayloads };
+        if (activeTab === "bookings") {
+          for (const [reference, payload] of Object.entries(sourcePayloads)) {
+            if (bookingGoogleCalendarSyncedPayloadsRef.current[reference]?.payload === payload) {
+              retainedStatuses[reference] = "cal_saved";
+              delete unresolvedPayloads[reference];
+            }
+          }
+        }
+        setBookingGoogleCalendarStatuses(retainedStatuses);
+        setBookingGoogleCalendarStatusMessage(Object.keys(unresolvedPayloads).length ? {
+          ...(activeTab === "bookings" ? { bookingPayloads: unresolvedPayloads } : {}),
           tone: "error",
           text:
             error instanceof Error
               ? `Calendar status unavailable: ${error.message}`
               : "Calendar status unavailable. No calendar status is assumed.",
-        });
+        } : null);
       }).finally(() => { reading = false; });
     };
     refreshCalendarRead();
@@ -28751,10 +28799,21 @@ export default function Home() {
         result.liveCalendarWritePerformed &&
         result.sendUpdates === "none";
       if (synced && bookingReference) {
-        setBookingGoogleCalendarStatuses((current) => ({
-          ...current,
-          [bookingReference.toLowerCase()]: "cal_saved",
-        }));
+        const reference = bookingReference.toLowerCase();
+        const payload = JSON.stringify(buildSavedBookingCalendarEventPayload(calendarBooking));
+        const currentBooking = bookingGoogleCalendarStatusSourceRef.current.find((record) =>
+          getBookingCalendarReference(record).toLowerCase() === reference,
+        );
+        if (!currentBooking || JSON.stringify(buildSavedBookingCalendarEventPayload(currentBooking)) === payload) {
+          bookingGoogleCalendarSyncedPayloadsRef.current[reference] = { payload };
+          setBookingGoogleCalendarStatuses((current) => ({ ...current, [reference]: "cal_saved" }));
+          setBookingGoogleCalendarStatusMessage((current) => {
+            if (current?.bookingPayloads?.[reference] !== payload) return current;
+            const remaining = { ...current.bookingPayloads };
+            delete remaining[reference];
+            return Object.keys(remaining).length ? { ...current, bookingPayloads: remaining } : null;
+          });
+        }
       }
       const eventCount = result.eventsSynced || result.eventCount;
       const message = synced
@@ -30199,14 +30258,14 @@ export default function Home() {
 
   const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 p-3">
-      {bookingGoogleCalendarStatusMessage ? (
+      {visibleBookingGoogleCalendarStatusMessage ? (
         <p
           className={`rounded-md border px-3 py-2 text-sm ${statusClass(
-            bookingGoogleCalendarStatusMessage.tone,
+            visibleBookingGoogleCalendarStatusMessage.tone,
           )}`}
           data-bookings-calendar-status-message="true"
         >
-          {bookingGoogleCalendarStatusMessage.text}
+          {visibleBookingGoogleCalendarStatusMessage.text}
         </p>
       ) : null}
       {bookingDriverDetailsDeliveryStatusMessage ? (

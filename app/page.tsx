@@ -15601,6 +15601,10 @@ export default function Home() {
   const [copyEditStates, setCopyEditStates] =
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
+  const [customerCopyButtonFeedback, setCustomerCopyButtonFeedback] = useState<
+    (Message & { bookingReference: string; copiedText: string; expiresAt: number | null }) | null
+  >(null);
+  const customerCopyRequestRef = useRef(0);
   const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
   const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
   const [dispatchReleaseWorkflowStatus, setDispatchReleaseWorkflowStatus] =
@@ -20835,6 +20839,8 @@ export default function Home() {
       preserveAdminEmailAiReview?: boolean;
     } = {},
   ) {
+    customerCopyRequestRef.current += 1;
+    setCustomerCopyButtonFeedback(null);
     driverJobLinkFormContextRevisionRef.current += 1;
     updateCalReturnBookingReferenceRef.current = "";
     pendingSaveCrmBillingIdentityIntentRef.current = null;
@@ -27911,10 +27917,30 @@ export default function Home() {
   }
 
   async function copyDispatchCopy(target: DispatchCopyTarget) {
+    const copiedText = getDispatchCopyText(target);
+    const bookingReference = loadedBookingId;
+    const customerRequest = target === "customerCopy" ? ++customerCopyRequestRef.current : null;
+    if (customerRequest !== null) setCustomerCopyButtonFeedback(null);
     try {
-      await navigator.clipboard.writeText(getDispatchCopyText(target));
+      await navigator.clipboard.writeText(copiedText);
+      if (customerRequest !== null) {
+        if (customerRequest !== customerCopyRequestRef.current) return;
+        setCustomerCopyButtonFeedback({
+          bookingReference, copiedText, expiresAt: Date.now() + 2000,
+          tone: "success", text: `${dispatchCopyLabels[target]} copied.`,
+        });
+        return;
+      }
       setCopyFeedback({ target, tone: "success", text: `${dispatchCopyLabels[target]} copied.` });
     } catch {
+      if (customerRequest !== null) {
+        if (customerRequest !== customerCopyRequestRef.current) return;
+        setCustomerCopyButtonFeedback({
+          bookingReference, copiedText, expiresAt: null, tone: "error",
+          text: "Copy failed. Select the customer copy text manually.",
+        });
+        return;
+      }
       setCopyFeedback({
         target,
         tone: "error",
@@ -28074,11 +28100,6 @@ export default function Home() {
           tone: "success",
           text: "One-time customer booking invitation copied. Paste/send it manually; no SMS or provider message was sent.",
         });
-        setCopyFeedback({
-          target: "customerCopy",
-          tone: "success",
-          text: "Customer booking invitation copied.",
-        });
         return;
       }
 
@@ -28114,11 +28135,6 @@ export default function Home() {
           tone: "success",
           text: "App link copied. Access is already set up; use the existing sign-in.",
         });
-        setCopyFeedback({
-          target: "customerCopy",
-          tone: "success",
-          text: "App link copied.",
-        });
         return;
       }
       const portalUrl = accessResult.portalUrl;
@@ -28143,11 +28159,6 @@ export default function Home() {
         tone: "success",
         text: `Customer access invitation copied for ${displayBookingReference}. Paste/send manually; no provider message was sent.`,
       });
-      setCopyFeedback({
-        target: "customerCopy",
-        tone: "success",
-        text: "Customer access invitation copied.",
-      });
     } catch (error) {
       const errorText =
         error instanceof Error
@@ -28160,11 +28171,6 @@ export default function Home() {
         noProviderSend: true,
         portalLinkCopied: false,
         portalUrl: "",
-        tone: "error",
-        text: errorText,
-      });
-      setCopyFeedback({
-        target: "customerCopy",
         tone: "error",
         text: errorText,
       });
@@ -31029,6 +31035,20 @@ export default function Home() {
   const driverDispatchCopyEditState = getRenderableCopyEditState("driverDispatch");
   const jobCardCopyText = getDispatchCopyText("jobCard");
   const customerCopyText = getDispatchCopyText("customerCopy");
+  useEffect(() => {
+    customerCopyRequestRef.current += 1;
+    setCustomerCopyButtonFeedback(null);
+    return () => { customerCopyRequestRef.current += 1; };
+  }, [loadedBookingId, customerCopyText]);
+
+  useEffect(() => {
+    if (customerCopyButtonFeedback?.tone !== "success" || customerCopyButtonFeedback.expiresAt === null) return;
+    const feedback = customerCopyButtonFeedback;
+    const timer = window.setTimeout(() => {
+      setCustomerCopyButtonFeedback((current) => current === feedback ? null : current);
+    }, Math.max(0, feedback.expiresAt! - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [customerCopyButtonFeedback]);
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
   const dispatchReadableFlightLocationParts = dispatchCopyLocationFlightParts(booking);
   const dispatchReadablePickupDateTime = [
@@ -37648,8 +37668,12 @@ export default function Home() {
   const customerCopyFeedback = copyFeedback?.target === "customerCopy" ? copyFeedback : null;
   const driverDispatchFeedback = copyFeedback?.target === "driverDispatch" ? copyFeedback : null;
   const jobCardCopied = jobCardFeedback?.tone === "success" && /copied/i.test(jobCardFeedback.text);
-  const customerCopyCopied =
-    customerCopyFeedback?.tone === "success" && /copied/i.test(customerCopyFeedback.text);
+  const customerCopyButtonDisplayFeedback =
+    customerCopyButtonFeedback?.bookingReference === loadedBookingId &&
+    customerCopyButtonFeedback.copiedText === customerCopyText &&
+    (customerCopyButtonFeedback.expiresAt === null || customerCopyButtonFeedback.expiresAt > Date.now())
+      ? customerCopyButtonFeedback : null;
+  const customerCopyCopied = customerCopyButtonDisplayFeedback?.tone === "success";
   const customerDriverDetailsPortalLinkCopyMatchesReference =
     !customerDriverDetailsPortalLinkCopyState?.loadedReference ||
     customerDriverDetailsPortalLinkCopyState.loadedReference ===
@@ -50190,7 +50214,7 @@ export default function Home() {
                     <button
                       className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
                         actionFeedbackButtonClass(
-                          customerCopyCopied ? "success" : customerCopyFeedback?.tone === "error" ? "error" : null,
+                          customerCopyCopied ? "success" : customerCopyButtonDisplayFeedback?.tone === "error" ? "error" : null,
                           "border-emerald-300 text-emerald-900 hover:bg-emerald-50",
                         )
                       }`}
@@ -50237,12 +50261,12 @@ export default function Home() {
                       {customerDriverDetailsPortalLinkCopyButtonLabel}
                     </button>
                   </div>
-                  {customerCopyFeedback?.tone === "error" ? (
+                  {customerCopyButtonDisplayFeedback?.tone === "error" ? (
                     <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(customerCopyFeedback.tone)}`}
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(customerCopyButtonDisplayFeedback.tone)}`}
                       data-copy-feedback="customer-copy"
                     >
-                      {customerCopyFeedback.text}
+                      {customerCopyButtonDisplayFeedback.text}
                     </div>
                   ) : null}
                   {customerDriverDetailsPortalLinkCopyDisplayState ? (

@@ -31526,6 +31526,27 @@ export default function Home() {
     ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
     : compactBookingReference(adminCustomerDriverDetailsEmailReviewBookingReference);
   const adminCustomerDriverDetailsEmailReviewCustomerEmail = clean(booking.bookerEmail);
+  const adminCustomerDriverDetailsEmailRecipientDisplay = (() => {
+    const reference = adminCustomerDriverDetailsEmailReviewBookingReference;
+    const recipient = adminCustomerDriverDetailsEmailReviewCustomerEmail;
+    const savedRecord = reference
+      ? [
+          appliedAdminBookingSnapshot,
+          dispatchReleaseLoadedBookingRecord,
+          customerDriverDetailsPortalLastSavedRecord,
+        ].find((record) => clean(record?.booking_reference) === reference)
+      : null;
+    const savedEmail = clean(savedRecord?.contact_email) || (
+      reference && clean(dispatchReleaseLoadedBookingRecord?.booking_reference) === reference
+        ? clean(dispatchReleaseLoadedBookingRecord?.bookers?.email)
+        : ""
+    );
+
+    if (recipient.toLowerCase() !== savedEmail.toLowerCase() || (!savedRecord && recipient)) {
+      return "Unsaved email change";
+    }
+    return recipient ? `To: ${recipient}` : "No email saved";
+  })();
   const adminCustomerDriverDetailsEmailReviewCanReadApi = Boolean(
     adminCustomerDriverDetailsEmailReviewBookingReference &&
       adminCustomerDriverDetailsEmailReviewCustomerEmail,
@@ -50398,8 +50419,8 @@ export default function Home() {
                   <div className="min-w-0 flex-1">
                     <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
-                        aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
-                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
+                        aria-label={`${adminCustomerDriverDetailsEmailDisabledSendActionLabel}: ${adminCustomerDriverDetailsEmailRecipientDisplay}`}
+                        className={`inline-flex min-h-7 min-w-0 max-w-full w-auto flex-col items-start whitespace-normal rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
                           actionFeedbackButtonClass(
                             adminCustomerDriverDetailsEmailButtonTone,
                             "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
@@ -50409,10 +50430,16 @@ export default function Home() {
                         data-admin-customer-driver-details-email-review-action="true"
                         disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
                         onClick={sendAdminCustomerDriverDetailsEmail}
-                        title={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
+                        title={`${adminCustomerDriverDetailsEmailDisabledSendActionLabel}: ${adminCustomerDriverDetailsEmailRecipientDisplay}`}
                         type="button"
                       >
-                        {adminCustomerDriverDetailsEmailButtonLabel}
+                        <span>{adminCustomerDriverDetailsEmailButtonLabel}</span>
+                        <span
+                          className="max-w-full break-all text-[11px] font-normal leading-4"
+                          data-admin-customer-email-recipient-display="true"
+                        >
+                          {adminCustomerDriverDetailsEmailRecipientDisplay}
+                        </span>
                       </button>
                       <button
                         aria-label="Send Customer In-App update to the customer"

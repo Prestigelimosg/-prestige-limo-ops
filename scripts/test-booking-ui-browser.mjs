@@ -4332,7 +4332,7 @@ async function runChromeTest() {
         const action = item?.querySelector("[data-admin-customer-driver-details-email-review-action='true']");
 
         return {
-          action: action?.textContent.replace(/\\s+/g, " ").trim() || "",
+          action: action?.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() || "",
           actionDisabled: action?.disabled ?? null,
           disabledSendActionState:
             item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-action-state") || "",
@@ -19312,7 +19312,8 @@ async function runChromeTest() {
 
       return {
         buttonDisabled: button?.disabled ?? null,
-        buttonText: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+        buttonText: button?.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() || "",
+        recipientText: button?.querySelector("[data-admin-customer-email-recipient-display='true']")?.textContent.trim() || "",
         gateOpen: item?.getAttribute("data-admin-customer-driver-details-email-send-gate-open") || "",
         requests: window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [],
       };
@@ -19320,6 +19321,7 @@ async function runChromeTest() {
     assert.equal(customerCopyEmailDisabledSendState.buttonDisabled, true);
     assert.equal(customerCopyEmailDisabledSendState.buttonText, "Email gate off");
     assert.equal(customerCopyEmailDisabledSendState.gateOpen, "false");
+    assert.equal(customerCopyEmailDisabledSendState.recipientText, "To: booker@loadedsaved.example.com");
     assert.deepEqual(
       customerCopyEmailDisabledSendState.requests,
       [],
@@ -19382,7 +19384,7 @@ async function runChromeTest() {
           const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
           const item = document.querySelector("[data-admin-customer-driver-details-email-review-item='true']");
 
-          return button && !button.disabled && button.textContent.trim() === "Email" &&
+          return button && !button.disabled && button.querySelector("span")?.textContent.trim() === "Email" &&
             item?.getAttribute("data-admin-customer-driver-details-email-send-gate-open") === "true"
             ? true
             : false;
@@ -19430,10 +19432,10 @@ async function runChromeTest() {
           const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
           const requests = window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [];
 
-          return button?.disabled && button.textContent.trim() === "Emailed" && requests.length === 1
+          return button?.disabled && button.querySelector("span")?.textContent.trim() === "Emailed" && requests.length === 1
             ? {
                 buttonDisabled: button.disabled,
-                buttonText: button.textContent.trim(),
+                buttonText: button.querySelector("span")?.textContent.trim(),
                 requests,
               }
             : false;

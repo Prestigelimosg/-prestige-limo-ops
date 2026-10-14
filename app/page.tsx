@@ -45926,7 +45926,17 @@ export default function Home() {
               >
                 <div className="text-xs font-semibold text-slate-700 md:col-span-3">
                   <div className="md:w-[calc((100%_-_1rem)/3)]">
-                    <span id="admin-dispatch-customer-account-label">Customer Account</span>
+                    <span id="admin-dispatch-customer-account-label">
+                      Customer Account{" "}
+                      {adminDispatchCustomerAccountSelectionLocked ? (
+                        <span
+                          className="ml-2 rounded bg-slate-200 px-1 py-0.5 text-[10px] font-semibold text-slate-600"
+                          data-admin-dispatch-customer-account-locked="true"
+                        >
+                          Locked
+                        </span>
+                      ) : null}
+                    </span>
                     <details
                       className="group relative mt-1 w-full"
                       data-booker-id={booking.bookerId}
@@ -45943,6 +45953,7 @@ export default function Home() {
                       ref={adminDispatchCustomerAccountChooserRef}
                     >
                     <summary
+                      aria-describedby="admin-dispatch-customer-account-help"
                       aria-labelledby="admin-dispatch-customer-account-label"
                       className="flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-sky-300 bg-white px-2 text-sm outline-none transition focus-visible:border-sky-500 focus-visible:ring-2 focus-visible:ring-sky-100 [&::-webkit-details-marker]:hidden"
                     >
@@ -46001,7 +46012,9 @@ export default function Home() {
                             className="px-2 py-3 text-sm font-medium text-slate-500"
                             data-admin-dispatch-customer-account-empty="true"
                           >
-                            No matching customer account. Use Create New Customer only after review.
+                            {adminDispatchCustomerAccountSelectionLocked
+                              ? "No matching account. Selection is locked for this saved booking."
+                              : "No matching customer account. Use Create New Customer only after review."}
                           </p>
                         ) : null}
                       </div>
@@ -46009,9 +46022,23 @@ export default function Home() {
                     </details>
                   </div>
                 </div>
-                <p className="font-medium text-slate-500 md:col-span-3">
-                  Search uses stored account, company, Booker and passenger records. It never creates,
-                  merges or links a customer until Admin makes an explicit choice.
+                <p
+                  className="font-medium text-slate-500 md:col-span-3"
+                  id="admin-dispatch-customer-account-help"
+                >
+                  {adminDispatchCustomerAccountSelectionLocked ? (
+                    <span className="block text-xs">
+                      Saved booking. Company + Booker locked.{" "}
+                      <span className="md:hidden">Tap Clear for a new booking.</span>
+                      <span className="hidden md:inline">Use New booking to choose another account.</span>
+                      <span className="block">Unsaved changes clear; saved booking stays.</span>
+                    </span>
+                  ) : (
+                    <>
+                      Search uses stored account, company, Booker and passenger records. It never creates,
+                      merges or links a customer until Admin makes an explicit choice.
+                    </>
+                  )}
                 </p>
                 {adminDispatchAgencyFoldersError ? (
                   <p

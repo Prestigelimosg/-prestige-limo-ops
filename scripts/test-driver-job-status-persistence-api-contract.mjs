@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -20,6 +21,14 @@ const sourceFiles = [
   "lib/native-push-badge-count.ts",
   "lib/driver-portal-session.ts",
   "lib/driver-job-link-production.ts",
+  "lib/driver-job-operations-calendar-sync.ts",
+  "lib/admin-booking-google-calendar-sync.ts",
+  "lib/admin-booking-calendar-policy.ts",
+  "lib/admin-booking-calendar-event.ts",
+  "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/pricing.ts",
+  "lib/admin-rate-setup-read.ts",
+  "lib/hourly-billing.ts",
   "app/api/driver-job/[token]/route.ts",
   "app/api/driver-job/[token]/status/route.ts",
 ];
@@ -72,7 +81,8 @@ async function writeHarnessFile(tempDir, relativePath) {
 
   await mkdir(path.dirname(jsPath), { recursive: true });
   await writeFile(jsPath, outputSource);
-  await writeFile(tsPath, outputSource);
+  // Keep the .ts probe at the dynamic production handoff; its .js counterpart is real.
+  if (relativePath !== "lib/driver-job-operations-calendar-sync.ts") await writeFile(tsPath, outputSource);
 }
 
 async function writeMockModules(tempDir) {
@@ -91,6 +101,11 @@ async function writeMockModules(tempDir) {
     if (probe) probe.after.push(task);
   };`);
   await mkdir(path.join(tempDir, "lib"), { recursive: true });
+  await writeFile(path.join(tempDir, "lib/driver-job-operations-calendar-sync.ts"), `
+    exports.syncAcknowledgedDriverDetailsToOperationsCalendar = async input => {
+      if (!globalThis.__ackCalendarProbe) throw new Error('Calendar fixture unavailable');
+      return globalThis.__ackCalendarProbe(input);
+    };`);
   await writeFile(path.join(tempDir, "lib/customer-driver-app-notification-persistence.ts"), `
     exports.queueDriverStatusCustomerInAppNotification = async (client, input, deferPush) => {
       const probe = globalThis.__otwDeliveryProbe;
@@ -144,6 +159,8 @@ async function loadHarness() {
     mode: require(path.join(tempDir, "lib/driver-job-link-mode.ts")),
     persistence: require(path.join(tempDir, "lib/driver-job-status-persistence.ts")),
     production: require(path.join(tempDir, "lib/driver-job-link-production.ts")),
+    calendar: require(path.join(tempDir, "lib/driver-job-operations-calendar-sync.js")),
+    calendarWriter: require(path.join(tempDir, "lib/admin-booking-google-calendar-sync.js")),
     route: require(path.join(tempDir, "app/api/driver-job/[token]/route.js")),
     statusRoute: require(path.join(tempDir, "app/api/driver-job/[token]/status/route.js")),
   };
@@ -1746,6 +1763,116 @@ try {
 
   process.env.DRIVER_JOB_LINK_MODE = "production";
   delete process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;
+
+  // Actual public ACK route -> token verification -> persistence -> Calendar handoff.
+  // Continue through the real ACK adapter, resolver and writer; only DB/HTTP are synthetic.
+  const calendarEnv = {
+    PRESTIGE_ADMIN_GOOGLE_CALENDAR_SYNC_ENABLED: "true",
+    PRESTIGE_GOOGLE_CALENDAR_ID: "synthetic-ops@example.test",
+    PRESTIGE_GOOGLE_CALENDAR_CLIENT_EMAIL: "synthetic-service@example.test",
+    PRESTIGE_GOOGLE_CALENDAR_PRIVATE_KEY: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    PRESTIGE_GOOGLE_CALENDAR_API_BASE_URL: "https://calendar.test/calendar/v3",
+    PRESTIGE_GOOGLE_CALENDAR_TOKEN_URI: "https://calendar.test/token",
+  };
+  for (const providerThrows of [false, true]) {
+    const client = createSeededClient({ acknowledgedAt: "", latestStatus: "",
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null,
+        service_type: "DEP", pickup_at: "2026-06-07T08:00:00Z", pickup_location: "Hotel", dropoff_location: "Airport",
+        passenger_name: "Synthetic Passenger", vehicle_type_or_category: "AVF",
+        driver_payout_override: 55, driver_payout_reason: "" }] });
+    client.tables.rate_settings = [{ id: "default", driver_payout_rules: { DEP: { amount: 50 } } }];
+    setDriverJobProductionSupabaseClientForTests(client);
+    let calls = 0;
+    let observed;
+    let calendarEvent = null;
+    let calendarResult;
+    const calendarCalls = [];
+    const mockGoogle = async (url, init = {}) => {
+      const target = new URL(url);
+      if (target.origin !== "https://calendar.test") throw new Error("Unexpected provider");
+      if (target.pathname === "/token") return Response.json({ access_token: "synthetic-access-token" });
+      const method = init.method || "GET";
+      calendarCalls.push(method);
+      if (providerThrows) return new Response("{}", { status: 503 });
+      if (method === "GET") return Response.json(calendarEvent);
+      if (method === "POST" && calendarEvent) return new Response("{}", { status: 409 });
+      if (method === "PUT" && new Headers(init.headers).get("If-Match") !== calendarEvent.etag) return new Response("{}", { status: 412 });
+      if (target.searchParams.get("sendUpdates") !== "none") throw new Error("Unexpected send setting");
+      calendarEvent = { ...JSON.parse(init.body), etag: `"v${calendarCalls.length}"` };
+      return Response.json(calendarEvent);
+    };
+    globalThis.__ackCalendarProbe = async input => {
+      calls++;
+      observed = { input, acknowledgedAt: client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at,
+        driverId: client.tables.bookings[0].driver_id, amount: client.tables.bookings[0].driver_payout_override };
+      calendarResult = await harness.calendar.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        ...input,
+        syncer: (payload, options) => harness.calendarWriter.syncVerifiedDriverDetailsToAdminBookingCalendar(payload, {
+          ...options, env: calendarEnv, fetcher: mockGoogle, payoutClient: client,
+        }),
+      });
+      return calendarResult;
+    };
+    const request = token => new Request(`http://localhost/api/driver-job/${token}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ driver_name: "Calendar Driver One", driver_contact: "+65 8111 2222",
+        driver_plate_number: "SLA1234X", driver_vehicle_model: "Mercedes V Class" }),
+    });
+    const priorWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const rejected = await harness.route.PATCH(request(revokedToken), { params: Promise.resolve({ token: revokedToken }) });
+      assert.equal((await rejected.json()).ok, false);
+      assert.equal(calls, 0, "rejected ACK cannot invoke Calendar");
+      const accepted = await harness.route.PATCH(request(validToken), { params: Promise.resolve({ token: validToken }) });
+      const body = await accepted.json();
+      assert.equal(accepted.status, 200);
+      assert.equal(body.ok, true, "provider failure must not roll back or fail saved ACK");
+      assert.equal(calls, 1);
+      // Assert outside the production best-effort catch, which intentionally swallows provider errors.
+      assert.equal(observed.input.bookingReference, "DRV-JOB-API-001");
+      assert.equal(observed.input.client, client);
+      assert.equal(observed.input.useSavedOverride, true);
+      assert.ok(observed.acknowledgedAt, "Calendar only runs after successful ACK persistence");
+      assert.ok(observed.driverId);
+      assert.equal(observed.amount, 55);
+      assertNoDriverJobLeaks(body);
+      assert.doesNotMatch(JSON.stringify(body), /useSavedOverride|prestigeAutomaticPayout|acknowledgedBookingReference/);
+      assert.equal(calendarResult, !providerThrows);
+      if (!providerThrows) {
+        assert.match(calendarEvent.summary, /^SLA1234X \$55 > /);
+        assert.equal(calendarEvent.attendees, undefined);
+        const original = structuredClone(calendarEvent);
+        const repeatAck = async () => {
+          const response = await harness.route.PATCH(request(validToken), { params: Promise.resolve({ token: validToken }) });
+          assert.equal((await response.json()).ok, true);
+          assert.equal(calendarResult, true);
+          assert.equal(calendarEvent.id, original.id);
+          for (const field of ["start", "end", "location", "description", "reminders"]) assert.deepEqual(calendarEvent[field], original[field]);
+        };
+        client.tables.bookings[0].driver_payout_override = 65;
+        await repeatAck();
+        assert.match(calendarEvent.summary, /\$65 > /);
+        client.tables.bookings[0].driver_payout_override = null;
+        await repeatAck();
+        assert.match(calendarEvent.summary, /\$50 > /, "real route falls back to default without an override");
+        calendarEvent.summary = calendarEvent.summary.replace("$50", "$72");
+        client.tables.bookings[0].driver_payout_override = 80;
+        await repeatAck();
+        assert.match(calendarEvent.summary, /\$72 > /, "real route preserves direct Calendar edits");
+        calendarEvent.summary = calendarEvent.summary.replace(" $72", "");
+        await repeatAck();
+        assert.doesNotMatch(calendarEvent.summary, /\$/, "real route preserves deliberate amount removal");
+        assert.deepEqual(calendarCalls.slice(0, 4), ["POST", "POST", "GET", "PUT"]);
+      } else {
+        assert.equal(calendarEvent, null);
+        assert.deepEqual(calendarCalls, ["POST", "POST"], "existing provider retry is bounded");
+      }
+    } finally {
+      console.warn = priorWarn;
+      delete globalThis.__ackCalendarProbe;
+    }
+  }
 
   {
     const client = createSeededClient({

@@ -2338,6 +2338,7 @@ type MonthlyBillingMonthGroupingReviewStatus =
   | "grouped-locally";
 
 type AdminBookingPersistenceRecord = {
+  assignment_payout?: { amount: number; reason: string };
   booking_reference: string;
   public_booking_reference?: string | null;
   source_channel?: string | null;
@@ -3434,6 +3435,7 @@ const adminBookingDriverAssignmentFormFields = [
 function adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
   booking: BookingForm,
   baselineBooking: BookingForm,
+  allowInitialAssignmentPayout = false,
 ) {
   const bookingWithBaselineDriverAssignment = {
     ...booking,
@@ -3441,6 +3443,11 @@ function adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
 
   for (const field of adminBookingDriverAssignmentFormFields) {
     bookingWithBaselineDriverAssignment[field] = baselineBooking[field];
+  }
+
+  if (allowInitialAssignmentPayout) {
+    bookingWithBaselineDriverAssignment.driverPayoutOverride = baselineBooking.driverPayoutOverride;
+    bookingWithBaselineDriverAssignment.driverPayoutReason = baselineBooking.driverPayoutReason;
   }
 
   return (
@@ -11234,6 +11241,10 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     driver_contact: clean(record.driver_contact) || null,
     driver_name: clean(record.driver_name) || null,
     driver_plate_number: clean(record.driver_plate_number) || null,
+    ...(record.assignment_payout ? {
+      driver_payout_override: record.assignment_payout.amount,
+      driver_payout_reason: record.assignment_payout.reason,
+    } : {}),
     driver_remark: clean(record.driver_remark) || null,
     flight_no: clean(record.flight_no) || adminSnapshotFlightReference(record) || null,
     id: bookingReference || "saved-booking",
@@ -19459,6 +19470,18 @@ export default function Home() {
     assignedDriverPoolAdminOffer?.booking_reference === loadedDriverPoolBookingReference
       ? assignedDriverPoolAdminOffer
       : null;
+  // Only the first assignment of one saved job may include its reviewed payout.
+  const initialDriverAssignmentPayoutAllowed = Boolean(
+    saveLoadedDriverAssignmentAvailable &&
+    !adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.driver_id) &&
+    !dispatchCombo && !currentAssignedDriverPoolAdminOffer,
+  );
+  const initialDriverAssignmentPayoutChanged = Boolean(
+    initialDriverAssignmentPayoutAllowed && loadedAdminBookingBaselineRef.current && (
+      clean(booking.driverPayoutOverride) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutOverride) ||
+      clean(booking.driverPayoutReason) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutReason)
+    ),
+  );
   const canCancelLoadedDriverAssignment = Boolean(
     appliedAdminBookingSnapshot?.driver_id && !currentAssignedDriverPoolAdminOffer,
   );
@@ -27464,10 +27487,22 @@ export default function Home() {
               : !adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
                     booking,
                     baseline.form,
+                    initialDriverAssignmentPayoutAllowed,
                   )
                 ? "Other booking details changed with this driver assignment. Use the existing Update + Cal action for the full amendment; nothing was saved."
                 : null;
 
+      const payoutInvalid = initialDriverAssignmentPayoutChanged && (
+        !clean(booking.driverPayoutOverride) || !Number.isFinite(Number(booking.driverPayoutOverride)) ||
+        Number(booking.driverPayoutOverride) < 0 || Number(booking.driverPayoutOverride) > 99999.99 ||
+        Math.abs(Number(booking.driverPayoutOverride) * 100 - Math.round(Number(booking.driverPayoutOverride) * 100)) > 0.000001 ||
+        clean(booking.driverPayoutReason).length > 500
+      );
+      if (payoutInvalid) {
+        const notice = { tone: "error", text: "Enter a payout from S$0 to S$99,999.99 (up to 2 decimals) and a reason of at most 500 characters. Nothing was saved." } satisfies Message;
+        setAdminBookingPersistenceMessage(notice); setMessage(notice); setBookingSaveMessage(notice);
+        return;
+      }
       if (assignmentFailure) {
         const failureMessage = {
           tone: "error",
@@ -27735,6 +27770,9 @@ export default function Home() {
           update_mode: cancelDriverAssignment ? "driver_assignment_cancel" : assignmentOnly ? "driver_assignment" : undefined,
           ...(assignmentOnly && !cancelDriverAssignment && dispatchCombo?.primary_booking_reference === targetBookingReference
             ? {combo_assignment:{revision:dispatchCombo.revision,total_payout_sgd:clean(booking.driverPayoutOverride)?Number(booking.driverPayoutOverride):null}} : {}),
+          ...(assignmentOnly && !cancelDriverAssignment && initialDriverAssignmentPayoutChanged
+            ? { assignment_payout: { amount: Number(booking.driverPayoutOverride), reason: clean(booking.driverPayoutReason) } }
+            : {}),
           ...payload,
         }),
         headers: {
@@ -27768,9 +27806,13 @@ export default function Home() {
       if (assignmentOnly) {
         await refreshDashboardDriverJobLinksRead([updatedBookingReference]);
         const retainedAssignmentBooking = {
-          ...bookingRecordToForm(
+          ...(updatedBooking.assignment_payout ? {
+            ...booking,
+            driverPayoutOverride: String(updatedBooking.assignment_payout.amount),
+            driverPayoutReason: updatedBooking.assignment_payout.reason,
+          } : bookingRecordToForm(
             adminBookingPersistenceRecordToCalendarBookingRecord(updatedBooking),
-          ),
+          )),
           driverContact: cancelDriverAssignment ? "" : booking.driverContact,
           driverId: cancelDriverAssignment ? "" : booking.driverId,
           driverName: cancelDriverAssignment ? "" : booking.driverName,
@@ -27781,7 +27823,7 @@ export default function Home() {
           tone: "success",
           text: cancelDriverAssignment
             ? "Driver cancelled. Alert queued. Booking stays active."
-            : `Driver assignment saved: ${updatedBookingReference}. Create Link is ready. Operations Calendar will receive the confirmed plate after Driver Save & Acknowledge Job; Update + Cal remains available for recovery.`,
+            : `Driver assignment saved: ${updatedBookingReference}.${updatedBooking.assignment_payout ? " Payout saved." : ""} Create Link is ready. Operations Calendar will receive the confirmed plate after Driver Save & Acknowledge Job; Update + Cal remains available for recovery.`,
         } satisfies Message;
 
         lastSuccessfulBookingSaveRef.current = {
@@ -37688,6 +37730,7 @@ export default function Home() {
       adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
         booking,
         loadedAdminBookingBaselineRef.current.form,
+        initialDriverAssignmentPayoutAllowed,
       ),
   );
   const bookingSaveButtonTone: Message["tone"] | null = bookingSaveSucceededForCurrentDraft

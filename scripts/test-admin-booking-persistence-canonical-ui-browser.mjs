@@ -13,6 +13,8 @@ import {
   waitForTabLabels,
 } from "./browser-test-helpers.mjs";
 
+const payoutOnly = process.env.ASSIGNMENT_PAYOUT_ONLY === "1";
+const expectPayoutBlocked = process.env.EXPECT_PAYOUT_BLOCKED === "1";
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -170,7 +172,7 @@ async function main() {
         bookers: null,
         travelers: null
       };
-      let type2Booking = {
+      let type2Booking = JSON.parse(sessionStorage.getItem("synthetic-assignment-booking") || "null") || {
         id: "type2-row-1",
         booking_reference: "TYPE2-SAVED-001",
         public_booking_reference: "19002",
@@ -248,7 +250,8 @@ async function main() {
           window.__canonicalLoadBookingCalls.push({ method, surface: "saved", url: String(url) });
           return new Response(JSON.stringify({
             ok: true,
-            bookings: [canonicalBooking, type2Booking]
+            bookings: [canonicalBooking, type2Booking],
+            booking: type2Booking
           }), { headers: { "Content-Type": "application/json" }, status: 200 });
         }
 
@@ -332,6 +335,7 @@ async function main() {
             type2Booking = {
               ...type2Booking,
               ...parsedBody.booking,
+              ...(parsedBody.assignment_payout ? { driver_payout_override: parsedBody.assignment_payout.amount, driver_payout_reason: parsedBody.assignment_payout.reason } : {}),
               booking_reference: type2Booking.booking_reference,
               id: type2Booking.id,
               public_booking_reference: type2Booking.public_booking_reference,
@@ -339,8 +343,12 @@ async function main() {
               service_items: parsedBody.service_items || [],
               updated_at: "2026-06-25T02:01:00.000Z"
             };
+            if (parsedBody.assignment_payout) {
+              sessionStorage.setItem("synthetic-assignment-booking",JSON.stringify(type2Booking));
+              sessionStorage.setItem("synthetic-assignment-save-count",String(Number(sessionStorage.getItem("synthetic-assignment-save-count") || "0")+1));
+            }
             return new Response(JSON.stringify({
-              booking: type2Booking,
+              booking: { ...type2Booking, ...(parsedBody.assignment_payout ? {assignment_payout:parsedBody.assignment_payout} : {}) },
               ok: true,
               version: "type2-assignment-update-browser-mock"
             }), { headers: { "Content-Type": "application/json" }, status: 200 });
@@ -383,6 +391,10 @@ async function main() {
           }), { headers: { "Content-Type": "application/json" }, status: 201 });
         }
 
+        // This test never forwards writes or external requests to a provider.
+        if (method !== "GET" || /^https?:/.test(String(url)) && new URL(String(url)).origin !== location.origin) {
+          throw new Error("Unexpected test request blocked: " + method + " " + url);
+        }
         return originalFetch(...args);
       };
     })()`,
@@ -398,7 +410,12 @@ async function main() {
       bookingsTab?.click();
       return Boolean(bookingsTab);
     })()`);
-    await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-bookings-find-toolbar="true"]'))`),10000,'Bookings tab render');
+    await waitForCondition(() => evaluate(`(() => {
+      if(document.querySelector('[data-bookings-find-toolbar="true"]')) return true;
+      document.querySelector('button[data-app-tab="bookings"]')?.click();
+      return false;
+    })()`),30000,'Bookings tab render');
+    if (!payoutOnly) {
     const bookingsSurfaceState = await evaluate(`(() => {
       const autoLoadTab = document.querySelector("[data-bookings-tab-autoload='true']");
       const findToolbar = document.querySelector("[data-bookings-find-toolbar='true']");
@@ -554,6 +571,8 @@ async function main() {
       return Boolean(bookingsTab);
     })()`);
 
+    }
+
     const type2OpenClicked = await waitForCondition(
       () => evaluate(`(() => {
         const record = document.querySelector("[data-recent-operational-card='TYPE2-SAVED-001']");
@@ -662,6 +681,20 @@ async function main() {
       "an existing Driver Job Link refresh must not overwrite the Admin's unsaved verified profile selection",
     );
 
+    if (payoutOnly) {
+      await evaluate(`(() => {
+        for (const [name,value] of [["Override Payout","88.50"],["Override Reason","Reviewed one-trip payout"]]) {
+          const input = [...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector("span")?.textContent.trim()===name)?.querySelector("input");
+          if (!input) throw new Error("Missing " + name);
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,value);
+          input.dispatchEvent(new Event("input",{bubbles:true}));
+        }
+      })()`);
+      await new Promise(resolve=>setTimeout(resolve,150));
+    }
+
+    const unchangedFormExpression = `JSON.stringify([...document.querySelectorAll('[data-dispatch-workflow-step="booking-details"] input, [data-dispatch-workflow-step="booking-details"] select, [data-dispatch-workflow-step="pickup-dropoff-vehicle"] input, [data-dispatch-workflow-step="pickup-dropoff-vehicle"] select, [data-dispatch-workflow-step="trip-extras"] input, [data-dispatch-workflow-step="trip-extras"] select, [data-dispatch-workflow-step="admin-lower-pricing"] input')].map(e=>[e.type,e.value,e.checked]))`;
+    const unchangedFormBefore = payoutOnly ? await evaluate(unchangedFormExpression) : null;
     await evaluate(`(() => {
       window.__type2AssignmentCalendarCalls = [];
       window.__type2AssignmentLinkBodies = [];
@@ -672,6 +705,13 @@ async function main() {
       return Boolean(button);
     })()`);
 
+    if (payoutOnly && expectPayoutBlocked) {
+      await waitForCondition(() => evaluate(`document.body.innerText.includes("Other booking details changed with this driver assignment.")`),10000,"exact payout block reproduced");
+      assert.deepEqual(await evaluate(`window.__type2AssignmentPatchBodies`), []);
+      assert.deepEqual(await evaluate(`window.__type2AssignmentCalendarCalls`), []);
+      console.log("REPRODUCED: driver + payout blocked before PATCH; zero Calendar requests.");
+      return;
+    }
     const type2AssignmentSavedState = await waitForCondition(
       () => evaluate(`(() => {
         const patches = window.__type2AssignmentPatchBodies || [];
@@ -707,6 +747,23 @@ async function main() {
       "assignment-only save must perform zero Operations Calendar requests",
     );
     assert.equal(type2AssignmentSavedState.createLinkDisabled, false);
+    if (payoutOnly) {
+      assert.equal(await evaluate(unchangedFormExpression),unchangedFormBefore,"customer/CRM/trip/pricing form fields unchanged");
+      assert.deepEqual(type2AssignmentSavedState.patch.assignment_payout,{amount:88.5,reason:"Reviewed one-trip payout"});
+      const value = await evaluate(`[...document.querySelectorAll("label")].find(l=>l.querySelector("span")?.textContent.trim()==="Override Payout")?.querySelector("input")?.value`);
+      assert.equal(Number(value),88.5,"confirmed saved payout remains in Dispatch");
+      assert.deepEqual(await evaluate(`window.__type2AssignmentLinkBodies`),[]);
+      await navigateWithLoadEvent(client, appUrl);
+      await waitForTabLabels(evaluate,["Dispatch","Bookings"],"reopened app tabs");
+      await waitForCondition(() => evaluate(`(() => { if(document.querySelector('[data-recent-operational-card="TYPE2-SAVED-001"]'))return true;document.querySelector('button[data-app-tab="bookings"]')?.click();return false;})()`),30000,"fresh saved card after assignment");
+      await evaluate(`(() => { const card=document.querySelector('[data-recent-operational-card="TYPE2-SAVED-001"]'); [...card.querySelectorAll('button')].find(b=>b.textContent.trim()==='Open / Edit').click(); })()`);
+      await waitForCondition(() => evaluate(`Number([...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector('span')?.textContent.trim()==='Override Payout')?.querySelector('input')?.value)===88.5`),10000,"saved payout reopens correctly");
+      assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),0,"fresh reopen must not save again");
+      assert.equal(await evaluate(`sessionStorage.getItem("synthetic-assignment-save-count")`),"1");
+      assert.equal(await evaluate(`Object.hasOwn(JSON.parse(sessionStorage.getItem("synthetic-assignment-booking")),"assignment_payout")`),false,"reopen uses stored payout columns, not temporary response receipt");
+      console.log("Driver + payout browser: one PATCH, retained payout, zero Calendar writes or sends.");
+      return;
+    }
     assert.match(type2AssignmentSavedState.linkSectionText, /Booking 19002/);
     assert.match(type2AssignmentSavedState.linkSectionText, /TYPE 2 VERIFIED DRIVER/);
     await evaluate(`(() => {
@@ -781,12 +838,18 @@ async function main() {
     await waitForCondition(() => evaluate(`document.querySelector('[data-driver-assignment-trigger]').value==='7301'`),10000,'new draft selected');
     assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),1,'Selecting a new draft must not persist');
     console.log("Admin booking persistence canonical UI browser test passed.");
+  } catch (error) {
+    if (client) {
+      const diagnostic = await client.send("Runtime.evaluate", { returnByValue:true, expression:`JSON.stringify({text:document.body.innerText.slice(-18000), patches:window.__type2AssignmentPatchBodies})` });
+      console.error(diagnostic.result?.value);
+    }
+    throw error;
   } finally {
     if (client) {
       await client.close();
     }
     await terminate(chromeProcess);
-    await rm(userDataDir, { force: true, recursive: true });
+    await rm(userDataDir, { force: true, recursive: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 

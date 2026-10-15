@@ -2338,6 +2338,7 @@ type MonthlyBillingMonthGroupingReviewStatus =
   | "grouped-locally";
 
 type AdminBookingPersistenceRecord = {
+  payout_amendment?: { amount: number | null; reason: string };
   assignment_payout?: { amount: number; reason: string };
   booking_reference: string;
   public_booking_reference?: string | null;
@@ -11245,6 +11246,10 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
       driver_payout_override: record.assignment_payout.amount,
       driver_payout_reason: record.assignment_payout.reason,
     } : {}),
+    ...(record.payout_amendment ? {
+      driver_payout_override: record.payout_amendment.amount,
+      driver_payout_reason: record.payout_amendment.reason,
+    } : {}),
     driver_remark: clean(record.driver_remark) || null,
     flight_no: clean(record.flight_no) || adminSnapshotFlightReference(record) || null,
     id: bookingReference || "saved-booking",
@@ -15569,6 +15574,7 @@ export default function Home() {
   const loadSelectedBookingRequestRevisionRef = useRef(0);
   const [adminBookingPersistenceMessage, setAdminBookingPersistenceMessage] =
     useState<Message | null>(null);
+  const [payoutCalendarRetryReference, setPayoutCalendarRetryReference] = useState("");
   const [adminBookingPersistenceAction, setAdminBookingPersistenceAction] =
     useState<AdminBookingPersistenceAction | null>(null);
   const [appliedAdminBookingSnapshotReference, setAppliedAdminBookingSnapshotReference] =
@@ -19455,21 +19461,29 @@ export default function Home() {
       currentDraftDriverAssignmentSignature !==
         draftDriverAssignmentSignature(loadedAdminBookingBaselineRef.current.form),
   );
-  const saveLoadedDriverAssignmentAvailable = Boolean(
-    cleanReferenceText(appliedAdminBookingSnapshotReference) &&
-      appliedAdminBookingSnapshot &&
-      assignedDriverRecord &&
-      !assignedDriverIsInactive &&
-      loadedDriverAssignmentDiffersFromBaseline &&
-      clean(booking.returnTripRequested) !== "yes" &&
-      !dispatchHandoffCustomerReturnUrlRef.current,
-  );
   const loadedDriverPoolBookingReference =
     cleanReferenceText(appliedAdminBookingSnapshotReference) || cleanReferenceText(loadedBookingId);
   const currentAssignedDriverPoolAdminOffer =
     assignedDriverPoolAdminOffer?.booking_reference === loadedDriverPoolBookingReference
       ? assignedDriverPoolAdminOffer
       : null;
+  const assignedPayoutSaveRequested = Boolean(
+    !dispatchCombo && !currentAssignedDriverPoolAdminOffer &&
+    appliedAdminBookingSnapshot?.driver_id && loadedAdminBookingBaselineRef.current &&
+    clean(booking.driverId) === String(appliedAdminBookingSnapshot.driver_id) && (
+      clean(booking.driverPayoutOverride) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutOverride) ||
+      clean(booking.driverPayoutReason) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutReason) ||
+      payoutCalendarRetryReference === cleanReferenceText(appliedAdminBookingSnapshotReference)
+    ),
+  );
+  const saveLoadedDriverAssignmentAvailable = Boolean(
+    cleanReferenceText(appliedAdminBookingSnapshotReference) &&
+      appliedAdminBookingSnapshot &&
+      (assignedPayoutSaveRequested || (assignedDriverRecord && !assignedDriverIsInactive)) &&
+      (loadedDriverAssignmentDiffersFromBaseline || assignedPayoutSaveRequested) &&
+      clean(booking.returnTripRequested) !== "yes" &&
+      !dispatchHandoffCustomerReturnUrlRef.current,
+  );
   // Only the first assignment of one saved job may include its reviewed payout.
   const initialDriverAssignmentPayoutAllowed = Boolean(
     saveLoadedDriverAssignmentAvailable &&
@@ -27480,14 +27494,14 @@ export default function Home() {
           : appliedAdminBookingSnapshotIsPendingCustomerRequest
             ? "Accept this customer booking request through the existing Accept + Cal action before assigning its driver. No booking or Calendar event was changed."
             : !verifiedDriverId ||
-                !verifiedDriver ||
+                (!assignedPayoutSaveRequested && (!verifiedDriver ||
                 isInactiveDriver(verifiedDriver) ||
-                verifiedDriverAssignmentSignature !== currentDraftDriverAssignmentSignature
+                verifiedDriverAssignmentSignature !== currentDraftDriverAssignmentSignature))
               ? "Select one active verified Driver Database profile and apply its unchanged details before saving. No booking or Calendar event was changed."
               : !adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
                     booking,
                     baseline.form,
-                    initialDriverAssignmentPayoutAllowed,
+                    initialDriverAssignmentPayoutAllowed || assignedPayoutSaveRequested,
                   )
                 ? "Other booking details changed with this driver assignment. Use the existing Update + Cal action for the full amendment; nothing was saved."
                 : null;
@@ -27514,6 +27528,30 @@ export default function Home() {
         setBookingSaveMessage(failureMessage);
         return;
       }
+    }
+
+    const savedPayoutChanged = assignmentOnly && !cancelDriverAssignment && Boolean(
+      appliedAdminBookingSnapshot?.driver_id && loadedAdminBookingBaselineRef.current && (
+        clean(booking.driverPayoutOverride) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutOverride) ||
+        clean(booking.driverPayoutReason) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutReason) ||
+        payoutCalendarRetryReference === targetBookingReference
+      ),
+    );
+    if (savedPayoutChanged && (
+      dispatchCombo || currentAssignedDriverPoolAdminOffer ||
+      clean(booking.driverId) !== String(appliedAdminBookingSnapshot?.driver_id || "") ||
+      clean(booking.driverName) !== clean(appliedAdminBookingSnapshot?.driver_name) ||
+      clean(booking.driverContact) !== clean(appliedAdminBookingSnapshot?.driver_contact) ||
+      clean(booking.driverPlate) !== clean(appliedAdminBookingSnapshot?.driver_plate_number) ||
+      appliedAdminBookingSnapshotIsPendingCustomerRequest ||
+      (clean(booking.driverPayoutOverride) && (!Number.isFinite(Number(booking.driverPayoutOverride)) ||
+        Number(booking.driverPayoutOverride) < 0 || Number(booking.driverPayoutOverride) > 99999.99 ||
+        Math.abs(Number(booking.driverPayoutOverride) * 100 - Math.round(Number(booking.driverPayoutOverride) * 100)) > 0.000001)) ||
+      clean(booking.driverPayoutReason).length > 500
+    )) {
+      const notice = { tone: "error", text: "Review the saved payout on one active assigned job. Keep its Driver unchanged; enter S$0–99,999.99 or clear it to use the default. Pool/combo payouts use their existing controls. Nothing was saved." } satisfies Message;
+      setAdminBookingPersistenceMessage(notice); setMessage(notice); setBookingSaveMessage(notice);
+      return;
     }
 
     const returnToCustomerFolderAfterUpdate = () => {
@@ -27773,6 +27811,10 @@ export default function Home() {
           ...(assignmentOnly && !cancelDriverAssignment && initialDriverAssignmentPayoutChanged
             ? { assignment_payout: { amount: Number(booking.driverPayoutOverride), reason: clean(booking.driverPayoutReason) } }
             : {}),
+          ...(savedPayoutChanged ? { payout_amendment: {
+            amount: clean(booking.driverPayoutOverride) ? Number(booking.driverPayoutOverride) : null,
+            reason: clean(booking.driverPayoutOverride) ? clean(booking.driverPayoutReason) : "",
+          } } : {}),
           ...payload,
         }),
         headers: {
@@ -27802,6 +27844,24 @@ export default function Home() {
           ? `Saving verified driver assignment for ${updatedBookingReference}...`
           : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Syncing Google Calendar...`,
       });
+
+      if (assignmentOnly && updatedBooking.payout_amendment) {
+        const payout = updatedBooking.payout_amendment;
+        const status = result.payout_calendar_status;
+        const failed = !["updated", "preserved", "awaiting_ack"].includes(status);
+        const notice = {
+          tone: failed ? "error" : "success",
+          text: failed ? "Payout saved; Calendar update failed. Use Save Driver Assignment to retry Calendar."
+            : status === "preserved" ? "Payout saved. Your Calendar amount was kept."
+            : status === "awaiting_ack" ? "Payout saved. Calendar will update after Driver Save & Acknowledge."
+            : "Payout saved. Calendar synced.",
+        } satisfies Message;
+        const retained = { ...booking, driverPayoutOverride: payout.amount === null ? "" : String(payout.amount), driverPayoutReason: payout.reason };
+        retainSavedBookingForDriverJobLinkHandoff(updatedBooking, retained);
+        setPayoutCalendarRetryReference(failed ? updatedBookingReference : "");
+        setAdminBookingPersistenceMessage(notice); setMessage(notice); setBookingSaveMessage(notice);
+        return;
+      }
 
       if (assignmentOnly) {
         await refreshDashboardDriverJobLinksRead([updatedBookingReference]);
@@ -37730,7 +37790,7 @@ export default function Home() {
       adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
         booking,
         loadedAdminBookingBaselineRef.current.form,
-        initialDriverAssignmentPayoutAllowed,
+        initialDriverAssignmentPayoutAllowed || assignedPayoutSaveRequested,
       ),
   );
   const bookingSaveButtonTone: Message["tone"] | null = bookingSaveSucceededForCurrentDraft

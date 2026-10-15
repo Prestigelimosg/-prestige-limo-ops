@@ -103,6 +103,7 @@ export type AdminBookingPersistenceInput = {
 };
 
 export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
+  payout_amendment?: { amount: number | null; reason: string };
   assignment_payout?: { amount: number; reason: string };
   combo_assignment?: {revision: string; total_payout_sgd: number|null};
   expected_updated_at?: string | null;
@@ -139,6 +140,7 @@ export type AdminBookingPersistenceRecord = Required<
   Pick<AdminBookingRecordInput, "booking_reference">
 > &
   Omit<AdminBookingRecordInput, "booking_reference"> & {
+    payout_amendment?: { amount: number | null; reason: string };
     assignment_payout?: { amount: number; reason: string };
     route_points: AdminBookingRoutePointInput[];
     service_items: AdminBookingServiceItemInput[];
@@ -214,6 +216,7 @@ const updatePayloadTopLevelFields = new Set([
   "update_mode",
   "combo_assignment",
   "assignment_payout",
+  "payout_amendment",
   "booking",
   "route_points",
   "service_items",
@@ -859,8 +862,9 @@ function parseAdminBookingOperationalPayload(
   // Keep recursive finance rejection for every other path, including nested values.
   const forbiddenFields = findForbiddenFieldNames(body).filter((path) => !(
     allowedTopLevelFields === updatePayloadTopLevelFields &&
-    body.update_mode === "driver_assignment" &&
-    (path === "combo_assignment.total_payout_sgd" || path === "assignment_payout")
+    ((body.update_mode === "driver_assignment" &&
+      (path === "combo_assignment.total_payout_sgd" || path === "assignment_payout")) ||
+      (body.update_mode === "driver_assignment" && path === "payout_amendment"))
   ));
 
   if (forbiddenFields.length > 0) {
@@ -1170,6 +1174,16 @@ export function parseAdminBookingUpdatePayload(
   const expectedUpdatedAt = textOrNull(body.expected_updated_at);
   const updateMode = textOrNull(body.update_mode);
   const comboAssignment = body.combo_assignment === undefined ? null : asRecord(body.combo_assignment);
+  const payoutAmendment = body.payout_amendment === undefined ? null : asRecord(body.payout_amendment);
+  if (payoutAmendment && (
+    updateMode !== "driver_assignment" || !expectedUpdatedAt || body.combo_assignment !== undefined || body.assignment_payout !== undefined ||
+    Object.keys(payoutAmendment).length !== 2 ||
+    (payoutAmendment.amount !== null && (typeof payoutAmendment.amount !== "number" ||
+      !Number.isFinite(payoutAmendment.amount) || payoutAmendment.amount < 0 || payoutAmendment.amount > 99999.99 ||
+      Math.abs(payoutAmendment.amount * 100 - Math.round(payoutAmendment.amount * 100)) > 0.000001)) ||
+    typeof payoutAmendment.reason !== "string" || payoutAmendment.reason.trim().length > 500 ||
+    (payoutAmendment.amount === null && payoutAmendment.reason.trim() !== "")
+  )) return { ok: false, status: 400, error: "Invalid saved payout amendment." };
   const assignmentPayout = body.assignment_payout === undefined ? null : asRecord(body.assignment_payout);
   if (assignmentPayout && (
     updateMode !== "driver_assignment" || !expectedUpdatedAt || body.combo_assignment !== undefined ||
@@ -1234,6 +1248,7 @@ export function parseAdminBookingUpdatePayload(
     data: {
       ...parsed.data,
       ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
+      ...(payoutAmendment ? { payout_amendment: { amount: payoutAmendment.amount === null ? null : Number(payoutAmendment.amount), reason: String(payoutAmendment.reason).trim() } } : {}),
       ...(assignmentPayout ? { assignment_payout: { amount: Number(assignmentPayout.amount), reason: String(assignmentPayout.reason).trim() } } : {}),
       ...(comboAssignment ? {combo_assignment: {revision: String(comboAssignment.revision), total_payout_sgd: comboAssignment.total_payout_sgd===null?null:Number(comboAssignment.total_payout_sgd)}} : {}),
       target_booking_reference: targetBookingReference,

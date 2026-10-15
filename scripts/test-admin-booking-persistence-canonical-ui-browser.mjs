@@ -13,7 +13,8 @@ import {
   waitForTabLabels,
 } from "./browser-test-helpers.mjs";
 
-const payoutOnly = process.env.ASSIGNMENT_PAYOUT_ONLY === "1";
+const amendmentOnly = process.env.SAVED_OVERRIDE_AMENDMENT_ONLY === "1";
+const payoutOnly = amendmentOnly || process.env.ASSIGNMENT_PAYOUT_ONLY === "1";
 const expectPayoutBlocked = process.env.EXPECT_PAYOUT_BLOCKED === "1";
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const chromeBinary =
@@ -224,7 +225,7 @@ async function main() {
         },
         travelers: { traveler_name: "Type 2 Passenger" }
       };
-      let type2PreviousLinkExpired = false;
+      let type2PreviousLinkExpired = Boolean(sessionStorage.getItem("synthetic-assignment-booking"));
       const type2Driver = {
         id: 7301,
         availability_status: "available",
@@ -335,7 +336,9 @@ async function main() {
             type2Booking = {
               ...type2Booking,
               ...parsedBody.booking,
+              customer_id: parsedBody.booking.customer_id || type2Booking.customer_id,
               ...(parsedBody.assignment_payout ? { driver_payout_override: parsedBody.assignment_payout.amount, driver_payout_reason: parsedBody.assignment_payout.reason } : {}),
+              ...(parsedBody.payout_amendment ? { driver_payout_override: parsedBody.payout_amendment.amount, driver_payout_reason: parsedBody.payout_amendment.reason } : {}),
               booking_reference: type2Booking.booking_reference,
               id: type2Booking.id,
               public_booking_reference: type2Booking.public_booking_reference,
@@ -343,12 +346,12 @@ async function main() {
               service_items: parsedBody.service_items || [],
               updated_at: "2026-06-25T02:01:00.000Z"
             };
-            if (parsedBody.assignment_payout) {
+            if (parsedBody.assignment_payout || parsedBody.payout_amendment) {
               sessionStorage.setItem("synthetic-assignment-booking",JSON.stringify(type2Booking));
               sessionStorage.setItem("synthetic-assignment-save-count",String(Number(sessionStorage.getItem("synthetic-assignment-save-count") || "0")+1));
             }
             return new Response(JSON.stringify({
-              booking: { ...type2Booking, ...(parsedBody.assignment_payout ? {assignment_payout:parsedBody.assignment_payout} : {}) },
+              booking: { ...type2Booking, ...(parsedBody.assignment_payout ? {assignment_payout:parsedBody.assignment_payout} : {}), ...(parsedBody.payout_amendment ? {payout_amendment:parsedBody.payout_amendment} : {}) },
               ok: true,
               version: "type2-assignment-update-browser-mock"
             }), { headers: { "Content-Type": "application/json" }, status: 200 });
@@ -359,7 +362,7 @@ async function main() {
           window.__type2AssignmentCalendarCalls.push({ method, url: String(url) });
           return new Response(JSON.stringify({
             ok: true,
-            sync: { live_calendar_write_performed: true }
+            sync: { live_calendar_write_performed: true, provider_connection: "connected", live_calendar_provider: "google_calendar", send_updates: "none", events_synced: 1 }
           }), { headers: { "Content-Type": "application/json" }, status: 200 });
         }
 
@@ -761,6 +764,34 @@ async function main() {
       assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),0,"fresh reopen must not save again");
       assert.equal(await evaluate(`sessionStorage.getItem("synthetic-assignment-save-count")`),"1");
       assert.equal(await evaluate(`Object.hasOwn(JSON.parse(sessionStorage.getItem("synthetic-assignment-booking")),"assignment_payout")`),false,"reopen uses stored payout columns, not temporary response receipt");
+      if (amendmentOnly) {
+        for (const amount of ["65", ""]) {
+          const before = await evaluate(unchangedFormExpression);
+          await evaluate(`(() => {
+            const input=[...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector('span')?.textContent.trim()==='Override Payout').querySelector('input');
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(amount)});
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+            window.__type2AssignmentPatchBodies=[];window.__type2AssignmentCalendarCalls=[];
+          })()`);
+          await waitForCondition(()=>evaluate(`(() => {const b=document.querySelector("[data-job-card-save-toolbar='primary'] button");return b?.textContent.trim()==='Update + Cal'&&!b.disabled;})()`),10000,'payout amendment uses existing Update + Cal');
+          await evaluate(`document.querySelector("[data-job-card-save-toolbar='primary'] button").click()`);
+          await waitForCondition(()=>evaluate(`document.body.innerText.includes('Google Calendar auto-synced')`),10000,'payout amendment response reaches Calendar continuation');
+          const patches=await evaluate(`window.__type2AssignmentPatchBodies`);
+          assert.equal(patches.length,1);assert.equal(patches[0].update_mode,undefined);
+          assert.deepEqual(patches[0].payout_amendment,{amount:amount?65:null,reason:amount?'Reviewed one-trip payout':''});
+          assert.equal(await evaluate(`window.__type2AssignmentCalendarCalls.filter(call=>call.method === "POST" && !call.url.includes("mode=status")).length`),1,"one Calendar write; status reads are separate");
+          assert.deepEqual(await evaluate(`window.__type2AssignmentLinkBodies`),[],'no link or notification sends');
+          await navigateWithLoadEvent(client,appUrl);
+          await waitForTabLabels(evaluate,["Dispatch","Dashboard","Bookings"],"reload amended payout");
+          await waitForCondition(()=>evaluate(`(() => {if(document.querySelector('[data-recent-operational-card="TYPE2-SAVED-001"]'))return true;document.querySelector('button[data-app-tab="bookings"]')?.click();return false;})()`),30000,'persisted amended booking card');
+          await evaluate(`(() => {const card=document.querySelector('[data-recent-operational-card="TYPE2-SAVED-001"]');[...card.querySelectorAll('button')].find(b=>b.textContent.trim()==='Open / Edit').click();})()`);
+          await waitForCondition(()=>evaluate(`([...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector('span')?.textContent.trim()==='Override Payout')?.querySelector('input')?.value)===${JSON.stringify(amount)}`),10000,'changed/cleared payout survives full reload');
+          assert.deepEqual(await evaluate(unchangedFormExpression),before,'CRM, Driver, itinerary and customer price unchanged');
+          assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),0,'reload does not save');
+          if(!amount) assert.equal(await evaluate(`([...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector('span')?.textContent.trim()==='Override Reason')?.querySelector('input')?.value)`),'');
+        }
+        console.log('Saved override React browser: 65 then clear/null, one existing Update+Cal PATCH each, full reload persistence, unchanged CRM/Driver/trip/customer price, no link/send calls. Synthetic only.');
+      }
       console.log("Driver + payout browser: one PATCH, retained payout, zero Calendar writes or sends.");
       return;
     }

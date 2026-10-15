@@ -123,7 +123,7 @@ assert.equal(matches(draft,base),false);assert.equal(matches(draft,base,true),tr
 for(const key of ['companyId','bookerId','travelerId','customerId','pickup','date','time','customerPriceOverride','driverNotes'])assert.equal(matches({...draft,[key]:'CHANGED'},base,true),false,`Reject ${key}`);
 const branch=slice(adapterSource,'  if (input.assignment_payout) {','  if (input.update_mode === "driver_assignment_cancel") {\n    // Explicit action only');
 assert.doesNotMatch(branch,/\.rpc\(|ensureCustomerContact|findOrCreateCustomer|from\("(?:customers|customer_contacts|booking_route_points|booking_service_items)"\)/);
-assert.match(route,/driver_assignment_cancel" \|\| parsed\.data\.assignment_payout\) \? null : await maybeQueueCustomerRequestDecisionNotification/);
+assert.match(route,/driver_assignment_cancel" \|\| parsed\.data\.assignment_payout \|\| parsed\.data\.payout_amendment\) \? null : await maybeQueueCustomerRequestDecisionNotification/);
 assert.match(app,/assignmentOnly && !cancelDriverAssignment && initialDriverAssignmentPayoutChanged/);
 // Execute the real route and real auth boundary with a synthetic session and the
 // same in-memory adapter. No credentials, providers, or real database are used.

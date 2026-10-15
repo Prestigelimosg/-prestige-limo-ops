@@ -2338,6 +2338,7 @@ type MonthlyBillingMonthGroupingReviewStatus =
   | "grouped-locally";
 
 type AdminBookingPersistenceRecord = {
+  payout_amendment?: { amount: number | null; reason: string };
   assignment_payout?: { amount: number; reason: string };
   booking_reference: string;
   public_booking_reference?: string | null;
@@ -11244,6 +11245,10 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     ...(record.assignment_payout ? {
       driver_payout_override: record.assignment_payout.amount,
       driver_payout_reason: record.assignment_payout.reason,
+    } : {}),
+    ...(record.payout_amendment ? {
+      driver_payout_override: record.payout_amendment.amount,
+      driver_payout_reason: record.payout_amendment.reason,
     } : {}),
     driver_remark: clean(record.driver_remark) || null,
     flight_no: clean(record.flight_no) || adminSnapshotFlightReference(record) || null,
@@ -27516,6 +27521,29 @@ export default function Home() {
       }
     }
 
+    const savedPayoutChanged = !assignmentOnly && Boolean(
+      appliedAdminBookingSnapshot?.driver_id && loadedAdminBookingBaselineRef.current && (
+        clean(booking.driverPayoutOverride) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutOverride) ||
+        clean(booking.driverPayoutReason) !== clean(loadedAdminBookingBaselineRef.current.form.driverPayoutReason)
+      ),
+    );
+    if (savedPayoutChanged && (
+      dispatchCombo || currentAssignedDriverPoolAdminOffer ||
+      clean(booking.driverId) !== String(appliedAdminBookingSnapshot?.driver_id || "") ||
+      clean(booking.driverName) !== clean(appliedAdminBookingSnapshot?.driver_name) ||
+      clean(booking.driverContact) !== clean(appliedAdminBookingSnapshot?.driver_contact) ||
+      clean(booking.driverPlate) !== clean(appliedAdminBookingSnapshot?.driver_plate_number) ||
+      appliedAdminBookingSnapshotIsPendingCustomerRequest ||
+      (clean(booking.driverPayoutOverride) && (!Number.isFinite(Number(booking.driverPayoutOverride)) ||
+        Number(booking.driverPayoutOverride) < 0 || Number(booking.driverPayoutOverride) > 99999.99 ||
+        Math.abs(Number(booking.driverPayoutOverride) * 100 - Math.round(Number(booking.driverPayoutOverride) * 100)) > 0.000001)) ||
+      clean(booking.driverPayoutReason).length > 500
+    )) {
+      const notice = { tone: "error", text: "Review the saved payout on one active assigned job. Keep its Driver unchanged; enter S$0–99,999.99 or clear it to use the default. Pool/combo payouts use their existing controls. Nothing was saved." } satisfies Message;
+      setAdminBookingPersistenceMessage(notice); setMessage(notice); setBookingSaveMessage(notice);
+      return;
+    }
+
     const returnToCustomerFolderAfterUpdate = () => {
       if (typeof window === "undefined" || !customerReturnUrl) {
         return;
@@ -27773,6 +27801,10 @@ export default function Home() {
           ...(assignmentOnly && !cancelDriverAssignment && initialDriverAssignmentPayoutChanged
             ? { assignment_payout: { amount: Number(booking.driverPayoutOverride), reason: clean(booking.driverPayoutReason) } }
             : {}),
+          ...(savedPayoutChanged ? { payout_amendment: {
+            amount: clean(booking.driverPayoutOverride) ? Number(booking.driverPayoutOverride) : null,
+            reason: clean(booking.driverPayoutOverride) ? clean(booking.driverPayoutReason) : "",
+          } } : {}),
           ...payload,
         }),
         headers: {

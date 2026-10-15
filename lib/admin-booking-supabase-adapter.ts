@@ -3133,7 +3133,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     const {loadDriverCombo} = await import("./driver-job-combo.ts");
     const combo = await loadDriverCombo(client, input.target_booking_reference);
     if (combo) {
-      if (input.assignment_payout) return { ok: false, status: 409, error: "Use the existing combo assignment workflow." };
+      if (input.assignment_payout || input.payout_amendment) return { ok: false, status: 409, error: "Use the existing combo assignment workflow." };
       if (!input.update_mode && !input.combo_assignment) {
         // Only the reported TRF pickup amendment is admitted here. Preserve the
         // existing full booking/route/service writer for ordinary bookings.
@@ -3299,6 +3299,29 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     }
   }
 
+  if (input.payout_amendment) {
+    const payout = input.payout_amendment;
+    const terminal = ["completed", "cancelled", "canceled", "closed", "declined"];
+    const savedDriver = positiveSafeInteger(existing.driver_id);
+    const pendingCustomerRequest = existing.source_surface === "customer_booking_request" && existing.request_review_status !== "approved";
+    if (!isVerifiedAdminDispatcherActor(actor) || input.update_mode || input.assignment_payout || !expectedUpdatedAt ||
+        !savedDriver || savedDriver !== positiveSafeInteger(input.booking.driver_id) || pendingCustomerRequest ||
+        ["Driver Pool accepted fixed offer.", "Admin assigned combo total."].includes(String(asRecord(existing).driver_payout_reason || "")) ||
+        [asRecord(existing).status, existing.admin_internal_status, existing.customer_facing_status, input.booking.admin_internal_status, input.booking.customer_facing_status].some(value => terminal.includes(String(value || "").trim().toLowerCase())) ||
+        // Full amendments already retain the saved customer when the UI sends null.
+        !dbIdentifierOrNull(existing.customer_id) ||
+        String(dbIdentifierOrNull(input.booking.customer_id) || existing.customer_id) !== String(existing.customer_id) ||
+        ["company_id", "booker_id", "traveler_id"].some(key => String(asRecord(existing)[key] ?? "") !== String(asRecord(input.booking)[key] ?? "")) ||
+        ["driver_name", "driver_contact", "driver_plate_number"].some(key => textOrNull(asRecord(existing)[key]) !== textOrNull(asRecord(input.booking)[key])) ||
+        (payout.amount !== null && (!Number.isFinite(payout.amount) || payout.amount < 0 || payout.amount > 99999.99 || Math.abs(payout.amount * 100 - Math.round(payout.amount * 100)) > 0.000001)) ||
+        typeof payout.reason !== "string" || payout.reason.length > 500 || (payout.amount === null && payout.reason !== "")) {
+      return { ok: false, status: 409, error: "Reload one active assigned booking before changing its saved payout. Keep its Driver and customer ownership unchanged." };
+    }
+    const offers = await client.from("driver_job_bid_offers").select("id")
+      .eq("booking_reference", input.target_booking_reference).in("offer_status", ["open", "assigned"]).limit(1);
+    if (offers.error || offers.data?.length) return { ok: false, status: 409, error: "Review this booking's Driver Pool assignment before changing its payout." };
+  }
+
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
   const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
   let customerId = requestedCustomerId || existingCustomerId;
@@ -3321,6 +3344,10 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .from("bookings")
     .update({
       ...bookingRow,
+      ...(input.payout_amendment ? {
+        driver_payout_override: input.payout_amendment.amount,
+        driver_payout_reason: textOrNull(input.payout_amendment.reason),
+      } : {}),
       booking_reference: input.target_booking_reference,
       updated_at: nextUpdatedAt,
     })
@@ -3330,6 +3357,11 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     bookingUpdateQuery = bookingUpdateQuery.eq("updated_at", existing.updated_at);
   }
 
+  if (input.payout_amendment) {
+    bookingUpdateQuery = bookingUpdateQuery.eq("booking_reference", input.target_booking_reference)
+      .eq("driver_id", existing.driver_id)
+      .or("status.is.null,status.not.in.(completed,cancelled,canceled,closed,declined)");
+  }
   const { error: bookingError } = await bookingUpdateQuery;
 
   if (bookingError) {
@@ -3431,7 +3463,10 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
   return {
     ...reloadedResult,
-    data: updatedBooking,
+    data: {
+      ...updatedBooking,
+      ...(input.payout_amendment ? { payout_amendment: input.payout_amendment } : {}),
+    },
   };
 }
 

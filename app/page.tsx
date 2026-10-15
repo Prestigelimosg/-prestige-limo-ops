@@ -50692,20 +50692,20 @@ export default function Home() {
                   value={driverDispatchCopyEditState.draftText}
                 />
               ) : (
-                <details
+                <div
                   className="rounded-md border border-sky-100 bg-white px-2 py-1"
                   data-dispatch-compact-panel="driver-dispatch-copy-preview"
                 >
-                  <summary className="cursor-pointer list-none text-[11px] font-semibold leading-5 text-sky-950 [&::-webkit-details-marker]:hidden">
+                  <p className="text-[11px] font-semibold leading-5 text-sky-950">
                     Preview assigned-driver copy
-                  </summary>
+                  </p>
                   <pre
                     className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-sky-50 p-2.5 text-xs leading-5 text-slate-900"
                     data-copy-preview="driverDispatch"
                   >
                     {driverDispatchCopyText}
                   </pre>
-                </details>
+                </div>
               )}
               </div>
             </details>

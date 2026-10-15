@@ -55,7 +55,9 @@ try {
   const customerBefore=await evaluate(`document.querySelector('[data-copy-preview="customerCopy"]').textContent`);
   const jobBefore=await evaluate(`document.querySelector('[data-copy-preview="jobCard"]').textContent`);
   const linkBefore=await evaluate(`document.querySelector('[data-driver-job-link-preview-disclosure]')?.textContent`);
-  await evaluate(`document.querySelector('[data-driver-message-disclosure]').open=true;document.querySelector('[data-dispatch-compact-panel="driver-dispatch-copy-preview"]').open=true;`);
+  await click('[data-driver-message-disclosure] > summary');
+  assert.equal(await evaluate(`document.querySelector('[data-copy-preview="driverDispatch"]').checkVisibility()`),true,"One outer click reveals manual message");
+  assert.equal(await evaluate(`document.querySelectorAll('[data-driver-message-disclosure] details').length`),0,"No inner toggle");
   await click('[data-copy-copy-button="driverDispatch"]');
   assert.equal(await evaluate('window.qaCopies.at(-1)'),initial);
   await click('[data-copy-edit-button="driverDispatch"]');
@@ -72,7 +74,7 @@ try {
   assert.equal(await evaluate(`document.querySelector('[data-copy-preview="customerCopy"]').textContent`),customerBefore);
   assert.equal(await evaluate(`document.querySelector('[data-copy-preview="jobCard"]').textContent`),jobBefore);
   assert.equal(await evaluate(`document.querySelector('[data-driver-job-link-preview-disclosure]')?.textContent`),linkBefore);
-  await evaluate(`document.querySelector('[data-dispatch-compact-panel="driver-dispatch-copy-preview"]').open=true;document.querySelector('[data-driver-message-disclosure]').scrollIntoView({block:'center'})`);
+  await evaluate(`document.querySelector('[data-driver-message-disclosure]').scrollIntoView({block:'center'})`);
   assert.equal(await evaluate(`document.querySelector('[data-copy-preview="driverDispatch"]').getClientRects().length>0`),true);
   assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth'),false);
   const shot=await client.send('Page.captureScreenshot',{format:'png'});

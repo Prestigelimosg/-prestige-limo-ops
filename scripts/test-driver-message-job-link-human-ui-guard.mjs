@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import ts from "typescript";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const app = await readFile("app/page.tsx", "utf8");
 const messageStart = app.indexOf('data-dispatch-workflow-step="driver-dispatch-copy"');
@@ -63,6 +65,48 @@ assert.ok(
   !linkPanel.includes("loaded here. Next: Create Link"),
   "Reference-only machine instruction must be replaced with booking details.",
 );
+
+// One outer disclosure must reveal the existing message without another toggle.
+const uiTree = ts.createSourceFile("page.tsx", app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let manualElement;
+function findManualElement(node) {
+  if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(
+    attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(uiTree) === "data-driver-message-disclosure",
+  )) manualElement = node;
+  ts.forEachChild(node, findManualElement);
+}
+findManualElement(uiTree);
+assert.ok(manualElement, "Existing outer manual-copy disclosure is required");
+const manualJsx = manualElement.getText(uiTree);
+const renderManual = new Function("React", "env", ts.transpileModule(
+  `with (env) { return (${manualJsx}); }`,
+  {compilerOptions:{target:ts.ScriptTarget.ES2022, jsx:ts.JsxEmit.React}},
+).outputText);
+const syntheticText = "AVF MNG\n17 Oct Sat, 0035hrs\n\nQA719 > Example Hotel\n\nPassenger: Example Passenger\nPax: 1";
+const noAction = () => { throw new Error("Rendering must not invoke actions"); };
+const uiEnv = {
+  driverDispatchCopyEditState:{isEditing:false,draftText:"Reviewed draft"},
+  driverDispatchFeedback:null, driverDispatchEdited:false, driverDispatchCopied:false,
+  driverDispatchCopyText:syntheticText,
+  actionFeedbackButtonClass:()=>"",statusClass:()=>"",
+  saveCopyEdit:noAction,cancelCopyEdit:noAction,startCopyEdit:noAction,
+  copyDraftDriverDispatch:noAction,updateCopyEditDraft:noAction,
+};
+const normalHtml = renderToStaticMarkup(renderManual(React,uiEnv));
+assert.equal((normalHtml.match(/<details[ >]/g)||[]).length,1,"One click must reveal the message: no nested disclosure");
+assert.equal((normalHtml.match(/<summary[ >]/g)||[]).length,1,"Only the outer section may toggle");
+assert.match(normalHtml,/data-copy-preview="driverDispatch"/);
+assert.ok(normalHtml.includes("QA719 &gt; Example Hotel"));
+for (const marker of ['data-copy-edit-button="driverDispatch"','data-copy-copy-button="driverDispatch"']) assert.ok(normalHtml.includes(marker));
+const editingHtml=renderToStaticMarkup(renderManual(React,{...uiEnv,driverDispatchCopyEditState:{isEditing:true,draftText:"Reviewed draft"}}));
+assert.match(editingHtml,/data-copy-edit-textarea="driverDispatch"/);
+assert.match(editingHtml,/Reviewed draft/);
+assert.doesNotMatch(editingHtml,/data-copy-preview="driverDispatch"/);
+for (const marker of ['data-copy-save-edit="driverDispatch"','data-copy-cancel-edit="driverDispatch"']) assert.ok(editingHtml.includes(marker));
+if (process.env.MANUAL_COPY_PREVIEW_HTML) {
+  await writeFile(process.env.MANUAL_COPY_PREVIEW_HTML, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local manual copy preview</title><link rel="stylesheet" href="/preview.css"><main style="max-width:900px;margin:16px auto">${normalHtml}</main>`);
+}
+console.log("Actual manual-copy JSX: one disclosure, retained message/Edit/Copy, and Edit Save/Cancel branch passed");
 
 console.log("Manual WhatsApp Copy + human Driver Job Link UI guard passed");
 

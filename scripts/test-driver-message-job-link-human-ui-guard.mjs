@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import ts from "typescript";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const app = await readFile("app/page.tsx", "utf8");
@@ -76,6 +78,26 @@ for(const fragment of ["dispatchReleaseTripComplete", "dispatchReleaseDriverRead
   assert.ok(readiness.includes(fragment), "Retain readiness guard: " + fragment);
 }
 
+// Execute real flight-location helpers, not a simplified formatter stub.
+const compile = source => ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+function functionSource(source, name) {
+  const tree = ts.createSourceFile("source.tsx",source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  let result;
+  function visit(node) {
+    if(ts.isFunctionDeclaration(node) && node.name?.text === name) result=node.getText(tree).replace(/^export /, "");
+    ts.forEachChild(node,visit);
+  }
+  visit(tree);
+  assert.ok(result, `Missing actual function ${name}`);
+  return result;
+}
+const pricing = await readFile("lib/pricing.ts", "utf8");
+const flightHelpers = compile([
+  functionSource(pricing,"normalizeBookingType"),
+  ...["bookingTypeIsDeparture","bookingTypeIsArrival","appendFlightDetailToLocation","dispatchCopyLocationFlightParts"].map(name=>functionSource(app,name)),
+].join("\n"));
+globalThis.fetch = () => { throw new Error("No network allowed in manual-copy guard"); };
+
 // Run the existing formatter with synthetic jobs; other copy generators are not replaced.
 const generatorBody = generator.slice(generator.indexOf("() => {") + 7, generator.lastIndexOf("  }, ["));
 const formatCopy = new Function("booking", "options", `
@@ -87,7 +109,7 @@ const formatCopy = new Function("booking", "options", `
   const dispatchReleaseWorkflowBookingReference = "";
   const draftPricing = {driverPayout:65};
   const formatChildSeatNote = () => "Child seat: 1 booster";
-  const dispatchCopyLocationFlightParts = b => ({pickup:b.pickup,dropoff:b.dropoff,standaloneFlightLine:b.flight ? "Flight: " + b.flight : ""});
+  ${flightHelpers}
   const formatDate = value => value || "Date TBC";
   const formatPickupTime = value => value ? "1800hrs" : "Time TBC";
   const isDspItinerary = options.dsp || false;
@@ -99,7 +121,7 @@ const basicCopy = formatCopy(copyBooking,{});
 assert.equal(basicCopy,"VVV DEP\n14 Sept Mon, 1800hrs\n\nExample pickup > Example airport\n\nPassenger: Example passenger\nPax: 2");
 const assignedCopy = formatCopy({...copyBooking,driverName:"Example chauffeur",driverContact:"00000000",driverPlate:"EXAMPLE",driverVehicleModel:"V-Class",flight:"QA123",extraStopLocation:"Example stop",childSeatRequired:"yes",driverIncludePayout:true},{});
 assert.doesNotMatch(assignedCopy,/DRIVER DISPATCH|^Driver:/m);
-for (const line of ["Contact: 00000000","Plate: EXAMPLE","Vehicle: V-Class","Flight: QA123","Example pickup > Example stop > Example airport","Child seat: 1 booster","Payout: $65"]) assert.ok(assignedCopy.includes(line),line);
+for (const line of ["Contact: 00000000","Plate: EXAMPLE","Vehicle: V-Class","Example pickup > Example stop > QA123","Child seat: 1 booster","Payout: $65"]) assert.ok(assignedCopy.includes(line),line);
 const dspCopy = formatCopy({...copyBooking,bookingType:"DSP"},{dsp:true,stops:[{time:"1900",location:"Example stop"}]});
 assert.match(dspCopy,/Itinerary:\n1900 - Example stop/);
 assert.doesNotMatch(dspCopy,/DRIVER DISPATCH|^Driver:/m);
@@ -124,3 +146,62 @@ assert.match(formatCopy({...copyBooking,date:"2028-02-29"},{}),/29 Feb Tue, 1800
 assert.match(formatCopy({...copyBooking,date:"",time:""},{}),/Date TBC, Time TBC/);
 assert.match(formatCopy({...copyBooking,date:"invalid"},{}),/invalid, 1800hrs/);
 console.log("Manual copy weekday is derived from the booking date; missing and invalid dates preserve fallback");
+
+// Service-specific route regressions: no change to booking data or other copy targets.
+const arrival = {...copyBooking,bookingType:"MNG",pickup:"Changi Airport",dropoff:"Example hotel",flight:"QA719"};
+const arrivalBefore = JSON.stringify(arrival);
+assert.ok(formatCopy(arrival,{}).includes("\n\nQA719 > Example hotel\n\n"));
+assert.equal(JSON.stringify(arrival),arrivalBefore,"Formatting must not mutate booking fields");
+assert.ok(formatCopy({...arrival,extraStopLocation:"Stop one > Stop two"},{}).includes("QA719 > Stop one > Stop two > Example hotel"));
+assert.ok(formatCopy({...copyBooking,flight:"QA207"},{}).includes("Example pickup > QA207"));
+for (const [type,expected] of [["MNG","Changi Airport > Example hotel"],["DEP","Changi Airport > Example hotel"]]) {
+  assert.ok(formatCopy({...arrival,bookingType:type,flight:" "},{}).includes(expected),"Missing flight retains existing location fallback");
+}
+for (const type of ["TRF","DSP"]) {
+  const result=formatCopy({...arrival,bookingType:type,extraStopLocation:"Stop"},{});
+  assert.ok(result.includes("Flight: QA719\nChangi Airport > Stop > Example hotel"),type+" unchanged");
+}
+assert.ok(formatCopy({...arrival,bookingType:"Arrival"},{}).includes("QA719 > Example hotel"));
+assert.ok(formatCopy({...copyBooking,bookingType:"Departure",flight:"QA207"},{}).includes("Example pickup > QA207"));
+const mismatch = {...arrival,bookingType:"DEP"};
+assert.ok(formatCopy(mismatch,{}).includes("Changi Airport > QA719"));
+assert.equal(mismatch.bookingType,"DEP","Never guess or change stored service from airport text");
+for (const result of [formatCopy(arrival,{}),assignedCopy]) {
+  assert.doesNotMatch(result,/\(Flight:/,"Airport endpoint is compact only in this manual target");
+}
+
+// Use the existing selector/edit/copy callbacks; the preview and clipboard share it.
+const env = {
+  generatedDispatchCopyMessages:{driverDispatch:formatCopy(arrival,{})}, dispatchCopyResetKey:"BOOKING-A",
+  copyEditStates:{driverDispatch:{sourceKey:"",generatedText:"",editedText:null,draftText:"",isEditing:false}},
+  loadedBookingId:"BOOKING-A", dispatchCopyLabels:{driverDispatch:"Driver dispatch"},
+  writes:[], setCopyFeedback:()=>{},
+};
+env.setCopyEditStates = update => {env.copyEditStates=update(env.copyEditStates);};
+env.navigator={clipboard:{writeText:async text=>env.writes.push(text)}};
+const callbacks=compile(["getDispatchCopyText","startCopyEdit","updateCopyEditDraft","saveCopyEdit","cancelCopyEdit","copyDispatchCopy","copyDraftDriverDispatch"].map(name=>functionSource(app,name)).join("\n"));
+const actions = new Function("env",`with(env){${callbacks};return {getDispatchCopyText,startCopyEdit,updateCopyEditDraft,saveCopyEdit,cancelCopyEdit,copyDraftDriverDispatch};}`)(env);
+await actions.copyDraftDriverDispatch();
+await actions.copyDraftDriverDispatch();
+assert.deepEqual(env.writes,[env.generatedDispatchCopyMessages.driverDispatch,env.generatedDispatchCopyMessages.driverDispatch]);
+actions.startCopyEdit("driverDispatch");
+actions.updateCopyEditDraft("driverDispatch","Manual reviewed route");
+actions.saveCopyEdit("driverDispatch");
+await actions.copyDraftDriverDispatch();
+assert.equal(env.writes.at(-1),"Manual reviewed route");
+actions.cancelCopyEdit("driverDispatch");
+assert.equal(actions.getDispatchCopyText("driverDispatch"),env.generatedDispatchCopyMessages.driverDispatch);
+env.generatedDispatchCopyMessages.driverDispatch=formatCopy({...copyBooking,flight:"QA207"},{});
+env.dispatchCopyResetKey="BOOKING-B";
+await actions.copyDraftDriverDispatch();
+assert.equal(env.writes.at(-1),env.generatedDispatchCopyMessages.driverDispatch,"New booking copies current generated message");
+assert.ok(messagePanel.includes('{driverDispatchCopyText}'),"Existing preview consumes the same selected text");
+console.log("Manual airport routes, fallbacks, stops, repeated Copy, Edit/Cancel and booking switch passed; no network or booking writes.");
+
+// Preserve shared locations, Customer Copy, Driver Job Link, Email and edit/clipboard handlers.
+const preservedBlocks = [["function bookingTypeIsDeparture", "function hasParsedValue", "8d869fb3fe7747c7c35c44d38f5260fbd918a4b084665f0c50bea4e60a19c5cc"], ["  const customerCopyCard = useMemo", "  const draftDriverDispatchCard", "799d950e8b4cef6176a4b7199cd13c3a1668093ea60267617323b3faba13c464"], ["  const driverJobLinkMessage = useMemo", "  const generatedDispatchCopyMessages", "6c3721207adaff6a59cdc0ca0d09e4d50199810c9d0b12c03a19eb3cf1891151"], ["  function getDispatchCopyText", "  async function copyJobCard", "1c163c5a3b5a56dcc2042bad933e116eb3399cb946dec59104aaa76a5562cc79"], ["  async function sendAdminCustomerDriverDetailsEmail", "\n  async function ", "b342def3ed38a82fc7a6697466100c0f6272ec7aa96c98e94d0f077eb075a8cf"]];
+for (const [start,end,hash] of preservedBlocks) {
+  const i=app.indexOf(start), j=app.indexOf(end,i+start.length);
+  assert.ok(i>=0 && j>i);
+  assert.equal(createHash("sha256").update(app.slice(i,j)).digest("hex"),hash,`Unchanged boundary: ${start}`);
+}

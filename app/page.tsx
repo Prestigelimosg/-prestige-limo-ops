@@ -19582,9 +19582,13 @@ export default function Home() {
         : "";
     const flightLocationParts = dispatchCopyLocationFlightParts(booking);
     const driverDispatchRoute = [
-      flightLocationParts.pickup || "Pickup",
+      bookingTypeIsArrival(booking.bookingType) && clean(booking.flight)
+        ? clean(booking.flight)
+        : flightLocationParts.pickup || "Pickup",
       clean(booking.extraStopLocation),
-      flightLocationParts.dropoff || "Drop-off",
+      bookingTypeIsDeparture(booking.bookingType) && clean(booking.flight)
+        ? clean(booking.flight)
+        : flightLocationParts.dropoff || "Drop-off",
     ].filter(Boolean).join(" > ");
     const routeLines = isDspItinerary
       ? [

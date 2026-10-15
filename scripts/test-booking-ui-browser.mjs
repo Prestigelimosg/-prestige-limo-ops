@@ -25552,7 +25552,7 @@ async function runChromeTest() {
     assert.match(routeNameAirportDepartureState.driverDispatch, /Watten Estate Rd/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Sin Ming Ave/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Bedok South/);
-    assert.match(routeNameAirportDepartureState.driverDispatch, /Changi Airport/);
+    assert.match(routeNameAirportDepartureState.driverDispatch, /Bedok South.* > SQ265/);
 
     const focusedFreeformTransferTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

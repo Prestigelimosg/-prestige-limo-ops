@@ -864,7 +864,7 @@ function parseAdminBookingOperationalPayload(
     allowedTopLevelFields === updatePayloadTopLevelFields &&
     ((body.update_mode === "driver_assignment" &&
       (path === "combo_assignment.total_payout_sgd" || path === "assignment_payout")) ||
-      (body.update_mode === undefined && path === "payout_amendment"))
+      (body.update_mode === "driver_assignment" && path === "payout_amendment"))
   ));
 
   if (forbiddenFields.length > 0) {
@@ -1176,7 +1176,7 @@ export function parseAdminBookingUpdatePayload(
   const comboAssignment = body.combo_assignment === undefined ? null : asRecord(body.combo_assignment);
   const payoutAmendment = body.payout_amendment === undefined ? null : asRecord(body.payout_amendment);
   if (payoutAmendment && (
-    body.update_mode !== undefined || !expectedUpdatedAt || body.combo_assignment !== undefined || body.assignment_payout !== undefined ||
+    updateMode !== "driver_assignment" || !expectedUpdatedAt || body.combo_assignment !== undefined || body.assignment_payout !== undefined ||
     Object.keys(payoutAmendment).length !== 2 ||
     (payoutAmendment.amount !== null && (typeof payoutAmendment.amount !== "number" ||
       !Number.isFinite(payoutAmendment.amount) || payoutAmendment.amount < 0 || payoutAmendment.amount > 99999.99 ||

@@ -9,7 +9,7 @@ import {
   parseAdminBookingUpdatePayload,
   updateAdminBooking,
 } from "../../../lib/admin-booking-persistence";
-import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { getServerOnlySupabaseClient, adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
@@ -435,6 +435,24 @@ export async function PATCH(request: Request) {
       return adminBookingFailureResponse(result);
     }
 
+    let payoutCalendarStatus: "updated" | "preserved" | "awaiting_ack" | "failed" = "failed";
+    if (parsed.data.payout_amendment) {
+      try {
+        const client = getServerOnlySupabaseClient(actor);
+        if (client.ok) {
+          const { syncAcknowledgedDriverDetailsToOperationsCalendar } = await import("../../../lib/driver-job-operations-calendar-sync");
+          await syncAcknowledgedDriverDetailsToOperationsCalendar({
+            bookingReference: result.data.booking_reference || undefined,
+            client: client.data,
+            payoutRefresh: {
+              driverId: Number(result.data.driver_id), updatedAt: String(result.data.updated_at),
+              onResult: (status) => { payoutCalendarStatus = status; },
+            },
+          });
+        }
+      } catch { /* Saved payout remains successful; Calendar failure is reported separately. */ }
+    }
+
     const customerNotification = (parsed.data.update_mode === "driver_assignment_cancel" || parsed.data.assignment_payout || parsed.data.payout_amendment) ? null : await maybeQueueCustomerRequestDecisionNotification(
       parsed.data,
       actor,
@@ -445,6 +463,7 @@ export async function PATCH(request: Request) {
       ok: true,
       booking: result.data,
       customer_notification: customerNotification,
+      ...(parsed.data.payout_amendment ? { payout_calendar_status: payoutCalendarStatus } : {}),
     });
   } catch {
     return safeFailureResponse("update_request");

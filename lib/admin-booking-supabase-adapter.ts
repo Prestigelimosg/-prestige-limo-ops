@@ -3267,6 +3267,63 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     return applyAdminDriverReassignmentTransaction(client, input, actor, existing);
   }
 
+  if (input.payout_amendment) {
+    const payout = input.payout_amendment;
+    const terminal = ["completed", "cancelled", "canceled", "closed", "declined"];
+    const savedDriver = positiveSafeInteger(existing.driver_id);
+    const payoutRead = await client.from("bookings").select("driver_payout_override,driver_payout_reason")
+      .eq("id", existing.id).eq("booking_reference", input.target_booking_reference)
+      .eq("updated_at", existing.updated_at).eq("driver_id", savedDriver).maybeSingle();
+    if (payoutRead.error || !payoutRead.data) return { ok: false, status: 409, error: safeUpdateConflictError };
+    const savedPayout = asRecord(payoutRead.data);
+    const pendingCustomerRequest = existing.source_surface === "customer_booking_request" && existing.request_review_status !== "approved";
+    if (!isVerifiedAdminDispatcherActor(actor) || input.update_mode !== "driver_assignment" || input.assignment_payout || !expectedUpdatedAt ||
+        !savedDriver || savedDriver !== positiveSafeInteger(input.booking.driver_id) || pendingCustomerRequest ||
+        (["Driver Pool accepted fixed offer.", "Admin assigned combo total."].includes(String(savedPayout.driver_payout_reason || "")) || String(savedPayout.driver_payout_reason || "").startsWith("Included in combo ")) ||
+        [asRecord(existing).status, existing.admin_internal_status, existing.customer_facing_status, input.booking.admin_internal_status, input.booking.customer_facing_status].some(value => terminal.includes(String(value || "").trim().toLowerCase())) ||
+        // Omitted customer identity retains the saved owner; no CRM writer is entered.
+        !dbIdentifierOrNull(existing.customer_id) ||
+        String(dbIdentifierOrNull(input.booking.customer_id) || existing.customer_id) !== String(existing.customer_id) ||
+        ["company_id", "booker_id", "traveler_id"].some(key => String(asRecord(existing)[key] ?? "") !== String(asRecord(input.booking)[key] ?? "")) ||
+        ["driver_name", "driver_contact", "driver_plate_number"].some(key => textOrNull(asRecord(existing)[key]) !== textOrNull(asRecord(input.booking)[key])) ||
+        (payout.amount !== null && (!Number.isFinite(payout.amount) || payout.amount < 0 || payout.amount > 99999.99 || Math.abs(payout.amount * 100 - Math.round(payout.amount * 100)) > 0.000001)) ||
+        typeof payout.reason !== "string" || payout.reason.length > 500 || (payout.amount === null && payout.reason !== "")) {
+      return { ok: false, status: 409, error: "Reload one active assigned booking before changing its saved payout. Keep its Driver and customer ownership unchanged." };
+    }
+    const driverRead = await client.from("drivers").select("id,availability_status").eq("id", savedDriver).maybeSingle();
+    if (driverRead.error || !driverRead.data || Number(driverRead.data.id) !== savedDriver ||
+        String(driverRead.data.availability_status || "").trim().toLowerCase() === "inactive") {
+      return { ok: false, status: 409, error: "The saved Driver could not be verified as active. Nothing was saved." };
+    }
+    const offers = await client.from("driver_job_bid_offers").select("id")
+      .eq("booking_reference", input.target_booking_reference).in("offer_status", ["open", "assigned"]).limit(1);
+    if (offers.error || offers.data?.length) return { ok: false, status: 409, error: "Review this booking's Driver Pool assignment before changing its payout." };
+    // This action never enters customer/contact/route/service or reassignment writers.
+    const receipt = { amount: payout.amount, reason: payout.reason };
+    const previous = savedPayout.driver_payout_override;
+    if ((previous == null ? null : Number(previous)) === payout.amount &&
+        (textOrNull(savedPayout.driver_payout_reason) || "") === payout.reason) {
+      return { ok: true, data: { ...existing, payout_amendment: receipt } };
+    }
+    const { data: saved, error } = await client.from("bookings").update({
+      driver_payout_override: payout.amount,
+      driver_payout_reason: textOrNull(payout.reason),
+      updated_at: new Date().toISOString(),
+    }).eq("id", existing.id).eq("booking_reference", input.target_booking_reference)
+      .eq("updated_at", existing.updated_at).eq("driver_id", savedDriver)
+      .or("status.is.null,status.not.in.(completed,cancelled,canceled,closed,declined)")
+      .or("admin_internal_status.is.null,admin_internal_status.not.in.(completed,cancelled,canceled,closed,declined)")
+      .or("customer_facing_status.is.null,customer_facing_status.not.in.(completed,cancelled,canceled,closed,declined)")
+      .select(`${adminBookingCurrentLoadSelect},driver_payout_override,driver_payout_reason`).maybeSingle();
+    if (error) return safeAdapterFailure(safeUpdateError, 500, error, "booking_row");
+    if (!saved) return { ok: false, status: 409, error: safeUpdateConflictError };
+    const updated = { ...toAdminBookingDto(asRecord(saved)), payout_amendment: receipt };
+    const audit = await createAuditLog(client, existing.id, dbIdentifierOrNull(existing.customer_id),
+      input.target_booking_reference, { ...auditInput, change_summary: "Assigned driver payout updated; booking details unchanged." }, actor, existing, updated);
+    if (!audit.ok) return { ...audit, error: "Payout was saved, but audit recording could not be confirmed. Reload before further changes." };
+    return { ok: true, data: updated };
+  }
+
   if (input.update_mode === "driver_assignment") {
     const existingDriverId = positiveSafeInteger(existing.driver_id);
     const requestedDriverId = positiveSafeInteger(input.booking.driver_id);
@@ -3299,28 +3356,6 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     }
   }
 
-  if (input.payout_amendment) {
-    const payout = input.payout_amendment;
-    const terminal = ["completed", "cancelled", "canceled", "closed", "declined"];
-    const savedDriver = positiveSafeInteger(existing.driver_id);
-    const pendingCustomerRequest = existing.source_surface === "customer_booking_request" && existing.request_review_status !== "approved";
-    if (!isVerifiedAdminDispatcherActor(actor) || input.update_mode || input.assignment_payout || !expectedUpdatedAt ||
-        !savedDriver || savedDriver !== positiveSafeInteger(input.booking.driver_id) || pendingCustomerRequest ||
-        ["Driver Pool accepted fixed offer.", "Admin assigned combo total."].includes(String(asRecord(existing).driver_payout_reason || "")) ||
-        [asRecord(existing).status, existing.admin_internal_status, existing.customer_facing_status, input.booking.admin_internal_status, input.booking.customer_facing_status].some(value => terminal.includes(String(value || "").trim().toLowerCase())) ||
-        // Full amendments already retain the saved customer when the UI sends null.
-        !dbIdentifierOrNull(existing.customer_id) ||
-        String(dbIdentifierOrNull(input.booking.customer_id) || existing.customer_id) !== String(existing.customer_id) ||
-        ["company_id", "booker_id", "traveler_id"].some(key => String(asRecord(existing)[key] ?? "") !== String(asRecord(input.booking)[key] ?? "")) ||
-        ["driver_name", "driver_contact", "driver_plate_number"].some(key => textOrNull(asRecord(existing)[key]) !== textOrNull(asRecord(input.booking)[key])) ||
-        (payout.amount !== null && (!Number.isFinite(payout.amount) || payout.amount < 0 || payout.amount > 99999.99 || Math.abs(payout.amount * 100 - Math.round(payout.amount * 100)) > 0.000001)) ||
-        typeof payout.reason !== "string" || payout.reason.length > 500 || (payout.amount === null && payout.reason !== "")) {
-      return { ok: false, status: 409, error: "Reload one active assigned booking before changing its saved payout. Keep its Driver and customer ownership unchanged." };
-    }
-    const offers = await client.from("driver_job_bid_offers").select("id")
-      .eq("booking_reference", input.target_booking_reference).in("offer_status", ["open", "assigned"]).limit(1);
-    if (offers.error || offers.data?.length) return { ok: false, status: 409, error: "Review this booking's Driver Pool assignment before changing its payout." };
-  }
 
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
   const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
@@ -3344,10 +3379,6 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .from("bookings")
     .update({
       ...bookingRow,
-      ...(input.payout_amendment ? {
-        driver_payout_override: input.payout_amendment.amount,
-        driver_payout_reason: textOrNull(input.payout_amendment.reason),
-      } : {}),
       booking_reference: input.target_booking_reference,
       updated_at: nextUpdatedAt,
     })
@@ -3357,11 +3388,6 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     bookingUpdateQuery = bookingUpdateQuery.eq("updated_at", existing.updated_at);
   }
 
-  if (input.payout_amendment) {
-    bookingUpdateQuery = bookingUpdateQuery.eq("booking_reference", input.target_booking_reference)
-      .eq("driver_id", existing.driver_id)
-      .or("status.is.null,status.not.in.(completed,cancelled,canceled,closed,declined)");
-  }
   const { error: bookingError } = await bookingUpdateQuery;
 
   if (bookingError) {
@@ -3465,7 +3491,6 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     ...reloadedResult,
     data: {
       ...updatedBooking,
-      ...(input.payout_amendment ? { payout_amendment: input.payout_amendment } : {}),
     },
   };
 }

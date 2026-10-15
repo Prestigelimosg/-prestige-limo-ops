@@ -1304,7 +1304,9 @@ try {
     const payoutClient = { from(table) {
       assert.ok(Object.hasOwn(tables, table));
       const filters = [];
+      let maxRows;
       const query = {
+        order(){return query;}, limit(n){maxRows=n;return query;},
         select(columns) {
           assert.doesNotMatch(columns, /customer_rate|customer_price|invoice|payment/);
           if (table !== "bookings") assert.doesNotMatch(columns, /override/);
@@ -1312,6 +1314,7 @@ try {
         },
         eq(column, value) {
           const expected = table === "bookings" ? { booking_reference: tables.bookings.booking_reference }
+            : table === "driver_job_links" ? { booking_reference: tables.bookings.booking_reference, link_status: "active" }
             : table === "driver_job_bid_offers" ? { booking_reference: tables.bookings.booking_reference, offer_status: "assigned" }
             : table === "driver_job_bids" ? { driver_job_bid_offer_id: "11111111-1111-4111-8111-111111111111", bid_status: "accepted" }
             : { id: table === "companies" ? 7 : table === "drivers" ? 8 : "default" };
@@ -1321,27 +1324,28 @@ try {
         async maybeSingle() {
           if (tables[table]?.error) return { data: null, error: tables[table].error };
           if (!Array.isArray(tables[table])) return { data: tables[table], error: null };
-          const rows = tables[table].filter(row => filters.every(([column,value]) => row[column] === value));
+          const rows = tables[table].filter(row => filters.every(([column,value]) => row[column] === value)).slice(0,maxRows);
           return rows.length > 1 ? { data: null, error: { message: "Ambiguous records" } } : { data: rows[0] || null, error: null };
         },
       }; return query;
     } };
     let stored = null;
     let conflict = false;
+    let onCalendarGet;
     const requests = [];
     const fetcher = async (url, init = {}) => {
       const u = new URL(String(url));
       if (u.pathname === "/token") return Response.json({ access_token: googleAccessToken });
       const method = init.method || "GET";
       requests.push({ method, init });
-      if (method === "GET") return stored ? Response.json(stored) : new Response("{}", { status: 404 });
+      if (method === "GET") { onCalendarGet?.(); return stored ? Response.json(stored) : new Response("{}", { status: 404 }); }
       assert.equal(u.searchParams.get("sendUpdates"), "none");
       const resource = JSON.parse(init.body);
       assert.equal(resource.attendees, undefined);
       if (method === "POST") {
         if (stored) return new Response("{}", { status: 409 });
       } else {
-        assert.equal(method, "PUT");
+        assert.ok(["PUT","PATCH"].includes(method));
         assert.equal(new Headers(init.headers).get("If-Match"), stored.etag);
         if (conflict) {
           stored.summary = stored.summary.replace(/\$[\d.]+ > /, "$88 > ");
@@ -1349,7 +1353,7 @@ try {
           return new Response("{}", { status: 412 });
         }
       }
-      stored = { ...resource, etag: `"v${requests.length}"` };
+      stored = { ...(method === "PATCH" ? stored : {}), ...resource, etag: `"v${requests.length}"` };
       return Response.json(stored);
     };
     const options = { env, fetcher, payoutClient };
@@ -1373,6 +1377,54 @@ try {
     assert.equal(await ack(), true);
     assert.match(stored.summary, /^SLV1234 \$55 > /, "ACK must prefer the saved override 55 over default 50");
     const firstAck = structuredClone(stored);
+    // Same-driver payout save -> verified persisted ACK -> existing event PATCH.
+    // No new ACK, link issuance, event insertion or operational amendment.
+    {
+      const initialBooking=structuredClone(tables.bookings);
+      tables.bookings.updated_at="2026-10-15T12:31:22.677Z";
+      tables.bookings.status=null;
+      tables.driver_job_links=[{id:"latest",booking_reference:tables.bookings.booking_reference,driver_id:8,link_status:"active",revoked_at:null,expires_at:"2099-01-01T00:00:00Z",safe_link_context:{driver_acknowledged_at:"2026-10-15T12:00:00Z"}}];
+      const link=structuredClone(tables.driver_job_links[0]);
+      let outcome;
+      const refresh=()=>driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference:tables.bookings.booking_reference,client:payoutClient,
+        payoutRefresh:{driverId:8,updatedAt:"2026-10-15T12:31:22.677Z",onResult:s=>{outcome=s;}},
+        syncer:(payload,opts)=>googleSync.syncVerifiedDriverDetailsToAdminBookingCalendar(payload,{...opts,...options})
+      });
+      for(const amount of [65,null,0,88.5]){
+        tables.bookings.driver_payout_override=amount;outcome=undefined;requests.length=0;
+        assert.equal(await refresh(),true);assert.equal(outcome,"updated");
+        assert.match(stored.summary,new RegExp("\\$"+String(amount??50).replace(".","\\.")+" > "));
+        assert.equal(requests.filter(r=>r.method==="POST").length,0,"payout change never inserts events");
+        assert.equal(requests.filter(r=>r.method==="PATCH").length,1);
+        assert.deepEqual(Object.keys(JSON.parse(requests.find(r=>r.method==="PATCH").init.body)).sort(),["extendedProperties","summary"]);
+        for(const key of ["id","start","end","location","description","reminders"])assert.deepEqual(stored[key],firstAck[key]);
+        requests.length=0;assert.equal(await refresh(),true);assert.equal(requests.filter(r=>r.method!=="GET").length,0,"identical retry is read-only");
+      }
+      for(const manual of ["$72","$0",""]){
+        stored=structuredClone(firstAck);stored.summary=stored.summary.replace("$55",manual).replace(/ +/g," ");
+        const manualSummary=stored.summary;tables.bookings.driver_payout_override=65;
+        assert.equal(await refresh(),true);assert.equal(outcome,"preserved");assert.equal(stored.summary,manualSummary);
+        assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout,undefined);
+        tables.bookings.driver_payout_override=72;assert.equal(await refresh(),true);tables.bookings.driver_payout_override=80;assert.equal(await refresh(),true);assert.equal(stored.summary,manualSummary);
+      }
+      stored=structuredClone(firstAck);delete stored.extendedProperties.private.prestigeAutomaticPayout;
+      assert.equal(await refresh(),true);assert.equal(outcome,"preserved");assert.equal(stored.summary,firstAck.summary);
+      for(const setup of [()=>{tables.driver_job_links=[];},()=>{tables.driver_job_links[0].safe_link_context.driver_amendment_ack_pending=true;},()=>{delete tables.driver_job_links[0].safe_link_context.driver_acknowledged_at;}]){
+        tables.driver_job_links=[structuredClone(link)];setup();requests.length=0;
+        assert.equal(await refresh(),true);assert.equal(outcome,"awaiting_ack");assert.equal(requests.length,0);
+      }
+      for(const setup of [()=>{tables.driver_job_links[0].driver_id=9;},()=>{tables.driver_job_links[0].revoked_at="2026-10-15";},()=>{tables.driver_job_links[0].expires_at="2020-01-01";},()=>{tables.bookings.updated_at="2026-10-15T12:32:00Z";},()=>{tables.bookings.status="completed";}]){
+        tables.driver_job_links=[structuredClone(link)];tables.bookings.updated_at="2026-10-15T12:31:22.677Z";tables.bookings.status=null;setup();requests.length=0;
+        assert.equal(await refresh(),false);assert.equal(requests.length,0);
+      }
+      tables.bookings.status=null;tables.bookings.updated_at="2026-10-15T12:31:22.677Z";tables.driver_job_links=[structuredClone(link)];
+      stored=null;requests.length=0;assert.equal(await refresh(),false);assert.equal(requests.some(r=>r.method!=="GET"),false,"missing event never recreated");
+      stored=structuredClone(firstAck);conflict=true;assert.equal(await refresh(),false);assert.match(stored.summary,/\$88/);conflict=false;
+      stored=structuredClone(firstAck);requests.length=0;onCalendarGet=()=>{tables.bookings.updated_at="2026-10-15T12:33:00Z";};
+      assert.equal(await refresh(),false);assert.equal(requests.some(r=>r.method!=="GET"),false);onCalendarGet=undefined;
+      tables.bookings=initialBooking;delete tables.driver_job_links;stored=structuredClone(firstAck);
+    }
     const immutableBooking = structuredClone(tables.bookings);
     assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, "$55");
     assert.equal(await ack(), true, "repeated ACK is safe");

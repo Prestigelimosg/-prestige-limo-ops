@@ -38,6 +38,12 @@ type CalendarSyncOptions = {
   payoutClient?: PayoutReadClient;
   // Server-only context from a successful single-booking acknowledgement, never request data.
   acknowledgedBookingReference?: string;
+  // Server-only, verified Admin payout-save continuation. Never public request fields.
+  payoutRefresh?: {
+    bookingReference: string;
+    beforeWrite: () => Promise<boolean>;
+    onResult: (status: "updated" | "preserved") => void;
+  };
 };
 
 type GoogleCalendarSyncConfig = {
@@ -776,11 +782,16 @@ async function upsertGoogleCalendarEvent(
   if (initialPayout) eventResource.extendedProperties.private.prestigePayoutInitialized = "1";
   if (candidate?.followsBooking) eventResource.extendedProperties.private.prestigeAutomaticPayout = candidate.amount;
   const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
-  const insertResponse = await fetcher(calendarEventsUrl(config), {
-    body: JSON.stringify(eventResource), headers, method: "POST",
-  });
-  if (insertResponse.ok) return true;
-  if (insertResponse.status !== 409) return false;
+  const payoutRefresh = options.payoutRefresh;
+  if (payoutRefresh && (payoutRefresh.bookingReference !== event.booking_reference ||
+      options.acknowledgedBookingReference !== event.booking_reference || !candidate?.followsBooking)) return false;
+  if (!payoutRefresh) {
+    const insertResponse = await fetcher(calendarEventsUrl(config), {
+      body: JSON.stringify(eventResource), headers, method: "POST",
+    });
+    if (insertResponse.ok) return true;
+    if (insertResponse.status !== 409) return false;
+  }
 
   // Read before replacing an existing event so an Admin's Calendar amount survives.
   // A concurrent edit yields 412 rather than being overwritten; no blind retry here.
@@ -821,6 +832,25 @@ async function upsertGoogleCalendarEvent(
     eventResource.extendedProperties.private.prestigePayoutInitialized = "1";
   } else {
     delete eventResource.extendedProperties.private.prestigePayoutInitialized;
+  }
+  if (payoutRefresh) {
+    if (!await payoutRefresh.beforeWrite()) return false;
+    const preserved = !mayRefresh && !firstSeed;
+    const manualOwnershipLost = typeof lastAutomatic === "string" && !stillAutomatic;
+    if ((!mayRefresh || previousPayout === initialPayout) && !firstSeed && !manualOwnershipLost) {
+      payoutRefresh.onResult(preserved ? "preserved" : "updated");
+      return true;
+    }
+    // Payout-only refresh cannot change plate, itinerary, reminders or description.
+    const summary = calendarTitleWithPayout(calendarTitleWithoutPayout(String(current.summary)), payout);
+    const privateProperties = { ...properties.private, ...eventResource.extendedProperties.private };
+    if (!eventResource.extendedProperties.private.prestigeAutomaticPayout) delete privateProperties.prestigeAutomaticPayout;
+    const refreshed = await fetcher(calendarEventsUrl(config, eventResource.id), {
+      body: JSON.stringify({ summary, extendedProperties: { ...current.extendedProperties as object, private: privateProperties } }),
+      headers: { ...headers, "If-Match": current.etag }, method: "PATCH",
+    });
+    if (refreshed.ok) payoutRefresh.onResult(preserved ? "preserved" : "updated");
+    return refreshed.ok;
   }
   const updateResponse = await fetcher(calendarEventsUrl(config, eventResource.id), {
     body: JSON.stringify(eventResource),

@@ -13,7 +13,8 @@ import {
   waitForTabLabels,
 } from "./browser-test-helpers.mjs";
 
-const amendmentOnly = process.env.SAVED_OVERRIDE_AMENDMENT_ONLY === "1";
+const oneClickPayout = process.env.ONE_CLICK_PAYOUT_ONLY === "1";
+const amendmentOnly = oneClickPayout || process.env.SAVED_OVERRIDE_AMENDMENT_ONLY === "1";
 const payoutOnly = amendmentOnly || process.env.ASSIGNMENT_PAYOUT_ONLY === "1";
 const expectPayoutBlocked = process.env.EXPECT_PAYOUT_BLOCKED === "1";
 const appUrl = process.env.APP_URL || "http://localhost:3000";
@@ -353,6 +354,7 @@ async function main() {
             return new Response(JSON.stringify({
               booking: { ...type2Booking, ...(parsedBody.assignment_payout ? {assignment_payout:parsedBody.assignment_payout} : {}), ...(parsedBody.payout_amendment ? {payout_amendment:parsedBody.payout_amendment} : {}) },
               ok: true,
+              ...(parsedBody.payout_amendment ? { payout_calendar_status: window.__payoutCalendarResult || "updated" } : {}),
               version: "type2-assignment-update-browser-mock"
             }), { headers: { "Content-Type": "application/json" }, status: 200 });
           }
@@ -773,13 +775,19 @@ async function main() {
             input.dispatchEvent(new Event('input',{bubbles:true}));
             window.__type2AssignmentPatchBodies=[];window.__type2AssignmentCalendarCalls=[];
           })()`);
+          if (oneClickPayout) {
+            await waitForCondition(()=>evaluate(`(() => {const b=document.querySelector('[data-admin-draft-driver-assignment-state]');return b?.textContent.trim()==='Save Driver Assignment'&&!b.disabled;})()`),10000,'same Assigned Driver button offers payout save');
+            await evaluate(`document.querySelector('[data-admin-draft-driver-assignment-state]').click()`);
+            await waitForCondition(()=>evaluate(`document.body.innerText.includes('Payout saved. Calendar synced.')`),10000,'one click saves payout and reports server Calendar result');
+          } else {
           await waitForCondition(()=>evaluate(`(() => {const b=document.querySelector("[data-job-card-save-toolbar='primary'] button");return b?.textContent.trim()==='Update + Cal'&&!b.disabled;})()`),10000,'payout amendment uses existing Update + Cal');
           await evaluate(`document.querySelector("[data-job-card-save-toolbar='primary'] button").click()`);
           await waitForCondition(()=>evaluate(`document.body.innerText.includes('Google Calendar auto-synced')`),10000,'payout amendment response reaches Calendar continuation');
+          }
           const patches=await evaluate(`window.__type2AssignmentPatchBodies`);
-          assert.equal(patches.length,1);assert.equal(patches[0].update_mode,undefined);
+          assert.equal(patches.length,1);assert.equal(patches[0].update_mode,oneClickPayout ? "driver_assignment" : undefined);
           assert.deepEqual(patches[0].payout_amendment,{amount:amount?65:null,reason:amount?'Reviewed one-trip payout':''});
-          assert.equal(await evaluate(`window.__type2AssignmentCalendarCalls.filter(call=>call.method === "POST" && !call.url.includes("mode=status")).length`),1,"one Calendar write; status reads are separate");
+          assert.equal(await evaluate(`window.__type2AssignmentCalendarCalls.filter(call=>call.method === "POST" && !call.url.includes("mode=status")).length`),oneClickPayout ? 0 : 1,"no second client Calendar write; status reads are separate");
           assert.deepEqual(await evaluate(`window.__type2AssignmentLinkBodies`),[],'no link or notification sends');
           await navigateWithLoadEvent(client,appUrl);
           await waitForTabLabels(evaluate,["Dispatch","Dashboard","Bookings"],"reload amended payout");
@@ -790,7 +798,24 @@ async function main() {
           assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),0,'reload does not save');
           if(!amount) assert.equal(await evaluate(`([...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector('span')?.textContent.trim()==='Override Reason')?.querySelector('input')?.value)`),'');
         }
-        console.log('Saved override React browser: 65 then clear/null, one existing Update+Cal PATCH each, full reload persistence, unchanged CRM/Driver/trip/customer price, no link/send calls. Synthetic only.');
+        if(oneClickPayout){
+          for(const [status,amount,message] of [["preserved","66","Payout saved. Your Calendar amount was kept."],["awaiting_ack","67","Payout saved. Calendar will update after Driver Save & Acknowledge."],["failed","68","Payout saved; Calendar update failed."]]){
+            await evaluate(`(() => {window.__payoutCalendarResult=${JSON.stringify(status)};window.__type2AssignmentPatchBodies=[];const e=[...document.querySelectorAll('[data-dispatch-workflow-step="driver-assignment"] label')].find(l=>l.querySelector('span')?.textContent.trim()==='Override Payout').querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(amount)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+            await waitForCondition(()=>evaluate(`document.querySelector('[data-admin-draft-driver-assignment-state]')?.textContent.trim()==='Save Driver Assignment'`),10000,'payout status save enabled');
+            await evaluate(`document.querySelector('[data-admin-draft-driver-assignment-state]').click()`);
+            await waitForCondition(()=>evaluate(`document.body.innerText.includes(${JSON.stringify(message)})`),10000,'payout outcome is honest');
+            assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),1);
+            assert.equal(await evaluate(`document.querySelector('[data-dispatch-workflow-step="driver-assignment"]')!==null`),true,'remain in Dispatch without reload');
+          }
+          await evaluate(`window.__payoutCalendarResult='updated';window.__type2AssignmentPatchBodies=[]`);
+          await waitForCondition(()=>evaluate(`(() => {const b=document.querySelector('[data-admin-draft-driver-assignment-state]');return b?.textContent.trim()==='Save Driver Assignment'&&!b.disabled;})()`),10000,'same control retries Calendar without another edit');
+          await evaluate(`document.querySelector('[data-admin-draft-driver-assignment-state]').click()`);
+          await waitForCondition(()=>evaluate(`document.body.innerText.includes('Payout saved. Calendar synced.')`),10000,'retry reports successful Calendar outcome');
+          assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),1);
+          assert.deepEqual(await evaluate(`window.__type2AssignmentLinkBodies`),[]);
+          assert.equal(await evaluate(`window.__type2AssignmentCalendarCalls.filter(c=>c.method==='POST'&&!c.url.includes('mode=status')).length`),0);
+        }
+        console.log(`${oneClickPayout ? 'Assigned Driver one-click' : 'Update+Cal'} browser: 65 then clear/null, one booking PATCH each, no ACK/link/send, full reload persistence, unchanged CRM/Driver/trip/customer price. Synthetic only.`);
       }
       console.log("Driver + payout browser: one PATCH, retained payout, zero Calendar writes or sends.");
       return;

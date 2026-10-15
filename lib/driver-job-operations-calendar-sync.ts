@@ -169,6 +169,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   client,
   pickupAt,
   useSavedOverride = false,
+  payoutRefresh,
   syncer = syncVerifiedDriverDetailsToAdminBookingCalendar,
 }: {
   bookingReference?: string;
@@ -176,6 +177,11 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   client: DriverJobOperationsCalendarClient;
   pickupAt?: string;
   useSavedOverride?: boolean;
+  payoutRefresh?: {
+    driverId: number;
+    updatedAt: string;
+    onResult: (status: "updated" | "preserved" | "awaiting_ack") => void;
+  };
   syncer?: typeof syncVerifiedDriverDetailsToAdminBookingCalendar;
 }) {
   let exactBookingReference = cleanText(bookingReference, 120);
@@ -209,6 +215,36 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
     return false;
   }
 
+  // Only the Admin payout-only save opts in. Ordinary ACK/Pool behavior is unchanged.
+  const verifyPayoutRefresh = async () => {
+    if (!payoutRefresh) return false;
+    const saved = await client.from("bookings").select("booking_reference,driver_id,updated_at,status,admin_internal_status,customer_facing_status")
+      .eq("booking_reference", exactBookingReference).maybeSingle();
+    const row = asRecord(saved.data);
+    if (saved.error || row.booking_reference !== exactBookingReference ||
+        Number(row.driver_id) !== payoutRefresh.driverId ||
+        Date.parse(String(row.updated_at)) !== Date.parse(payoutRefresh.updatedAt) ||
+        [row.status,row.admin_internal_status,row.customer_facing_status].some(v => ["completed","cancelled","canceled","closed","declined"].includes(String(v || "").toLowerCase()))) return false;
+    const linkRead = await client.from("driver_job_links")
+      .select("id,booking_reference,driver_id,link_status,revoked_at,expires_at,safe_link_context")
+      .eq("booking_reference", exactBookingReference).eq("link_status", "active")
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle();
+    if (linkRead.error) return false;
+    if (!linkRead.data) return "awaiting_ack" as const;
+    const link = asRecord(linkRead.data), context = asRecord(link.safe_link_context);
+    if (link.booking_reference !== exactBookingReference || link.revoked_at ||
+        link.link_status !== "active" || !Number.isFinite(Date.parse(String(link.expires_at))) ||
+        Date.parse(String(link.expires_at)) <= Date.now()) return false;
+    if (!context.driver_acknowledged_at || context.driver_amendment_ack_pending === true) return "awaiting_ack" as const;
+    return Number(link.driver_id) === payoutRefresh.driverId && Number.isFinite(Date.parse(String(context.driver_acknowledged_at)));
+  };
+  if (payoutRefresh) {
+    if (driverPoolOfferKey !== undefined || !Number.isSafeInteger(payoutRefresh.driverId) || payoutRefresh.driverId <= 0) return false;
+    const verified = await verifyPayoutRefresh();
+    if (verified === "awaiting_ack") { payoutRefresh.onResult("awaiting_ack"); return true; }
+    if (!verified) return false;
+  }
+
   const { data, error } = await client
     .from("bookings")
     .select(operationsCalendarBookingSelect)
@@ -235,12 +271,19 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   };
   const result = await syncer(payload, {
     fetcher: observedFetcher,
-    acknowledgedBookingReference: useSavedOverride && driverPoolOfferKey === undefined ? exactBookingReference : undefined,
+    acknowledgedBookingReference: (useSavedOverride || payoutRefresh) && driverPoolOfferKey === undefined ? exactBookingReference : undefined,
+    ...(payoutRefresh ? { payoutRefresh: {
+      bookingReference: exactBookingReference,
+      beforeWrite: async () => await verifyPayoutRefresh() === true,
+      onResult: payoutRefresh.onResult,
+    } } : {}),
   });
 
   if (result.ok) {
     return true;
   }
+
+  if (payoutRefresh) return false;
 
   if (result.status !== 502) {
     console.warn(

@@ -168,12 +168,14 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   driverPoolOfferKey,
   client,
   pickupAt,
+  useSavedOverride = false,
   syncer = syncVerifiedDriverDetailsToAdminBookingCalendar,
 }: {
   bookingReference?: string;
   driverPoolOfferKey?: string;
   client: DriverJobOperationsCalendarClient;
   pickupAt?: string;
+  useSavedOverride?: boolean;
   syncer?: typeof syncVerifiedDriverDetailsToAdminBookingCalendar;
 }) {
   let exactBookingReference = cleanText(bookingReference, 120);
@@ -233,6 +235,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   };
   const result = await syncer(payload, {
     fetcher: observedFetcher,
+    acknowledgedBookingReference: useSavedOverride && driverPoolOfferKey === undefined ? exactBookingReference : undefined,
   });
 
   if (result.ok) {
@@ -248,6 +251,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
 
   const retryResult = await syncer(payload, {
     fetcher: observedFetcher,
+    acknowledgedBookingReference: useSavedOverride && driverPoolOfferKey === undefined ? exactBookingReference : undefined,
   });
 
   if (!retryResult.ok) {

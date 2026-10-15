@@ -268,6 +268,7 @@ export async function applyProductionDriverJobDetailsUpdate({
         bookingReference: detailsResult.booking_reference,
         client: clientResult.client,
         pickupAt: detailsResult.payload.pickupDateTime,
+        useSavedOverride: !detailsResult.isCombo,
       });
 
     if (combo) {

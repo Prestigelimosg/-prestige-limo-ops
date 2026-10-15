@@ -36,6 +36,8 @@ type CalendarSyncOptions = {
   fetcher?: Fetcher;
   now?: Date;
   payoutClient?: PayoutReadClient;
+  // Server-only context from a successful single-booking acknowledgement, never request data.
+  acknowledgedBookingReference?: string;
 };
 
 type GoogleCalendarSyncConfig = {
@@ -118,6 +120,7 @@ type GoogleCalendarEventResource = {
       prestigeSource: "prestige_limo_ops";
       prestigePayoutInitialized?: "1";
       prestigeCalendarPayout?: string;
+      prestigeAutomaticPayout?: string;
     };
   };
   id: string;
@@ -448,9 +451,9 @@ function calendarEventIdentityMatches(value: Record<string, unknown>, expected: 
 }
 
 // Best-effort READ ONLY. A missing rate/database must not disable the established Calendar sync.
-// Seed from a verified Pool award first; otherwise use the existing default.
-// An ordinary manual payout override is not a Pool award.
-async function readCalendarDefaultPayout(reference: string, options: CalendarSyncOptions): Promise<string | null> {
+// Preserve verified Pool/combo rules; ordinary bookings otherwise use the existing default.
+// Only the successful ACK context may prefer an ordinary saved override.
+async function readCalendarDefaultPayout(reference: string, options: CalendarSyncOptions): Promise<{ amount: string; followsBooking?: true } | null> {
   try {
     const env = options.env || process.env;
     let client = options.payoutClient;
@@ -476,8 +479,8 @@ async function readCalendarDefaultPayout(reference: string, options: CalendarSyn
       if (combo && combo.total_payout_sgd !== null) {
         if (combo.state !== "assigned" || combo.driver_id !== Number(booking.driver_id) ||
           !Number.isFinite(combo.total_payout_sgd) || Number(combo.total_payout_sgd)<=0) return null;
-        return reference===combo.primary_booking_reference ? `Combo total $${combo.total_payout_sgd}` :
-          `Included in combo ${combo.trips.find(trip=>trip.booking_reference===combo.primary_booking_reference)?.public_booking_reference || ""}`;
+        return { amount: reference===combo.primary_booking_reference ? `Combo total $${combo.total_payout_sgd}` :
+          `Included in combo ${combo.trips.find(trip=>trip.booking_reference===combo.primary_booking_reference)?.public_booking_reference || ""}` };
       }
       if (comboAmountMarker) return null;
     }
@@ -500,7 +503,17 @@ async function readCalendarDefaultPayout(reference: string, options: CalendarSyn
       const amount = Number(rawAmount);
       if (!Number.isFinite(amount) || amount <= 0 || amount > 99999.99 || amount !== Number(rawOverride)) return null;
       // The fixed offer already covers the job: do not add default-rate extras again.
-      return `$${amount}`;
+      return { amount: `$${amount}` };
+    }
+
+    if (options.acknowledgedBookingReference === reference &&
+        booking.driver_payout_override !== null && booking.driver_payout_override !== undefined &&
+        booking.driver_payout_override !== "") {
+      const raw = String(booking.driver_payout_override);
+      const amount = Number(raw);
+      if (!/^\d+(?:\.\d{1,2})?$/.test(raw) || !Number.isFinite(amount) || amount < 0 || amount > 99999.99) return null;
+      // A saved override is the complete agreed amount, not a base rate for extras.
+      return { amount: `$${amount}`, followsBooking: true };
     }
 
     const type = String(booking.service_type || booking.route_type || "").toUpperCase();
@@ -546,7 +559,7 @@ async function readCalendarDefaultPayout(reference: string, options: CalendarSyn
       { driver_payout_rules: payoutRulesFromDb(driver.driver_payout_rules) });
     const amount = calculateProfit(pricing).driverPayout;
     if (!Number.isFinite(amount) || amount < 0 || amount > 999999.99) return null;
-    return `$${Number(amount.toFixed(2))}`;
+    return { amount: `$${Number(amount.toFixed(2))}`, followsBooking: true };
   } catch {
     return null;
   }
@@ -749,7 +762,7 @@ async function upsertGoogleCalendarEvent(
   options: CalendarSyncOptions,
 ) {
   const eventResource = buildGoogleCalendarEventResource(event);
-  let defaultPayout: string | null | undefined;
+  let defaultPayout: Awaited<ReturnType<typeof readCalendarDefaultPayout>> | undefined;
   const getDefault = async () => {
     if (defaultPayout === undefined) defaultPayout = await readCalendarDefaultPayout(event.booking_reference, options);
     return defaultPayout;
@@ -757,9 +770,11 @@ async function upsertGoogleCalendarEvent(
   const hasPlate = calendarTitleWithPayout(event.title, "$0") !== event.title;
   // Keep the established insert/conflict/update sequence and deterministic event ID.
   // Do not read rates for titles without a plate; ACK can seed it when a plate is saved.
-  const initialPayout = hasPlate ? await getDefault() : null;
+  const candidate = hasPlate ? await getDefault() : null;
+  const initialPayout = candidate?.amount || null;
   eventResource.summary = calendarTitleWithPayout(event.title, initialPayout);
   if (initialPayout) eventResource.extendedProperties.private.prestigePayoutInitialized = "1";
+  if (candidate?.followsBooking) eventResource.extendedProperties.private.prestigeAutomaticPayout = candidate.amount;
   const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
   const insertResponse = await fetcher(calendarEventsUrl(config), {
     body: JSON.stringify(eventResource), headers, method: "POST",
@@ -786,7 +801,20 @@ async function upsertGoogleCalendarEvent(
   const carried = !previousHadPlate && typeof properties.private?.prestigeCalendarPayout === "string" &&
     /^\$(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(properties.private.prestigeCalendarPayout)
       ? properties.private.prestigeCalendarPayout : null;
-  const payout = currentPayout || carried || (initialized ? null : initialPayout);
+  const previousPayout = currentPayout || carried;
+  const lastAutomatic = properties.private?.prestigeAutomaticPayout;
+  const stillAutomatic = typeof lastAutomatic === "string" &&
+    /^\$(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(lastAutomatic) && previousPayout === lastAutomatic;
+  const mayRefresh = options.acknowledgedBookingReference === event.booking_reference &&
+    candidate?.followsBooking && stillAutomatic;
+  const payout = mayRefresh ? initialPayout : previousPayout || (initialized ? null : initialPayout);
+  // Unknown historic amounts, manual edits and removals never acquire automatic ownership.
+  // Drop ownership on a manual change, so later equal amounts cannot accidentally regain it.
+  delete eventResource.extendedProperties.private.prestigeAutomaticPayout;
+  const firstSeed = !previousPayout && !initialized && candidate?.followsBooking;
+  if (payout && (firstSeed || (stillAutomatic && (!candidate || candidate.followsBooking)))) {
+    eventResource.extendedProperties.private.prestigeAutomaticPayout = payout;
+  }
   if (payout && !hasPlate) eventResource.extendedProperties.private.prestigeCalendarPayout = payout;
   eventResource.summary = calendarTitleWithPayout(event.title, payout);
   if (initialized || currentPayout || (hasPlate && payout)) {

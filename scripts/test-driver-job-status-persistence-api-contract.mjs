@@ -91,6 +91,11 @@ async function writeMockModules(tempDir) {
     if (probe) probe.after.push(task);
   };`);
   await mkdir(path.join(tempDir, "lib"), { recursive: true });
+  await writeFile(path.join(tempDir, "lib/driver-job-operations-calendar-sync.ts"), `
+    exports.syncAcknowledgedDriverDetailsToOperationsCalendar = async input => {
+      if (!globalThis.__ackCalendarProbe) throw new Error('Calendar fixture unavailable');
+      return globalThis.__ackCalendarProbe(input);
+    };`);
   await writeFile(path.join(tempDir, "lib/customer-driver-app-notification-persistence.ts"), `
     exports.queueDriverStatusCustomerInAppNotification = async (client, input, deferPush) => {
       const probe = globalThis.__otwDeliveryProbe;
@@ -1746,6 +1751,53 @@ try {
 
   process.env.DRIVER_JOB_LINK_MODE = "production";
   delete process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;
+
+  // Actual public ACK route -> token verification -> persistence -> Calendar handoff.
+  // Provider is intercepted; this contract checks context/order and the unchanged safe response.
+  for (const providerThrows of [false, true]) {
+    const client = createSeededClient({ acknowledgedAt: "", latestStatus: "",
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null,
+        driver_payout_override: 55, driver_payout_reason: "" }] });
+    setDriverJobProductionSupabaseClientForTests(client);
+    let calls = 0;
+    let observed;
+    globalThis.__ackCalendarProbe = async input => {
+      calls++;
+      observed = { input, acknowledgedAt: client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at,
+        driverId: client.tables.bookings[0].driver_id, amount: client.tables.bookings[0].driver_payout_override };
+      if (providerThrows) throw new Error("Mock Calendar unavailable");
+      return true;
+    };
+    const request = token => new Request(`http://localhost/api/driver-job/${token}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ driver_name: "Calendar Driver One", driver_contact: "+65 8111 2222",
+        driver_plate_number: "SLA1234X", driver_vehicle_model: "Mercedes V Class" }),
+    });
+    const priorWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const rejected = await harness.route.PATCH(request(revokedToken), { params: Promise.resolve({ token: revokedToken }) });
+      assert.equal((await rejected.json()).ok, false);
+      assert.equal(calls, 0, "rejected ACK cannot invoke Calendar");
+      const accepted = await harness.route.PATCH(request(validToken), { params: Promise.resolve({ token: validToken }) });
+      const body = await accepted.json();
+      assert.equal(accepted.status, 200);
+      assert.equal(body.ok, true, "provider failure must not roll back or fail saved ACK");
+      assert.equal(calls, 1);
+      // Assert outside the production best-effort catch, which intentionally swallows provider errors.
+      assert.equal(observed.input.bookingReference, "DRV-JOB-API-001");
+      assert.equal(observed.input.client, client);
+      assert.equal(observed.input.useSavedOverride, true);
+      assert.ok(observed.acknowledgedAt, "Calendar only runs after successful ACK persistence");
+      assert.ok(observed.driverId);
+      assert.equal(observed.amount, 55);
+      assertNoDriverJobLeaks(body);
+      assert.doesNotMatch(JSON.stringify(body), /useSavedOverride|prestigeAutomaticPayout|acknowledgedBookingReference/);
+    } finally {
+      console.warn = priorWarn;
+      delete globalThis.__ackCalendarProbe;
+    }
+  }
 
   {
     const client = createSeededClient({

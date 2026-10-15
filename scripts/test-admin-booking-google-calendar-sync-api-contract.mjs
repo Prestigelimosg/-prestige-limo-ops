@@ -34,6 +34,7 @@ const sourceFiles = [
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-booking-google-calendar-sync.ts",
   "lib/driver-job-operations-calendar-sync.ts",
+  "lib/driver-job-combo.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-booking-calendar-google-sync/route.ts",
 ];
@@ -173,6 +174,9 @@ async function writeHarnessFile(tempDir, relativePath) {
 
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, transpileTypescript(source, sourcePath));
+  if (relativePath === "lib/driver-job-combo.ts") {
+    await writeFile(path.join(tempDir, relativePath), transpileTypescript(source, sourcePath));
+  }
 }
 
 async function writeMockModules(tempDir) {
@@ -1352,6 +1356,125 @@ try {
     const sync = (payload = input, extra = {}) => googleSync.syncAdminBookingCalendarAgendaToGoogle(payload, actor, { ...options, ...extra });
     const read = (payload = input) => googleSync.readAdminBookingCalendarStatusesFromGoogle(payload, actor, options);
     const originalPickup = tables.bookings.pickup_at;
+    // Execute the existing ACK adapter and real Calendar writer with synthetic persisted
+    // booking reads and a versioned Google store. No production DB/provider is used.
+    const originalBooking = structuredClone(tables.bookings);
+    Object.assign(tables.bookings, {
+      passenger_name: "Override Passenger", pickup_location: "Pickup", dropoff_location: "Drop-off",
+      driver_name: "Override Driver", driver_contact: "90000000", driver_plate_number: "SLV1234",
+      driver_payout_override: 55, driver_payout_reason: "", company_id: 7,
+    });
+    const ack = (useSavedOverride = true) => driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+      bookingReference: tables.bookings.booking_reference, client: payoutClient, useSavedOverride,
+      syncer: (payload, ackOptions) => googleSync.syncVerifiedDriverDetailsToAdminBookingCalendar(payload, {
+        ...ackOptions, ...options,
+      }),
+    });
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /^SLV1234 \$55 > /, "ACK must prefer the saved override 55 over default 50");
+    const firstAck = structuredClone(stored);
+    const immutableBooking = structuredClone(tables.bookings);
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, "$55");
+    assert.equal(await ack(), true, "repeated ACK is safe");
+    assert.equal(stored.id, firstAck.id);
+    assert.deepEqual(tables.bookings, immutableBooking, "Calendar never writes booking payout or other columns");
+    tables.bookings.driver_payout_override = "65.25";
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /\$65\.25 > /, "later saved override updates an app-owned amount");
+    for (const key of ["id", "start", "end", "location", "description", "reminders"]) {
+      assert.deepEqual(stored[key], firstAck[key], `ACK amount change preserves ${key}`);
+    }
+    stored.summary = stored.summary.replace("$65.25", "$72");
+    tables.bookings.driver_payout_override = 80;
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /\$72 > /, "manual Calendar amount wins");
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, undefined);
+    tables.bookings.driver_payout_override = 72;
+    assert.equal(await ack(), true);
+    tables.bookings.driver_payout_override = 90;
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /\$72 > /, "equal saved value never takes back a manually edited amount");
+
+    stored = structuredClone(firstAck);
+    stored.summary = stored.summary.replace(" $55", "");
+    assert.equal(await ack(), true);
+    assert.doesNotMatch(stored.summary, /\$/, "manual removal survives ACK");
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, undefined);
+    assert.equal(await ack(), true);
+    assert.doesNotMatch(stored.summary, /\$/, "repeat cannot reinsert removed amount");
+
+    for (const amount of ["$55", "$0"]) {
+      stored = structuredClone(firstAck);
+      stored.summary = stored.summary.replace("$55", amount);
+      delete stored.extendedProperties.private.prestigeAutomaticPayout;
+      assert.equal(await ack(), true);
+      assert.ok(stored.summary.includes(`${amount} > `), "unknown historical amount must stay untouched");
+      assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, undefined);
+    }
+
+    // The existing Admin writer may seed a default but must not apply an override.
+    stored = null;
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$50 > /);
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, "$50");
+    tables.bookings.driver_payout_override = 55;
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /\$55 > /, "ACK replaces a known app-seeded default on the same event");
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$55 > /, "Admin Update + Cal does not revert ACK amount");
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, "$55");
+    tables.bookings.driver_payout_override = null;
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /\$50 > /, "removing saved override restores default for an app-owned title");
+
+    for (const amount of [0, "0.00", "55.50", "99999.99"]) {
+      stored = null; tables.bookings.driver_payout_override = amount;
+      tables.bookings.extra_stop_count = 2; tables.bookings.child_seat_count = 1;
+      assert.equal(await ack(), true);
+      assert.ok(stored.summary.includes(`$${Number(amount)} > `), "override is the full amount, including zero; no extras twice");
+    }
+    tables.bookings.extra_stop_count = 0; tables.bookings.child_seat_count = 0;
+    for (const amount of [null, undefined, ""]) {
+      stored = null; tables.bookings.driver_payout_override = amount;
+      assert.equal(await ack(), true);
+      assert.match(stored.summary, /\$50 > /, "absent override uses existing default resolver");
+    }
+    for (const amount of [-1, "Infinity", "NaN", "55.001", "55abc", " ", "100000"]) {
+      stored = null; tables.bookings.driver_payout_override = amount;
+      assert.equal(await ack(), true);
+      assert.doesNotMatch(stored.summary, /\$/, "invalid saved override must not invent an amount or block driver details");
+    }
+    tables.bookings.driver_payout_override = 55;
+    stored = null;
+    assert.equal(await ack(false), true);
+    assert.match(stored.summary, /\$50 > /, "non-ACK helper callers keep their established selection");
+    stored = null;
+    assert.equal((await sync(input, { acknowledgedBookingReference: "OTHER-BOOKING" })).ok, true);
+    assert.match(stored.summary, /\$50 > /, "ACK context cannot select another booking's override");
+
+    stored = structuredClone(firstAck);
+    tables.bookings.driver_plate_number = "";
+    assert.equal(await ack(), true);
+    assert.doesNotMatch(stored.summary, /\$/);
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, "$55");
+    tables.bookings.driver_plate_number = "NEW5678";
+    tables.bookings.driver_payout_override = 65;
+    assert.equal(await ack(), true);
+    assert.match(stored.summary, /^NEW5678 \$65 > /, "temporary plate removal preserves automatic provenance");
+    tables.bookings.driver_plate_number = "SLV1234";
+
+    stored = structuredClone(firstAck); conflict = true;
+    assert.equal(await ack(), false, "concurrent Google edit is not overwritten, including bounded retry");
+    assert.match(stored.summary, /\$88 > /);
+    conflict = false;
+    stored = structuredClone(firstAck);
+    tables.bookings.error = { message: "read unavailable" };
+    const requestCount = requests.length;
+    assert.equal(await ack(), false);
+    assert.equal(requests.length, requestCount, "failed exact booking read cannot write Calendar");
+    delete tables.bookings.error;
+    tables.bookings = originalBooking;
+    stored = null;
     for (const [pickupTime, pickupAt, amount] of [
       ["2329", "2026-06-15T15:29:00Z", 50],
       ["2330", "2026-06-15T15:30:00Z", 60],
@@ -1490,10 +1613,15 @@ try {
     stored = null;
     assert.equal((await sync()).ok, true);
     assert.match(stored.summary, /\$75.25 > /, "confirmed Pool fixed amount must beat the default and must not add extras");
+    assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, undefined, "Pool amounts do not opt into ordinary ACK override refresh");
+    assert.equal((await sync(input, { acknowledgedBookingReference: tables.bookings.booking_reference })).ok, true);
+    assert.match(stored.summary, /\$75.25 > /);
     const poolEventId = stored.id;
     stored.summary = stored.summary.replace("$75.25", "$82");
     assert.equal((await sync()).ok, true);
     assert.match(stored.summary, /\$82 > /, "explicit Calendar amount still wins over the Pool seed");
+    assert.equal((await sync(input, { acknowledgedBookingReference: tables.bookings.booking_reference })).ok, true);
+    assert.match(stored.summary, /\$82 > /, "ACK context also preserves the existing Pool amount contract");
     assert.equal(stored.id, poolEventId);
     const validPool = structuredClone(tables.driver_job_bid_offers);
     const validBid = structuredClone(tables.driver_job_bids);
@@ -1516,6 +1644,9 @@ try {
       mutate(); stored = null;
       assert.equal((await sync()).ok, true, "unverified Pool evidence must not block Calendar");
       assert.doesNotMatch(stored.summary, /\$/, "unverified Pool amount must be omitted, not replaced with an unrelated default");
+      stored = null;
+      assert.equal((await sync(input, { acknowledgedBookingReference: tables.bookings.booking_reference })).ok, true);
+      assert.doesNotMatch(stored.summary, /\$/, "ACK cannot bypass Pool verification through ordinary override handling");
     }
     tables.driver_job_bid_offers = structuredClone(validPool);
     tables.driver_job_bids = structuredClone(validBid);
@@ -1528,6 +1659,52 @@ try {
     assert.equal((await sync()).ok, true);
     assert.match(stored.summary, /\$70 > /, "ordinary manual payout override cannot masquerade as a Pool award");
 
+    // Preserve the real existing combo reader/title result even with ACK context.
+    const oldComboEnabled = process.env.PRESTIGE_DRIVER_COMBO_ENABLED;
+    process.env.PRESTIGE_DRIVER_COMBO_ENABLED = "true";
+    const comboId = "11111111-1111-4111-8111-111111111111";
+    const primaryRef = tables.bookings.booking_reference;
+    const siblingRef = "PL-COMBO-SECONDARY";
+    const comboBookings = [primaryRef, siblingRef].map((booking_reference, i) => ({
+      ...originalBooking, booking_reference, public_booking_reference: `9910${i}`,
+      customer_id: 7, company_id: 7, booker_id: 9, driver_id: 8,
+      driver_payout_reason: i ? "Included in combo 99100" : "Admin assigned combo total.",
+      driver_payout_override: 999,
+    }));
+    const comboTables = {
+      bookings: comboBookings,
+      driver_job_combo_members: [primaryRef, siblingRef].map((booking_reference, ordinal) => ({ combo_id: comboId, booking_reference, ordinal })),
+      driver_job_combos: [{ id: comboId, revision: comboId, primary_booking_reference: primaryRef,
+        state: "assigned", total_payout_sgd: 150, driver_id: 8 }],
+    };
+    const comboClient = { from(table) {
+      assert.ok(Object.hasOwn(comboTables, table));
+      const filters = [];
+      const q = {
+        select() { return q; }, eq(k, v) { filters.push(row => row[k] === v); return q; },
+        in(k, values) { filters.push(row => values.includes(row[k])); return q; },
+        order() { return q; },
+        async maybeSingle() { return { data: comboTables[table].filter(row => filters.every(fn => fn(row)))[0], error: null }; },
+        single() { return q.maybeSingle(); },
+        then(resolve, reject) { return Promise.resolve({ data: comboTables[table].filter(row => filters.every(fn => fn(row))), error: null }).then(resolve, reject); },
+      }; return q;
+    } };
+    try {
+      for (const [reference, expected] of [[primaryRef, "Combo total $150"], [siblingRef, "Included in combo 99100"]]) {
+        stored = null;
+        const payload = { ...input, bookings: [safeBooking({ booking_reference: reference })] };
+        assert.equal((await sync(payload, { payoutClient: comboClient, acknowledgedBookingReference: reference })).ok, true);
+        assert.ok(stored.summary.includes(expected), "existing combo amount/label wins over ordinary override");
+        assert.equal(stored.extendedProperties.private.prestigeAutomaticPayout, undefined);
+      }
+      comboTables.driver_job_combos[0].driver_id = 9;
+      stored = null;
+      assert.equal((await sync(input, { payoutClient: comboClient, acknowledgedBookingReference: primaryRef })).ok, true);
+      assert.doesNotMatch(stored.summary, /\$/, "wrong-driver combo cannot fall through to ordinary override");
+    } finally {
+      if (oldComboEnabled === undefined) delete process.env.PRESTIGE_DRIVER_COMBO_ENABLED;
+      else process.env.PRESTIGE_DRIVER_COMBO_ENABLED = oldComboEnabled;
+    }
   }
   {
     // Execute the actual React effect callback with controlled read responses.

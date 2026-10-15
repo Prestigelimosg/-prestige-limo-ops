@@ -3133,6 +3133,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     const {loadDriverCombo} = await import("./driver-job-combo.ts");
     const combo = await loadDriverCombo(client, input.target_booking_reference);
     if (combo) {
+      if (input.assignment_payout) return { ok: false, status: 409, error: "Use the existing combo assignment workflow." };
       if (!input.update_mode && !input.combo_assignment) {
         // Only the reported TRF pickup amendment is admitted here. Preserve the
         // existing full booking/route/service writer for ordinary bookings.
@@ -3203,6 +3204,58 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     }
   }
   if (input.combo_assignment) return {ok:false,status:409,error:"Combo is unavailable. Reload the saved booking."};
+
+  if (input.assignment_payout) {
+    // Initial single-job assignment only. Do not enter reassignment, cancellation,
+    // customer/contact/route writers or Calendar. One row update saves both values.
+    const payout = input.assignment_payout;
+    const driverId = positiveSafeInteger(input.booking.driver_id);
+    const pendingCustomerRequest = existing.source_surface === "customer_booking_request" &&
+      !["approved", "declined"].includes(existing.request_review_status || "");
+    if (!isVerifiedAdminDispatcherActor(actor) || input.update_mode !== "driver_assignment" ||
+        !expectedUpdatedAt || positiveSafeInteger(existing.driver_id) || !driverId || pendingCustomerRequest ||
+        !Number.isFinite(payout.amount) || payout.amount < 0 || payout.amount > 99999.99 ||
+        Math.abs(payout.amount * 100 - Math.round(payout.amount * 100)) > 0.000001 ||
+        typeof payout.reason !== "string" || payout.reason.length > 500) {
+      return { ok: false, status: 409, error: "Reload one unassigned saved booking before saving its driver and payout." };
+    }
+    const { data: driver, error: driverError } = await client.from("drivers")
+      .select("id,driver_name,contact_number,plate_number,availability_status")
+      .eq("id", driverId).maybeSingle();
+    if (driverError || !driver || String(driver.availability_status || "").trim().toLowerCase() === "inactive" ||
+        textOrNull(driver.driver_name) !== textOrNull(input.booking.driver_name) ||
+        textOrNull(driver.contact_number) !== textOrNull(input.booking.driver_contact) ||
+        textOrNull(driver.plate_number) !== textOrNull(input.booking.driver_plate_number)) {
+      return { ok: false, status: 409, error: "Reload and select one active verified Driver profile. Nothing was saved." };
+    }
+    const { data: saved, error: assignmentError } = await client.from("bookings")
+      .update({
+        driver_id: driverId,
+        driver_name: textOrNull(driver.driver_name),
+        driver_contact: textOrNull(driver.contact_number),
+        driver_plate_number: textOrNull(driver.plate_number),
+        driver_payout_override: payout.amount,
+        driver_payout_reason: textOrNull(payout.reason),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id).eq("booking_reference", input.target_booking_reference)
+      .eq("updated_at", existing.updated_at).is("driver_id", null)
+      .not("status", "in", "(completed,cancelled,canceled,closed,declined)")
+      .select(`${adminBookingCurrentLoadSelect},driver_payout_override,driver_payout_reason`).maybeSingle();
+    if (assignmentError) return safeAdapterFailure(safeUpdateError, 500, assignmentError, "booking_row");
+    if (!saved) return { ok: false, status: 409, error: safeUpdateConflictError };
+    const updated = {
+      ...toAdminBookingDto(asRecord(saved)),
+      assignment_payout: { amount: Number(saved.driver_payout_override), reason: textOrNull(saved.driver_payout_reason) || "" },
+    };
+    const audit = await createAuditLog(client, existing.id, dbIdentifierOrNull(existing.customer_id),
+      input.target_booking_reference, { ...auditInput, change_summary: "Verified initial driver assignment and reviewed payout saved together." },
+      actor, existing, updated);
+    if (!audit.ok) {
+      return { ...audit, error: "Driver and payout were saved, but audit recording could not be confirmed. Reload this booking before any further change." };
+    }
+    return { ok: true, data: updated };
+  }
 
   if (input.update_mode === "driver_assignment_cancel") {
     // Explicit action only: a missing replacement in the normal save mode is never cancellation.

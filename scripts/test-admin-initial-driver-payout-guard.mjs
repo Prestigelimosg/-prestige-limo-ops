@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import * as crypto from 'node:crypto';
 import ts from 'typescript';
+import {createClient} from '@supabase/supabase-js';
 
 const [app,parserSource,adapterSource,route] = await Promise.all(['app/page.tsx','lib/admin-booking-persistence.ts','lib/admin-booking-supabase-adapter.ts','app/api/admin-bookings/route.ts'].map(p=>readFile(p,'utf8')));
 const compile = source => ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -45,14 +46,17 @@ const existingTemplate={...payload.booking,id:1,driver_id:null,driver_name:null,
 const actor={boundary_mode:'server-session-role-surface',actor_role:'admin',source_surface:'admin_api',actor_label:'Synthetic Admin'};
 let row,driver,writes,audits,queries,race,dbError,auditError;
 const reset=()=>{row=structuredClone(existingTemplate);driver={id:7301,driver_name:'Synthetic Driver',contact_number:'+6500007301',plate_number:'TEST7301',availability_status:'available'};writes=[];audits=[];queries=[];race=null;dbError=false;auditError=false;};
+const terminalStatuses=['completed','cancelled','canceled','closed','declined'];
+// SQL NOT IN yields UNKNOWN for NULL; WHERE must accept only TRUE.
+const sqlNotTerminal = value => value == null ? null : !terminalStatuses.includes(value);
 const client={from(table){
  assert.ok(['bookings','drivers'].includes(table),`Unexpected table ${table}`);
- const q={filters:[],patch:null,select(columns){this.columns=columns;return this;},update(value){assert.equal(table,'bookings');this.patch=plain(value);return this;},eq(k,v){this.filters.push([k,v]);return this;},is(k,v){this.filters.push([k,v]);return this;},not(k,op,v){assert.deepEqual([k,op,v],['status','in','(completed,cancelled,canceled,closed,declined)']);this.statusFilter=true;return this;},async maybeSingle(){
+ const q={filters:[],patch:null,select(columns){this.columns=columns;return this;},update(value){assert.equal(table,'bookings');this.patch=plain(value);return this;},eq(k,v){this.filters.push([k,v]);return this;},is(k,v){this.filters.push([k,v]);return this;},not(k,op,v){assert.deepEqual([k,op,v],['status','in','(completed,cancelled,canceled,closed,declined)']);this.statusFilter=true;return this;},or(expression){assert.equal(expression,'status.is.null,status.not.in.(completed,cancelled,canceled,closed,declined)');this.nullableStatusFilter=true;return this;},async maybeSingle(){
  queries.push({table,patch:this.patch,filters:this.filters});
  if(table==='drivers')return {data:driver,error:null};
  assert.ok(this.patch); if(race)race(row);
  if(dbError)return {data:null,error:{message:'synthetic failure'}};
- if(!this.filters.every(([k,v])=>row[k]===v)||this.statusFilter&&['completed','cancelled','canceled','closed','declined'].includes(row.status))return {data:null,error:null};
+ if(!this.filters.every(([k,v])=>row[k]===v)||this.statusFilter&&sqlNotTerminal(row.status)!==true||this.nullableStatusFilter&&!(row.status===null||sqlNotTerminal(row.status)===true))return {data:null,error:null};
  writes.push(this.patch);Object.assign(row,this.patch);return {data:structuredClone(row),error:null};
  }};return q;
 }};
@@ -66,7 +70,7 @@ const adapterContext={exports:{},process:{env:{}},console,
  createAuditLog:async(...args)=>{audits.push(args);return auditError?{ok:false,status:500,error:"synthetic audit failure"}:{ok:true,data:null};}
 };
 vm.runInNewContext(compile(slice(adapterSource,'export async function updateAdminBookingThroughSupabaseAdapter(','export async function listAdminBookingsThroughSupabaseAdapter(')),adapterContext);
-const update=()=>adapterContext.exports.updateAdminBookingThroughSupabaseAdapter(parsed.data,{},actor);
+const update=(input=parsed.data)=>adapterContext.exports.updateAdminBookingThroughSupabaseAdapter(input,{},actor);
 reset();const before=structuredClone(row);const success=await update();assert.equal(success.ok,true,JSON.stringify(success));
 assert.equal(writes.length,1);assert.equal(audits.length,1);
 assert.deepEqual(Object.keys(writes[0]).sort(),['driver_id','driver_name','driver_contact','driver_plate_number','driver_payout_override','driver_payout_reason','updated_at'].sort());
@@ -81,6 +85,28 @@ for(const setup of [
  ()=>race=r=>r.updated_at='2026-10-15T01:02:00.000Z',()=>race=r=>r.driver_id=999,()=>dbError=true
 ]){reset();setup();const result=await update();assert.equal(result.ok,false,JSON.stringify(result));assert.equal(writes.length,0);assert.equal(audits.length,0);}
 reset();assert.equal((await adapterContext.exports.updateAdminBookingThroughSupabaseAdapter(parsed.data,{}, {...actor,actor_role:'system'})).ok,false);assert.equal(writes.length,0);
+
+// Exact reported shape, with synthetic identity: NULL legacy status, Draft /
+// Received admin booking, no saved driver, S$55 and an empty override reason.
+const blankInput={...structuredClone(parsed.data),expected_updated_at:'2026-10-14T11:48:51.596912+00:00',assignment_payout:{amount:55,reason:''}};
+const resetBlank=()=>{reset();Object.assign(row,{status:null,admin_internal_status:'draft',customer_facing_status:'received',request_review_status:'pending_review',source_surface:'admin_dashboard',updated_at:blankInput.expected_updated_at});};
+resetBlank();const blankBefore=structuredClone(row);const blankResult=await update(blankInput);
+assert.equal(blankResult.ok,true,'NULL-status Draft / Received booking must save driver + S$55 together: '+JSON.stringify(blankResult));
+assert.equal(writes.length,1);assert.equal(audits.length,1);assert.equal(row.driver_id,7301);assert.equal(row.driver_payout_override,55);assert.equal(row.driver_payout_reason,null);
+assert.equal(row.status,null,'never backfill or change status to bypass the blocker');
+assert.deepEqual(plain(blankResult.data.assignment_payout),{amount:55,reason:''});
+for(const key of Object.keys(blankBefore).filter(k=>!Object.hasOwn(writes[0],k)))assert.deepEqual(row[key],blankBefore[key],`Blank-case preserves ${key}`);
+assert.equal((await update(blankInput)).ok,false);assert.equal(writes.length,1,'duplicate blank-status retry must not save again');
+for(const status of terminalStatuses){
+ for(const concurrent of [false,true]){
+  resetBlank();if(concurrent)race=r=>r.status=status;else row.status=status;
+  const result=await update(blankInput);assert.equal(result.ok,false,`${status}, concurrent=${concurrent}`);assert.equal(writes.length,0);assert.equal(audits.length,0);
+ }
+}
+for(const setup of [()=>row.updated_at='2026-10-15T01:01:00.000Z',()=>race=r=>r.updated_at='2026-10-15T01:02:00.000Z',()=>race=r=>r.driver_id=999,()=>{row.source_surface='customer_booking_request';}]){
+ resetBlank();setup();assert.equal((await update(blankInput)).ok,false);assert.equal(writes.length,0);assert.equal(audits.length,0);
+}
+resetBlank();row.status='';assert.equal((await update(blankInput)).ok,true,'empty text status retains prior behavior');
 
 reset();auditError=true;const auditFailure=await update();
 assert.equal(auditFailure.ok,false);assert.match(auditFailure.error,/Driver and payout were saved/);
@@ -118,7 +144,7 @@ const routeContext={exports:{},Response,Request,URL,console,require(name){
  return new Proxy({}, {get(){return ()=>{sends++;throw new Error('Unexpected send blocked');};}});
 }};
 vm.runInNewContext(compile(route),routeContext);
-const request=(headers={})=>new Request('http://localhost/api/admin-bookings',{method:'PATCH',headers:{'content-type':'application/json','origin':'http://localhost','referer':'http://localhost/','x-prestige-admin-purpose':'admin-booking-persistence','x-prestige-admin-session-token':'synthetic-session-token',...headers},body:JSON.stringify(payload)});
+const request=(headers={},body=payload)=>new Request('http://localhost/api/admin-bookings',{method:'PATCH',headers:{'content-type':'application/json','origin':'http://localhost','referer':'http://localhost/','x-prestige-admin-purpose':'admin-booking-persistence','x-prestige-admin-session-token':'synthetic-session-token',...headers},body:JSON.stringify(body)});
 reset();let response=await routeContext.exports.PATCH(request());assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(writes.length,1);assert.equal(sends,0);
 assert.deepEqual((await response.json()).booking.assignment_payout,payload.assignment_payout);
 for(const headers of [{origin:'https://evil.invalid'},{referer:'http://localhost/book'},{referer:'http://localhost/driver-job/test'},{'x-prestige-admin-purpose':'driver-job'},{'x-prestige-admin-session-token':'wrong'}]) {
@@ -126,4 +152,35 @@ for(const headers of [{origin:'https://evil.invalid'},{referer:'http://localhost
 }
 for(const role of ['customer','driver','system']){reset();authEnv.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE=role;response=await routeContext.exports.PATCH(request());assert.equal(response.status,403);assert.equal(writes.length,0);}
 authEnv.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE='dispatcher';reset();response=await routeContext.exports.PATCH(request());assert.equal(response.status,200);assert.equal(writes.length,1);assert.equal(sends,0);
-console.log('Initial driver + payout guard passed: real route/auth, parser, one atomic row update, concurrency/retry, CRM preservation, failure/no-write cases and bounded UI comparison.');
+authEnv.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE='admin';resetBlank();response=await routeContext.exports.PATCH(request({},blankInput));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal(writes.length,1);assert.equal(sends,0);assert.deepEqual((await response.json()).booking.assignment_payout,{amount:55,reason:''});
+// Exercise the installed Supabase/PostgREST request builder too. Its fetch is
+// replaced entirely: no credentials, sockets, provider or database requests.
+const transportRequests=[];
+const transportClient=createClient('https://synthetic.invalid','synthetic-key',{
+ auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+ global:{fetch:async(url,options)=>{
+  const requestUrl=new URL(url);const params=requestUrl.searchParams;
+  transportRequests.push({method:options.method,path:requestUrl.pathname});
+  if(requestUrl.pathname==='/rest/v1/drivers'){
+   assert.equal(options.method,'GET');assert.equal(params.get('id'),'eq.7301');
+   return new Response(JSON.stringify(driver),{status:200,headers:{'content-type':'application/json'}});
+  }
+  assert.equal(requestUrl.pathname,'/rest/v1/bookings');assert.equal(options.method,'PATCH');
+  assert.equal(params.get('id'),'eq.1');assert.equal(params.get('booking_reference'),'eq.ASSIGN-TEST-001');
+  assert.equal(params.get('updated_at'),'eq.'+blankInput.expected_updated_at);assert.equal(params.get('driver_id'),'is.null');
+  assert.equal(params.get('or'),'(status.is.null,status.not.in.(completed,cancelled,canceled,closed,declined))');
+  assert.equal(params.has('status'),false,'no residual AND status NOT IN to reject NULL');
+  const patch=JSON.parse(options.body);
+  assert.deepEqual(Object.keys(patch).sort(),['driver_id','driver_name','driver_contact','driver_plate_number','driver_payout_override','driver_payout_reason','updated_at'].sort());
+  assert.equal(patch.driver_payout_override,55);assert.equal(patch.driver_payout_reason,null);
+  Object.assign(row,patch);
+  return new Response(JSON.stringify(row),{status:200,headers:{'content-type':'application/json'}});
+ }}
+});
+resetBlank();adapterContext.getServerOnlySupabaseClient=()=>({ok:true,data:transportClient});
+response=await routeContext.exports.PATCH(request({},blankInput));
+assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+assert.deepEqual((await response.json()).booking.assignment_payout,{amount:55,reason:''});
+assert.deepEqual(transportRequests,[{method:'GET',path:'/rest/v1/drivers'},{method:'PATCH',path:'/rest/v1/bookings'}]);
+assert.equal(audits.length,1);assert.equal(sends,0);
+console.log('Initial driver + payout guard passed (including NULL status, S$55/empty reason, all terminal statuses and terminal races): real route/auth, parser, one atomic row update, concurrency/retry, CRM preservation, failure/no-write cases and bounded UI comparison.');

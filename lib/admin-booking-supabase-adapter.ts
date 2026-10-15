@@ -3240,7 +3240,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
       })
       .eq("id", existing.id).eq("booking_reference", input.target_booking_reference)
       .eq("updated_at", existing.updated_at).is("driver_id", null)
-      .not("status", "in", "(completed,cancelled,canceled,closed,declined)")
+      .or("status.is.null,status.not.in.(completed,cancelled,canceled,closed,declined)")
       .select(`${adminBookingCurrentLoadSelect},driver_payout_override,driver_payout_reason`).maybeSingle();
     if (assignmentError) return safeAdapterFailure(safeUpdateError, 500, assignmentError, "booking_row");
     if (!saved) return { ok: false, status: 409, error: safeUpdateConflictError };

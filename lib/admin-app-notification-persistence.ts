@@ -1,4 +1,5 @@
 import "server-only";
+import { isStoreReviewCustomerChangeProof, storeReviewReadFetch, type StoreReviewSession, type StoreReviewBookingProof } from "./store-review-access";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -505,6 +506,7 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
 
 function getServerOnlyNotificationSupabaseClient(
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): AdminBookingResult<SupabaseClient> {
   const actorResult = validateActor(actor);
 
@@ -544,6 +546,7 @@ function getServerOnlyNotificationSupabaseClient(
   try {
     return {
       data: createClient(supabaseUrl, serviceRoleKey, {
+        ...(review ? { global: { fetch: storeReviewReadFetch(review, supabaseUrl) } } : {}),
         auth: {
           persistSession: false,
         },
@@ -853,6 +856,7 @@ export function parseAdminAppNotificationUpdatePayload(
 export async function loadAdminAppNotifications(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): Promise<AdminBookingResult<AdminAppNotificationLoadResult>> {
   const parsed = parseAdminAppNotificationLoadParams(input);
 
@@ -860,7 +864,7 @@ export async function loadAdminAppNotifications(
     return parsed;
   }
 
-  const clientResult = getServerOnlyNotificationSupabaseClient(actor);
+  const clientResult = getServerOnlyNotificationSupabaseClient(actor, review);
 
   if (!clientResult.ok) {
     return clientResult;
@@ -869,6 +873,9 @@ export async function loadAdminAppNotifications(
   let query = clientResult.data
     .from("admin_app_notification_outbox")
     .select(notificationSelect, { count: "exact" });
+
+  // Synthetic review requests must never appear in the operational owner queue.
+  if (!review) query = query.or("actor_label.is.null,actor_label.neq.store-review-customer-request");
 
   if (parsed.data.booking_reference) {
     query = query.eq("booking_reference", parsed.data.booking_reference);
@@ -1079,6 +1086,7 @@ export async function createCustomerBookingRequestAdminAppNotification(
 
 export async function createCustomerBookingChangeRequestAdminAppNotification(
   input: CustomerBookingChangeRequestAdminAppNotificationInput,
+  review?: { proof: StoreReviewBookingProof; expectedUpdatedAt: string | null },
 ): Promise<AdminBookingResult<AdminAppNotificationRecord>> {
   const bookingReference = optionalSafeText(input.booking_reference, maxBookingReferenceLength);
   const requestKind = input.request_kind === "cancellation" ? "cancellation" : "amendment";
@@ -1118,6 +1126,26 @@ export async function createCustomerBookingChangeRequestAdminAppNotification(
 
   if (!parsed.ok) {
     return parsed;
+  }
+
+  if (review) {
+    if (!isStoreReviewCustomerChangeProof(review.proof) ||
+        bookingReference !== review.proof.booking.bookingReference || !review.expectedUpdatedAt ||
+        !Number.isFinite(Date.parse(review.expectedUpdatedAt))) {
+      return { ok: false, status: 403, error: "QA request unavailable. Reload the test booking." };
+    }
+    const key = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
+    if (!key) return { ok: false, status: 503, error: safeNotificationConfigError };
+    const client = createClient(review.proof.databaseOrigin, key, { auth: { persistSession: false } });
+    const target = review.proof.booking;
+    const { data, error } = await client.rpc("save_customer_reviewer_qa_change_request", {
+      p_booking_id: target.bookingId, p_booking_reference: target.bookingReference,
+      p_company_id: target.companyId, p_booker_id: target.bookerId, p_customer_id: target.customerId,
+      p_traveler_id: target.travelerId, p_driver_id: target.driverId,
+      p_expected_updated_at: review.expectedUpdatedAt, p_context: parsed.data.safe_context,
+    });
+    if (error) return safeAdapterFailure(safeNotificationCreateError, 409, error);
+    return { ok: true, data: normalizeNotificationRecord(asRecord(data)) };
   }
 
   const clientResult = getServerOnlySystemNotificationSupabaseClient();

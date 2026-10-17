@@ -167,8 +167,10 @@ const authPaths: Record<StoreReviewRole, string> = {
 // read-access preparation, not complete store-review feature acceptance.
 export function storeReviewRequestAllowed(session: StoreReviewSession, pathname: string, method: string, request?: Request) {
   if (request ? !storeReviewRequestOriginAllowed(request) : process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL_ENV)) return false;
+  if (request && pathname === "/api/customer-booking-change-requests" && method === "POST" &&
+      resolveStoreReviewCustomerChangeRequest(request).state === "review") return true;
   if (request && session.role === "admin" && method === "GET" &&
-      ["/api/admin-rate-setup", "/api/admin-customer-accounts"].includes(pathname) &&
+      ["/api/admin-rate-setup", "/api/admin-customer-accounts", "/api/admin-app-notifications"].includes(pathname) &&
       storeReviewSameOrigin(request, "admin") &&
       request.headers.get("x-prestige-admin-purpose") === "admin-booking-persistence") return true;
   if (request && session.role === "customer" && method === "GET" &&
@@ -217,6 +219,14 @@ export function storeReviewReadFetch(session: StoreReviewSession, databaseOrigin
       add("driver_id", `eq.${scope.driverId}`);
       if (scope.travelerIds.length) add("or", `(traveler_id.is.null,traveler_id.in.(${scope.travelerIds.join(",")}))`);
       else add("traveler_id", "is.null");
+    } else if (session.role === "admin" && table === "admin_app_notification_outbox" && scope.adminSaveBookingReference) {
+      add("booking_reference", `eq.${scope.adminSaveBookingReference}`);
+      add("actor_label", "eq.store-review-customer-request");
+      add("safe_context->>review_company_id", `eq.${scope.companyId}`);
+      add("safe_context->>review_booker_id", `eq.${scope.bookerId}`);
+      add("safe_context->>review_customer_id", `eq.${scope.customerId}`);
+      add("safe_context->>review_driver_id", `eq.${scope.driverId}`);
+      add("safe_context->>review_traveler_id", `in.(${scope.travelerIds.join(",")})`);
     } else if (session.role === "admin" && table === "customers") {
       add("id", `eq.${scope.customerId}`);
     } else if (session.role === "admin" && table === "companies") {
@@ -397,4 +407,35 @@ export function resolveStoreReviewLinkSetupRequest(request: Request,
     linkSetupProofs.add(proof);
     return { state: "review", proof };
   } catch { return { state: "blocked" }; }
+}
+
+// Customer request intake is a separate capability; it cannot borrow Admin saves,
+// Driver actions or any Calendar/OAuth operation.
+const customerChangeProofs = new WeakSet<object>();
+export function isStoreReviewCustomerChangeProof(value: unknown): value is StoreReviewBookingProof {
+  return Boolean(value && typeof value === "object" && customerChangeProofs.has(value) &&
+    currentReviewProof(value as StoreReviewBookingProof));
+}
+export function resolveStoreReviewCustomerChangeRequest(request: Request):
+  { state: "ordinary" } | { state: "blocked" } |
+  { state: "review"; proof: StoreReviewBookingProof; session: StoreReviewSession } {
+  const session = resolveStoreReviewSession(request.headers.get("cookie"));
+  if (session.state === "absent") return { state: "ordinary" };
+  if (session.state !== "valid" || session.role !== "customer" || request.method !== "POST" ||
+      !storeReviewSameOrigin(request, "customer") ||
+      request.headers.get("x-prestige-customer-purpose") !== "customer-booking-change-request") return { state: "blocked" };
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/customer-booking-change-requests" || url.search ||
+      request.headers.get("origin") !== url.origin) return { state: "blocked" };
+  const target = session.scope.bookingTargets?.find(row => row.bookingReference === session.scope.adminSaveBookingReference);
+  if (!target || !target.travelerId) return { state: "blocked" };
+  const config = configuration(process.env, Date.now());
+  if (!config) return { state: "blocked" };
+  const proof: StoreReviewBookingProof = Object.freeze({
+    booking: Object.freeze({ ...target, companyId: session.scope.companyId, bookerId: session.scope.bookerId,
+      customerId: session.scope.customerId, driverId: session.scope.driverId }),
+    databaseOrigin: session.databaseOrigin, expiresAt: session.expiresAt, origin: url.origin, revision: config.revision,
+  });
+  customerChangeProofs.add(proof);
+  return { state: "review", proof, session };
 }

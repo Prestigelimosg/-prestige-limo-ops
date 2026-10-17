@@ -1,3 +1,4 @@
+import { resolveStoreReviewSession, storeReviewSameOrigin, storeReviewBlockedResponse } from "../../../lib/store-review-access";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
   adminBookingPersistencePurpose,
@@ -70,14 +71,20 @@ function safeFailureResponse() {
 
 export async function GET(request: Request) {
   try {
-    const boundary = requireAdminDispatcherBoundary(request);
+    const review = resolveStoreReviewSession(request.headers.get("cookie"));
+    if (review.state !== "absent" && (review.state !== "valid" || review.role !== "admin" ||
+        !storeReviewSameOrigin(request, "admin") ||
+        request.headers.get("x-prestige-admin-purpose") !== adminBookingPersistencePurpose)) return storeReviewBlockedResponse();
+    const boundary: AdminDispatcherBoundaryCheck = review.state === "valid"
+      ? { ok: true, context: { actorLabel: "Store reviewer", role: "admin", mode: "server-session-role-surface" } }
+      : requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {
       return boundary.response;
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await loadAdminAppNotifications(new URL(request.url).searchParams, actor);
+    const result = await loadAdminAppNotifications(new URL(request.url).searchParams, actor, review.state === "valid" ? review : undefined);
 
     if (!result.ok) {
       return Response.json(

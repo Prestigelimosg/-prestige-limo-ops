@@ -3542,8 +3542,18 @@ export async function saveStoreReviewAdminBags(proof: StoreReviewAdminSaveProof,
   if (!isStoreReviewAdminSaveProof(proof)) return denied;
   if (!body || typeof body !== "object" || Array.isArray(body)) return denied;
   const input = body as Record<string, unknown>;
-  if (Object.keys(input).sort().join(",") !== "expected_updated_at,luggage_count,target_booking_reference" ||
-      input.target_booking_reference !== proof.booking.bookingReference || input.luggage_count !== 2 ||
+  const detailSave = Object.hasOwn(input, "details");
+  const details = input.details as Record<string, unknown>;
+  if (detailSave && (!details || typeof details !== "object" || Array.isArray(details) ||
+      Object.keys(details).sort().join(",") !== "flight_no,passenger_name,pax_count,vehicle_type_or_category" ||
+      typeof details.passenger_name !== "string" || !details.passenger_name.trim() || details.passenger_name.length > 160 ||
+      !Number.isInteger(details.pax_count) || Number(details.pax_count) < 1 || Number(details.pax_count) > 100 ||
+      typeof details.flight_no !== "string" || details.flight_no.length > 80 ||
+      typeof details.vehicle_type_or_category !== "string" || !details.vehicle_type_or_category.trim() || details.vehicle_type_or_category.length > 80)) return denied;
+  if (Object.keys(input).sort().join(",") !== (detailSave ? "details,expected_updated_at,luggage_count,target_booking_reference" : "expected_updated_at,luggage_count,target_booking_reference") ||
+      input.target_booking_reference !== proof.booking.bookingReference ||
+      !Number.isInteger(input.luggage_count) || Number(input.luggage_count) < 0 || Number(input.luggage_count) > 100 ||
+      (!detailSave && input.luggage_count !== 2) ||
       typeof input.expected_updated_at !== "string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(input.expected_updated_at) ||
       !Number.isFinite(Date.parse(input.expected_updated_at))) return denied;
@@ -3558,15 +3568,18 @@ export async function saveStoreReviewAdminBags(proof: StoreReviewAdminSaveProof,
       p_booking_id: b.bookingId, p_booking_reference: b.bookingReference,
       p_company_id: b.companyId, p_booker_id: b.bookerId, p_customer_id: b.customerId,
       p_traveler_id: b.travelerId, p_driver_id: b.driverId,
-      p_expected_updated_at: input.expected_updated_at, p_luggage_count: 2,
+      p_expected_updated_at: input.expected_updated_at, p_luggage_count: input.luggage_count,
+      ...(detailSave ? { p_details: details } : {}),
     });
-    if (error || !data || data.booking_reference !== b.bookingReference || data.luggage_count !== 2 ||
+    if (error || !data || data.booking_reference !== b.bookingReference || data.luggage_count !== input.luggage_count ||
+        (detailSave && (!data.details || Object.keys(details).some(field => data.details[field] !== details[field]))) ||
         typeof data.updated_at !== "string" || !Number.isFinite(Date.parse(data.updated_at)) || typeof data.noop !== "boolean") {
       return { ok: false as const, status: error?.code === "40001" ? 409 : 503,
         error: "QA save could not be confirmed. Reload the test booking before trying again." };
     }
     return { ok: true as const, status: 200, result: {
-      booking_reference: b.bookingReference, luggage_count: 2, updated_at: data.updated_at, noop: data.noop,
+      booking_reference: b.bookingReference, luggage_count: input.luggage_count, updated_at: data.updated_at, noop: data.noop,
+      ...(detailSave ? { details } : {}),
     } };
   } catch {
     return { ok: false as const, status: 503, error: "QA save could not be confirmed. Reload the test booking before trying again." };

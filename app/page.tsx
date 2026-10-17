@@ -1,5 +1,7 @@
 "use client";
 
+import { PrivacyPolicyDisclosure } from "./privacy/policy-disclosure";
+
 import { AndroidAppUpdate } from "./android-app-update";
 
 import type {AdminDriverCombo} from "../lib/driver-job-combo";
@@ -53716,6 +53718,7 @@ export default function Home() {
       >
         Ask AI
       </button>
+      <PrivacyPolicyDisclosure />
     </main>
   );
 }

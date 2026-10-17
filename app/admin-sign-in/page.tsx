@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { PrivacyPolicyDisclosure } from "../privacy/policy-disclosure";
 import { StoreReviewSignIn } from "../store-review-sign-in";
 
 import { adminAccountAuthIsEnabled } from "../../lib/admin-account-session.ts";
@@ -41,6 +42,7 @@ export default async function AdminSignInPage({
         ) : null}
         <AdminSignInForm enabled={enabled} returnTo={returnTo} />
         <StoreReviewSignIn role="admin" />
+        <PrivacyPolicyDisclosure />
       </section>
     </main>
   );

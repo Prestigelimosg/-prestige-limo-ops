@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
+if (!process.argv.includes('--policy-only')) {
 const source = readFileSync('driver-companion/src/tracking.ts', 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 async function start({ os = 'android', choice = 'continue', active = false, invalid = false, expiresDuringDisclosure = false, foreground = 'granted', background = 'granted' } = {}) {
@@ -55,7 +56,9 @@ assert.deepEqual((await start({ background: 'denied' })).calls, ['readiness', 'd
 assert.deepEqual((await start({ os: 'ios' })).calls, ['readiness', 'foreground', 'background', 'save', 'start', 'position', 'post'], 'iOS permission path unchanged');
 assert.deepEqual((await start({ active: true })).calls, ['readiness', 'foreground', 'background', 'save', 'position', 'post'], 'already active tracking does not restart or prompt again');
 
-const policy = readFileSync('app/privacy/page.tsx', 'utf8');
+}
+
+const policy = readFileSync('app/privacy/page.tsx', 'utf8') + readFileSync('app/privacy/policy-content.tsx', 'utf8');
 const shell = readFileSync('app/public-information-shell.tsx', 'utf8');
 const portal = readFileSync('app/driver-portal/page.tsx', 'utf8');
 assert.match(policy, /id="account-deletion"/);
@@ -67,7 +70,7 @@ assert.doesNotMatch(policy + shell, /willsglimo@gmail\.com/);
 assert.match(policy, /calendar\.events/);
 assert.match(policy, /encrypted at rest/);
 assert.doesNotMatch(policy, /fetch\(|supabase|localStorage|sessionStorage/);
-console.log('PASS Driver Play disclosure ordering/cancel/eligibility/iOS preservation and existing-page privacy/deletion access.');
+console.log(process.argv.includes('--policy-only') ? 'PASS shared privacy policy preservation; tracking tests not repeated.' : 'PASS Driver Play disclosure ordering/cancel/eligibility/iOS preservation and existing-page privacy/deletion access.');
 
 const bridgeSource = readFileSync('driver-companion/src/driver-webview-bridge.ts', 'utf8');
 assert.match(bridgeSource, /allowedReadOnlyPaths/);

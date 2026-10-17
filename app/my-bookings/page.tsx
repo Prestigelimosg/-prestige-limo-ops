@@ -3245,6 +3245,11 @@ export default function CustomerPortalPage() {
               : null}
           </>
         )}
+        <nav aria-label="Customer privacy information" className="mt-6 text-center text-sm text-slate-600">
+          <Link href="/privacy" className="underline underline-offset-4">
+            Privacy Policy
+          </Link>
+        </nav>
       </div>
     </main>
   );

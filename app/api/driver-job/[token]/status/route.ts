@@ -1,3 +1,5 @@
+import { resolveStoreReviewJobRequest, storeReviewBlockedResponse } from "../../../../../lib/store-review-access.ts";
+import { getDriverJobStatusPersistenceClientForProduction, saveDriverJobStatusThroughStatusPersistence } from "../../../../../lib/driver-job-status-persistence.ts";
 import { after } from "next/server";
 import { applyDriverJobStatusUpdateContract } from "../../../../../lib/driver-job-link-contract.ts";
 import { applyProductionDriverJobStatusUpdate } from "../../../../../lib/driver-job-link-production.ts";
@@ -48,6 +50,23 @@ export async function PATCH(request: Request, context: DriverJobStatusRouteConte
   const exceptionReason = body.exception_reason;
   const safeStatusContext = body.safe_status_context;
   const safeStatusNote = body.safe_status_note;
+
+  const review = resolveStoreReviewJobRequest(request, token);
+  if (review.state === "blocked") return storeReviewBlockedResponse();
+  if (review.state === "review") {
+    if (Object.keys(body).some(key => key !== "status")) return storeReviewBlockedResponse();
+    const client = getDriverJobStatusPersistenceClientForProduction();
+    if (!client.ok) return storeReviewBlockedResponse();
+    try {
+      const result = await saveDriverJobStatusThroughStatusPersistence({
+        client: client.client, token, status, reviewBooking: review.proof,
+      });
+      return Response.json({ ...result, mode: "review" }, {
+        status: result.ok ? 200 : blockedStatusByReason[result.reason],
+        headers: { "Cache-Control": "private, no-store", Vary: "Cookie" },
+      });
+    } catch { return storeReviewBlockedResponse(); }
+  }
 
   if (isProductionDriverJobLinkMode()) {
     const result = await applyProductionDriverJobStatusUpdate({

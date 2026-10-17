@@ -205,13 +205,14 @@ type DriverJobSharingCleanupResult = {
     | "cleanup_unavailable"
     | "completed_marker_cleared"
     | "missing_driver_job_link"
-    | "not_terminal_status";
+    | "not_terminal_status"
+    | "review_isolated";
 };
 
 type DriverJobLinkExpiryResult = {
   no_op: boolean;
   ok: boolean;
-  reason: "completed_links_expired" | "expiry_unavailable" | "not_terminal_status";
+  reason: "completed_links_expired" | "expiry_unavailable" | "not_terminal_status" | "review_isolated";
 };
 
 const driverJobLinkSelect =
@@ -1328,9 +1329,20 @@ async function resolveLinkForToken({
           ["archived","cancelled","canceled","complete","completed","declined","declined_internal","history","job completed","job_completed","deleted"].includes(String(status || "").trim().toLowerCase()))) {
       return { ok: false, reason: "unauthorized" };
     }
-    const completed = await client.from("driver_job_status_events").select("id")
-      .eq("booking_reference", target.bookingReference).eq("status_value", "completed").limit(1).maybeSingle();
-    if (completed.error || asRecord(completed.data).id) return { ok: false, reason: "unauthorized" };
+    const historyRead = await client.from("driver_job_status_events").select(driverJobStatusEventSelect)
+      .eq("booking_reference", target.bookingReference).order("occurred_at", { ascending: true }).order("id", { ascending: true }).limit(5);
+    if (historyRead.error) return { ok: false, reason: "not_configured" };
+    const historyRows = asArray(historyRead.data).map(asRecord);
+    const sequence = ["driver_otw", "ots", "pob", "completed"];
+    if (historyRows.some((event, index) => event.status_value !== sequence[index] ||
+        event.booking_reference !== target.bookingReference || event.driver_job_link_id !== link.id ||
+        event.actor_label !== "store_review_qa" || event.actor_role !== "driver" ||
+        event.status_source !== "driver_job_api" || event.source_surface !== "driver_job_api" ||
+        !toStatusEventRow(event) || Object.keys(asRecord(event.safe_status_context)).length !== 1 ||
+        Object.keys(asRecord(asRecord(event.safe_status_context).store_review_booking)).length !== Object.keys(target).length ||
+        Object.entries(target).some(([key, value]) => asRecord(asRecord(event.safe_status_context).store_review_booking)[key] !== value))) {
+      return { ok: false, reason: "unauthorized" };
+    }
     const pickup = singaporePickupParts(String(b.pickup_at || ""));
     const revision = context.driver_ack_required_revision || context.job_card_revision;
     if (!pickup || !/^[a-f0-9]{64}$/.test(String(revision || "")) || !isStoreReviewBookingProof(reviewBooking)) return { ok: false, reason: "unauthorized" };
@@ -1338,7 +1350,10 @@ async function resolveLinkForToken({
       public_reference: b.public_booking_reference || b.booking_reference, pickup_date: pickup.pickupDate,
       pickup_datetime: pickup.pickupDateTime, pickup_time: pickup.pickupTime, booking_type: b.service_type,
       pickup_address: b.pickup_location, dropoff_address: b.dropoff_location, route: b.route_summary,
-      passenger_name: b.passenger_name, flight_no: b.flight_no, status: b.status,
+      passenger_name: b.passenger_name, flight_no: b.flight_no, status: historyRows.at(-1)?.status_value || b.status,
+      statusHistory: historyRows.slice().reverse().map(event => ({ status: event.status_value,
+        statusLabel: driverJobStatusDisplayLabels[event.status_value as DriverJobStatusUpdate],
+        occurredAt: event.occurred_at, safeNote: null })),
       driver_name: b.driver_name, driver_contact: b.driver_contact, driver_plate_number: b.driver_plate_number,
       driver_vehicle_model: b.vehicle_type_or_category, driver_acknowledged_at: context.driver_acknowledged_at,
       driver_amendment_ack_pending: context.driver_amendment_ack_pending, driver_ack_required_revision: revision,
@@ -1548,6 +1563,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     if (!isStoreReviewBookingProof(input.reviewBooking)) return detailsBlockedResult("unauthorized");
     const resolved = await resolveLinkForToken(input);
     if (!resolved.ok) return detailsBlockedResult(resolved.reason);
+    if (resolved.review?.payload.status === "completed") return detailsBlockedResult("already_completed");
     if (!resolved.review || input.expectedRevision !== resolved.review.payload.acknowledgementRevision) return detailsBlockedResult("stale_revision");
     const driver = resolved.review.payload.assignedDriver;
     if (!driver.name) return detailsBlockedResult("invalid_details");
@@ -1714,7 +1730,30 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
 export async function saveDriverJobStatusThroughStatusPersistence(
   input: SaveDriverJobStatusPersistenceInput,
 ): Promise<DriverJobProductionStatusUpdateResult> {
-  if (input.reviewBooking !== undefined) return statusBlockedResult("unauthorized");
+  if (input.reviewBooking !== undefined) {
+    if (!isStoreReviewBookingProof(input.reviewBooking)) return statusBlockedResult("unauthorized");
+    const status = validateDriverJobStatusUpdate(input.status);
+    if (!status) return statusBlockedResult("invalid_status");
+    if ([input.completionNote, input.exceptionReason, input.safeStatusContext, input.safeStatusNote].some(value => value !== undefined)) return statusBlockedResult("invalid_status");
+    const resolved = await resolveLinkForToken(input);
+    if (!resolved.ok) return statusBlockedResult(resolved.reason);
+    if (!resolved.review || resolved.link.safe_link_context.link_purpose !== "store_review_qa" || !input.client.rpc || !isStoreReviewBookingProof(input.reviewBooking)) return statusBlockedResult("unauthorized");
+    const { data, error } = await input.client.rpc("record_driver_reviewer_qa_status", {
+      p_expected_booking: input.reviewBooking.booking, p_link_id: resolved.link.id,
+      p_expected_revision: resolved.review.payload.acknowledgementRevision, p_status: status,
+    });
+    if (error) return statusBlockedResult(error.code === "22023" ? "out_of_order" : "unauthorized");
+    const event = toStatusEventRow(asRecord(data));
+    if (!event || event.booking_reference !== input.reviewBooking.booking.bookingReference ||
+        event.driver_job_link_id !== resolved.link.id || event.status_value !== status) return statusBlockedResult("not_configured");
+    const loaded = await resolveLinkForToken(input);
+    if (!loaded.ok || !loaded.review) return statusBlockedResult("unauthorized");
+    return { ok: true, reason: "updated", status, payload: loaded.review.payload,
+      customer_notification: { ok: false, no_op: true, external_send: false, provider_send: false,
+        error: "QA review does not send notifications.", status: 200 },
+      link_expiry: { no_op: true, ok: true, reason: "review_isolated" },
+      sharing_cleanup: { no_op: true, ok: true, customerVisible: false, external_send: false, reason: "review_isolated" } };
+  }
   const nextStatus = validateDriverJobStatusUpdate(input.status);
 
   if (!nextStatus) {

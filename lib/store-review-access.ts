@@ -177,11 +177,12 @@ export function storeReviewRequestAllowed(session: StoreReviewSession, pathname:
   // exact target, current ownership and revision before reading or acknowledging.
   if (request && session.role === "driver") {
     const url = new URL(request.url);
-    const match = pathname.match(/^\/(api\/)?driver-job\/(review-[1-9][0-9]{0,15})$/);
+    const match = pathname.match(/^\/(api\/)?driver-job\/(review-[1-9][0-9]{0,15})(\/status)?$/);
     if (!url.search && match && session.scope.bookingTargets?.some(target =>
         match[2] === `review-${target.bookingId}` && (!session.scope.driverLinkBookingReference ||
           target.bookingReference === session.scope.driverLinkBookingReference))) {
-      if (!match[1] && method === "GET") return true;
+      if (!match[1] && !match[3] && method === "GET") return true;
+      if (match[3] && (!match[1] || method !== "PATCH")) return false;
       return resolveStoreReviewJobRequest(request, match[2]).state === "review";
     }
   }
@@ -288,7 +289,8 @@ export function resolveStoreReviewJobRequest(request: Request, token: string):
       !["GET", "PATCH"].includes(request.method)) return { state: "blocked" };
   try {
     const url = new URL(request.url), referrer = new URL(request.headers.get("referer") || "");
-    if (url.pathname !== `/api/driver-job/${token}` || url.search ||
+    const statusRequest = url.pathname === `/api/driver-job/${token}/status` && request.method === "PATCH";
+    if ((!statusRequest && url.pathname !== `/api/driver-job/${token}`) || url.search ||
         (request.headers.get("origin") ? request.headers.get("origin") !== url.origin : request.method !== "GET") || referrer.origin !== url.origin ||
         !["/driver-portal", `/driver-job/${token}`].includes(referrer.pathname) ||
         !/^review-[1-9][0-9]{0,15}$/.test(token)) return { state: "blocked" };

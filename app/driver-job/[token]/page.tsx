@@ -1511,6 +1511,7 @@ export default function DriverJobPage() {
           setDriverDetails(details);
           setSavedDriverDetails(result.payload.acknowledged ? details : null);
           setAcknowledged(result.payload.acknowledged);
+          setWorkflowStatus(result.payload.status || "assigned");
           setPageState({ kind: "ready", job: result.payload });
         } catch {
           if (active) setPageState({ kind: "blocked", reason: "unavailable" });
@@ -2770,7 +2771,7 @@ export default function DriverJobPage() {
         }));
       }
       if (
-        result.payload.status === "completed" &&
+        !reviewJob && result.payload.status === "completed" &&
         embeddedDriverApp &&
         isVerifiedEmbeddedDriverApp()
       ) {
@@ -2878,7 +2879,7 @@ export default function DriverJobPage() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950" data-driver-job-page="true">
-      {!reviewJob ? <dialog
+      <dialog
         ref={completionDialogRef}
         aria-labelledby="driver-completion-title"
         aria-describedby="driver-completion-description"
@@ -2908,7 +2909,7 @@ export default function DriverJobPage() {
             Confirm
           </button>
         </div>
-      </dialog> : null}
+      </dialog>
       <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6">
         <header className="space-y-1 border-b border-stone-200 pb-3">
           {embeddedDriverApp || reviewJob ? (
@@ -2921,7 +2922,7 @@ export default function DriverJobPage() {
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
           <PublicAppBuildMarker />
-          {reviewJob ? <p className="rounded-md bg-amber-50 p-3 text-sm" data-driver-review-boundary="true">QA review: view this designated test job and acknowledge it. Other actions are unavailable.</p> : !embeddedDriverApp ? (
+          {reviewJob ? <p className="rounded-md bg-amber-50 p-3 text-sm" data-driver-review-boundary="true">QA review: acknowledge this test job and record its trip statuses. Location sharing and notifications stay off.</p> : !embeddedDriverApp ? (
             <p
               className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
               data-driver-job-mobile-web-note="true"
@@ -3358,7 +3359,7 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            {!reviewJob ? <section
+            <section
               className="order-3 flex flex-col gap-2 pb-4"
               aria-labelledby="driver-status-heading"
               data-driver-primary-step="status-workflow"
@@ -3369,7 +3370,7 @@ export default function DriverJobPage() {
               <div className="order-1 grid gap-2 md:grid-cols-4" data-driver-primary-step="status-buttons">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
-                    {statusAction.label === "OTW" ? (
+                    {statusAction.label === "OTW" && !reviewJob ? (
                       <button
                         aria-label={driverOtwLiveLocationControlLabel}
                         className="h-11 w-full rounded-md border border-sky-400 bg-sky-50 px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -3407,7 +3408,7 @@ export default function DriverJobPage() {
                       >
                         {driverOtwLiveLocationFeedback.text}
                       </p>
-                    ) : statusAction.label !== "OTW" && statusFeedback?.target === statusAction.label ? (
+                    ) : (statusAction.label !== "OTW" || reviewJob) && statusFeedback?.target === statusAction.label ? (
                       <p
                         aria-live="polite"
                         className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(statusFeedback.tone)}`}
@@ -3419,7 +3420,7 @@ export default function DriverJobPage() {
                   </div>
                 ))}
               </div>
-              {driverOtsPhotoProofReady ? (
+              {!reviewJob && driverOtsPhotoProofReady ? (
                 <div
                   className="order-2 space-y-2 rounded-md border border-sky-200 bg-sky-50/70 p-2.5"
                   data-driver-job-ots-photo-proof="true"
@@ -3595,7 +3596,7 @@ export default function DriverJobPage() {
                   Times are recorded automatically after accepted status updates.
                 </p>
               </div>
-            </section> : null}
+            </section>
 
             {!reviewJob && acknowledged ? (
               <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">

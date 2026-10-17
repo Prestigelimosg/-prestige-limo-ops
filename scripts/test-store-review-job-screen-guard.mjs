@@ -15,7 +15,7 @@ async function scenario({action='load',status=200,mode='review',ok=true,acknowle
  const ctx={reviewJob:true,token:'review-9001',active:true,process:{env:{NODE_ENV:production?'production':'development'}},window:{location:{hostname:host}},
   savingDriverDetails:false,pageState:{kind:'ready',job:payload},encodeURIComponent,
   fetch:async(url,init)=>{calls.push({url,...init});if(networkError)throw Error('synthetic network failure');return{ok:status===200,json:async()=>({ok,mode,payload:{...payload,acknowledged}})};}};
- for(const name of ['PageState','Acknowledged','SavedDriverDetails','DetailsFeedback','DriverDetails','SavingDriverDetails'])ctx['set'+name]=v=>state[name]=v;
+ for(const name of ['PageState','Acknowledged','SavedDriverDetails','DetailsFeedback','DriverDetails','SavingDriverDetails','WorkflowStatus'])ctx['set'+name]=v=>state[name]=v;
  await run((action==='load'?load:ack).getText(tree),ctx)();
  count++;return{state,calls};
 }

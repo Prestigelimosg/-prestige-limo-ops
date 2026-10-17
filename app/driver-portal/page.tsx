@@ -293,6 +293,9 @@ export default function DriverPortalPage() {
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [recoveryMessage, setRecoveryMessage] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
+  const accountSignOutPendingRef = useRef(false);
+  const [accountSigningOut, setAccountSigningOut] = useState(false);
+  const [accountSignOutError, setAccountSignOutError] = useState("");
   const [biometricFeedback, setBiometricFeedback] = useState("");
   const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
   const biometricSetupEnabled = nativeBiometricEnabled || biometricEnabledThisSession;
@@ -649,6 +652,29 @@ export default function DriverPortalPage() {
     return () => window.removeEventListener("prestige-driver-native-job-open-result", onNativeJobOpenResult);
   }, []);
 
+  async function signOutDriverAccount() {
+    if (readState.kind !== "ready" || !readState.accountSession || readState.reviewSession || accountSignOutPendingRef.current) return;
+    accountSignOutPendingRef.current = true;
+    setAccountSigningOut(true);
+    setAccountSignOutError("");
+    try {
+      const response = await fetch("/api/driver-auth/session", {
+        method: "DELETE",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "x-prestige-driver-purpose": "driver-account-sign-out" },
+      });
+      const result = await response.json() as { ok?: boolean };
+      if (!response.ok || result.ok !== true) throw new Error("Sign out unavailable");
+      // End only the web account session. Native registration and binding stay intact.
+      window.location.assign("/driver-portal");
+    } catch {
+      accountSignOutPendingRef.current = false;
+      setAccountSigningOut(false);
+      setAccountSignOutError("Could not sign out. Please try again.");
+    }
+  }
+
   async function signInDriverAccount() {
     if (!installationId) return;
 
@@ -934,6 +960,7 @@ export default function DriverPortalPage() {
               <PublicAppBuildMarker tone="dark" />
             </div>
             {readState.kind === "ready" && readState.accountSession ? (
+              <div className="flex shrink-0 flex-col items-end gap-2">
               <button
                 aria-controls="driver-notification-centre"
                 aria-expanded={notificationCentreOpen}
@@ -944,8 +971,19 @@ export default function DriverPortalPage() {
               >
                 Alerts {driverPortalAlertCountLabel}
               </button>
+              <button
+                className="min-h-11 rounded-full border border-slate-600 bg-slate-900 px-3 text-sm font-bold text-white disabled:opacity-50"
+                data-driver-account-sign-out="true"
+                disabled={accountSigningOut}
+                onClick={signOutDriverAccount}
+                type="button"
+              >
+                {accountSigningOut ? "Signing out…" : "Sign out"}
+              </button>
+              </div>
             ) : null}
           </div>
+          {accountSignOutError ? <p role="alert" className="mt-2 text-sm text-amber-200">{accountSignOutError}</p> : null}
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">
             View your upcoming and active jobs.
           </p>

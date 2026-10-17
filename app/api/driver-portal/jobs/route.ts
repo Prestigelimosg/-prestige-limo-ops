@@ -121,8 +121,8 @@ export async function GET(request: Request) {
       const loaded = await loadDriverJobPayloadThroughStatusPersistence({ client: clientResult.client, token, reviewBooking: access.proof });
       if (!loaded.ok) return response({ jobs: [], ok: false, reason: "unavailable" }, 403);
       jobs.push({ job_key: token, review_job_path: `/driver-job/${token}`, payload: loaded.payload,
-        state: loaded.payload.acknowledged ? "assigned" : "pending_ack",
-        state_label: loaded.payload.acknowledged ? "Acknowledged" : "Pending ACK" });
+        state: loaded.payload.acknowledged ? loaded.payload.status : "pending_ack",
+        state_label: loaded.payload.acknowledged ? (loaded.payload.statusHistory.length ? loaded.payload.statusLabel : "Acknowledged") : "Pending ACK" });
     }
     return response({ ok: true, session: "reviewer", jobs, alert_count: 0, alerts: [], alerts_available: false,
       native_badge_count: null, dismiss_notification_keys: null,

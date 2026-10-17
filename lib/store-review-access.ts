@@ -167,17 +167,22 @@ const authPaths: Record<StoreReviewRole, string> = {
 // read-access preparation, not complete store-review feature acceptance.
 export function storeReviewRequestAllowed(session: StoreReviewSession, pathname: string, method: string, request?: Request) {
   if (request ? !storeReviewRequestOriginAllowed(request) : process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL_ENV)) return false;
+  if (request && session.role === "customer" && method === "GET" &&
+      (pathname === "/api/customer-invoices" || /^\/api\/customer-invoice-pdf\/[A-Z0-9-]+$/.test(pathname)) &&
+      storeReviewSameOrigin(request, "customer") &&
+      request.headers.get("x-prestige-customer-purpose") === "customer-saved-bookings-read") return true;
   if (request && pathname === "/api/admin-bookings" && method === "PATCH" &&
       resolveStoreReviewAdminSaveRequest(request).state === "review") return true;
   // The API independently verifies the session,
   // exact target, current ownership and revision before reading or acknowledging.
   if (request && session.role === "driver") {
     const url = new URL(request.url);
-    const match = pathname.match(/^\/(api\/)?driver-job\/(review-[1-9][0-9]{0,15})$/);
+    const match = pathname.match(/^\/(api\/)?driver-job\/(review-[1-9][0-9]{0,15})(\/status)?$/);
     if (!url.search && match && session.scope.bookingTargets?.some(target =>
         match[2] === `review-${target.bookingId}` && (!session.scope.driverLinkBookingReference ||
           target.bookingReference === session.scope.driverLinkBookingReference))) {
-      if (!match[1] && method === "GET") return true;
+      if (!match[1] && !match[3] && method === "GET") return true;
+      if (match[3] && (!match[1] || method !== "PATCH")) return false;
       return resolveStoreReviewJobRequest(request, match[2]).state === "review";
     }
   }
@@ -208,6 +213,16 @@ export function storeReviewReadFetch(session: StoreReviewSession, databaseOrigin
       add("driver_id", `eq.${scope.driverId}`);
       if (scope.travelerIds.length) add("or", `(traveler_id.is.null,traveler_id.in.(${scope.travelerIds.join(",")}))`);
       else add("traveler_id", "is.null");
+    } else if (session.role === "customer" && table === "bookers") {
+      add("id", `eq.${scope.bookerId}`);
+      add("company_id", `eq.${scope.companyId}`);
+      add("customer_id", `eq.${scope.customerId}`);
+    } else if (session.role === "customer" && table === "customer_invoice_records" && scope.travelerIds.length) {
+      add("customer_id", `eq.${scope.customerId}`);
+      add("booker_id", `eq.${scope.bookerId}`);
+      add("traveler_id", `in.(${scope.travelerIds.join(",")})`);
+      add("reference", `in.(${scope.bookingReferences.join(",")})`);
+      add("document_state", "eq.issued");
     } else if (session.role === "driver" && ["driver_job_links", "driver_job_status_events", "customer_driver_app_notification_outbox"].includes(table || "")) {
       add("booking_reference", `in.(${scope.bookingReferences.join(",")})`);
       if (table === "driver_job_links") add("driver_id", `eq.${scope.driverId}`);
@@ -274,7 +289,8 @@ export function resolveStoreReviewJobRequest(request: Request, token: string):
       !["GET", "PATCH"].includes(request.method)) return { state: "blocked" };
   try {
     const url = new URL(request.url), referrer = new URL(request.headers.get("referer") || "");
-    if (url.pathname !== `/api/driver-job/${token}` || url.search ||
+    const statusRequest = url.pathname === `/api/driver-job/${token}/status` && request.method === "PATCH";
+    if ((!statusRequest && url.pathname !== `/api/driver-job/${token}`) || url.search ||
         (request.headers.get("origin") ? request.headers.get("origin") !== url.origin : request.method !== "GET") || referrer.origin !== url.origin ||
         !["/driver-portal", `/driver-job/${token}`].includes(referrer.pathname) ||
         !/^review-[1-9][0-9]{0,15}$/.test(token)) return { state: "blocked" };

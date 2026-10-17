@@ -21,7 +21,7 @@ export function StoreReviewSignIn({ role }: { role: "admin" | "driver" | "custom
   }
   return <details className="mt-5 rounded-xl border border-slate-200 p-4 text-sm text-slate-800">
     <summary className="cursor-pointer font-semibold">Store review access</summary>
-    <p className="mt-3">Use the reviewer credential supplied with the store submission. This preparation currently allows viewing designated test records only. Operational actions are unavailable.</p>
+    <p className="mt-3">Use the reviewer credential supplied with the store submission. {role === "driver" ? "Use the designated test job to acknowledge and record trip statuses. Location sharing and notifications stay off." : "This preparation currently allows viewing designated test records only. Operational actions are unavailable."}</p>
     <form className="mt-3 space-y-3" onSubmit={submit}>
       <label className="block font-semibold">Reviewer credential
         <input className="mt-1 w-full rounded-lg border border-slate-300 p-3" type="password" autoComplete="current-password" autoCapitalize="none" spellCheck={false} maxLength={43} required value={code} onChange={event => setCode(event.target.value)} />
@@ -51,7 +51,7 @@ export function StoreReviewSessionNotice({ role, compact = false, qaAcknowledgem
     finally { setBusy(false); }
   }
   return <section aria-label="Store review session" className="my-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-slate-950">
-    {!compact ? <p className="mb-2">{role === "admin" ? "QA review: view designated test bookings. Only Number of bags can be saved as 2 on the designated Admin test booking. Other actions are unavailable." : role === "driver" || qaAcknowledgement ? "QA review: view and acknowledge the designated Driver test job. Other actions are unavailable." : "QA review: view designated test bookings only. Operational actions are unavailable."}</p> : null}
+    {!compact ? <p className="mb-2">{role === "admin" ? "QA review: view designated test bookings. Only Number of bags can be saved as 2 on the designated Admin test booking. Other actions are unavailable." : role === "driver" || qaAcknowledgement ? "QA review: acknowledge the designated Driver test job and record its trip statuses. Location sharing and notifications stay off." : "QA review: view designated test bookings only. Operational actions are unavailable."}</p> : null}
     <button type="button" onClick={endReview} disabled={busy} className="min-h-11 rounded-lg border border-slate-400 px-3 font-semibold disabled:opacity-50">{busy ? "Ending review…" : "End reviewer session"}</button>
     {error ? <p role="alert">{error}</p> : null}
   </section>;

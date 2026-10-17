@@ -1,3 +1,4 @@
+import { resolveStoreReviewCustomerChangeRequest, storeReviewBlockedResponse } from "../../../lib/store-review-access";
 import { createCustomerBookingChangeRequestAdminAppNotification } from "../../../lib/admin-app-notification-persistence";
 import { sendAdminBookingChangeRequestEmailAlert } from "../../../lib/admin-booking-change-request-email-alert";
 import {
@@ -415,10 +416,12 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    const boundary = resolveCustomerSavedBookingsBoundaryForPurpose(
-      request,
-      customerBookingChangePurposeHeader,
-    );
+    const review = resolveStoreReviewCustomerChangeRequest(request);
+    if (review.state === "blocked") return storeReviewBlockedResponse();
+    const boundary = review.state === "review" ? { ok: true as const, data: {
+      auth_user_id: "store-reviewer", mode: "server-session-cookie" as const, review: review.session,
+      source_surface: "customer_api" as const, runtime_gate: { account_allowlist: new Set<string>(), mode: "small-allowlist" as const },
+    } } : resolveCustomerSavedBookingsBoundaryForPurpose(request, customerBookingChangePurposeHeader);
 
     if (!boundary.ok) {
       return safeErrorResponse(boundary);
@@ -429,6 +432,8 @@ export async function POST(request: Request) {
     if (!parsed.ok) {
       return safeErrorResponse(parsed);
     }
+
+    if (review.state === "review" && parsed.data.booking_reference !== review.proof.booking.bookingReference) return storeReviewBlockedResponse();
 
     const savedBookingResult = await loadCustomerSavedBookings(
       new URLSearchParams({
@@ -456,13 +461,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const notification = await createAdminReviewNoticeForBookingChangeRequest(parsed.data, booking);
+    const notification = review.state === "review"
+      ? await createCustomerBookingChangeRequestAdminAppNotification(adminBookingChangeRequestAlertInput(parsed.data, booking),
+          { proof: review.proof, expectedUpdatedAt: booking.updated_at })
+      : await createAdminReviewNoticeForBookingChangeRequest(parsed.data, booking);
 
     if (!notification.ok) {
       return safeErrorResponse(notification);
     }
 
-    await prepareCustomerBookingChangeJobCardReview(parsed.data);
+    if (review.state !== "review") await prepareCustomerBookingChangeJobCardReview(parsed.data);
 
     return Response.json({
       ok: true,

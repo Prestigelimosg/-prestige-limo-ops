@@ -15,6 +15,15 @@ export default function TermsOfServicePage() {
       title="Terms of Service"
     >
       <section>
+        <h2 className="text-xl font-bold text-slate-950">Google Maps in Admin and Customer</h2>
+        <p className="mt-2">
+          Use of Google Maps features in the Admin and Customer apps is subject to the Google Maps/Google Earth
+          Additional Terms of Service at https://www.google.com/help/terms_maps/ and Google&apos;s Privacy Policy at
+          https://policies.google.com/privacy. The existing Driver Google Calendar terms below remain unchanged.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-xl font-bold text-slate-950">Eligibility and authorization</h2>
         <p className="mt-2">
           The Calendar connection is for authorized Prestige Limo Ops drivers with a verified Driver Database

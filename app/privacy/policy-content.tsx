@@ -130,6 +130,35 @@ export function PrivacyPolicyContent() {
       </section>
 
       <section>
+        <h2 className="text-xl font-bold text-slate-950">Maps, app updates and optional processing</h2>
+        <div className="mt-3 space-y-3">
+          <p>
+            Admin operational maps and Customer trip maps use Google Maps. When these maps load, Google receives
+            technical information such as your IP address and browser or device identifiers, and the map locations
+            or coordinates requested. Admin address searches and route estimates send the requested locations to
+            Google. Customer trip maps display the assigned driver&apos;s shared location; they do not start GPS
+            sharing from the Customer&apos;s phone. Google may use and retain this information to provide and improve
+            its services under the Google Privacy Policy at https://policies.google.com/privacy. The use of Google
+            Maps is also subject to the Google Maps terms at https://www.google.com/help/terms_maps/.
+          </p>
+          <p>
+            The Admin and Customer apps use Expo for app updates and permitted push notifications. Update requests
+            include installation and app-version information and may include a saved fatal error or identifiers of
+            updates that failed to launch. We use this information for app delivery, reliability and security.
+            Notification permission controls push alerts; it does not turn off the app&apos;s necessary account or
+            update processing. Hosting, database and delivery providers process information needed to operate these
+            services on our behalf.
+          </p>
+          <p>
+            When authorised Admin staff choose an AI assistance or booking-parsing action, the submitted text and,
+            for a conversation, a limited recent conversation history are sent to OpenAI to provide the requested
+            result. Email delivery providers process the recipients and message or document content needed for
+            service emails. These actions do not give Customers or Drivers access to internal Admin information.
+          </p>
+        </div>
+      </section>
+
+      <section>
         <h2 className="text-xl font-bold text-slate-950">Google data we access and how we use it</h2>
         <div className="mt-3 space-y-3">
           <p>

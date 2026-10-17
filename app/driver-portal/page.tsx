@@ -1251,7 +1251,7 @@ export default function DriverPortalPage() {
                   </p>
                 ) : null}
                 {availableJobs.length === 0 ? (availableJobsReadAvailable ? <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700">No open job offers.</p> : null) : availableJobs.map((job) => {
-                  const [pickupLabel, closesLabel] = [job.pickup_at, job.closes_at].map((value) => {
+                  const [pickupLabel] = [job.pickup_at].map((value) => {
                     const date = new Date(value);
                     if (Number.isNaN(date.getTime())) return "Time unavailable";
                     const parts = new Intl.DateTimeFormat("en-SG", {
@@ -1284,7 +1284,6 @@ export default function DriverPortalPage() {
                     <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-3">
                       {!job.combo ? <><div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Pickup</dt><dd className="mt-0.5 break-words font-semibold text-slate-800">{job.safe_pickup_area}</dd></div>
                       <div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Drop-off</dt><dd className="mt-0.5 break-words font-semibold text-slate-800">{job.safe_dropoff_area}</dd></div></> : null}
-                      <div className="rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Offer closes</dt><dd className="mt-0.5 font-semibold text-slate-800"><time dateTime={job.closes_at}>{closesLabel}</time></dd></div>
                       {(job.combo ? [] : tripDetails).map(([label, value]) => (
                         <div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2 sm:col-span-3" key={label}>
                           <dt className="font-bold uppercase text-slate-500">{label}</dt>

@@ -1262,8 +1262,8 @@ assert.ok(files["app/admin-driver-pool-control.tsx"].includes("onCancelAssignmen
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
   "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : job.combo ? "Accept all trips" : "Accept"', 'job.response_status === "awaiting_admin" ? "Cancel" : "Decline"', "Load more",
-  "Pickup", "Drop-off", "Offer closes", "job.safe_pickup_area",
-  "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
+  "Pickup", "Drop-off", "job.safe_pickup_area",
+  "job.safe_dropoff_area", "if (!driverPoolAccountSession)",
   "setAvailableJobs([])",
   "driverPoolAvailableJobsRefreshIntervalMs", "window.setInterval",
   'document.visibilityState === "visible"', "quiet: true",
@@ -1430,9 +1430,8 @@ assert.doesNotMatch(tripDetailsHtml, /<script>|PRIVATE ADMIN NOTE|customer_price
 assert.ok(tripDetailsHtml.includes('&lt;script&gt;'), 'Trip text must remain escaped React text');
 assert.doesNotMatch(poolDateHtml, /Trip instructions|Scheduled end|>Passengers<|>Luggage</, 'Missing legacy fields must not invent trip details');
 assert.ok(poolDateHtml.includes('14 Sept Mon, 1800hrs'));
-assert.ok(poolDateHtml.includes('14 Sept Mon, 1730hrs'));
-assert.ok(poolDateHtml.includes('dateTime="2026-09-14T09:30:00Z"'), 'Keep the original deadline timestamp');
-for (const text of ['DEP · AVF','Job QA-DATE','SGD 65.00','Example pickup area','Example drop-off area','Offer closes','Accept','Decline']) assert.ok(poolDateHtml.includes(text),text);
+assert.doesNotMatch(poolDateHtml, /Offer closes|14 Sept Mon, 1730hrs|2026-09-14T09:30:00Z/, 'Closing deadline must not be rendered; retain it unchanged in the offer data');
+for (const text of ['DEP · AVF','Job QA-DATE','SGD 65.00','Example pickup area','Example drop-off area','Accept','Decline']) assert.ok(poolDateHtml.includes(text),text);
 assert.equal(JSON.stringify(poolDateJob),poolDateOriginal,'Formatting must not mutate the offer');
 const poolPendingCard = poolCardModule.exports.renderCard({...poolDateJob, selection_mode:'admin', response_status:'awaiting_admin'});
 const poolPendingHtml = renderToStaticMarkup(poolPendingCard);
@@ -1454,7 +1453,7 @@ for (const [timestamp,expected] of [
   ['invalid','Time unavailable'],
 ]) {
   const html=renderToStaticMarkup(poolCardModule.exports.renderCard({...poolDateJob,pickup_at:timestamp,closes_at:timestamp}));
-  assert.equal(html.split(expected).length-1,2,`Pickup and closing time: ${timestamp}`);
+  assert.equal(html.split(expected).length-1,1,`Pickup time: ${timestamp}`);
 }
 console.log('Driver Pool date display passes Singapore midnight, weekday, 24-hour, year/leap boundaries and original offer preservation.');
 

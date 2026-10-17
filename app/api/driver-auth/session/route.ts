@@ -1,3 +1,4 @@
+import { storeReviewAuthResponse, resolveStoreReviewSession } from "../../../../lib/store-review-access";
 import { completeDriverPinReset, signInDriverAccountForInstallation, verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock.ts";
 import { recordDriverAccountActivity } from "../../../../lib/driver-account-activity";
 import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
@@ -32,6 +33,11 @@ function sameOriginPortalRequest(request: Request, purpose: string) {
 }
 
 export async function POST(request: Request) {
+  if (resolveStoreReviewSession(request.headers.get("cookie")).state !== "absent") {
+    const body = await request.clone().json().catch(() => ({}));
+    const response = storeReviewAuthResponse(request, "driver", body && typeof body === "object" && !Array.isArray(body) ? body : {});
+    if (response) return response;
+  }
   if (request.headers.get("x-prestige-driver-purpose") === "driver-account-pin-reset") {
     if (!sameOriginPortalRequest(request, "driver-account-pin-reset")
       || !/\b(?:Android|iPhone)\b/i.test(request.headers.get("user-agent") || "")) {
@@ -49,6 +55,8 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const reviewResponse = body && !Array.isArray(body) ? storeReviewAuthResponse(request, "driver", body) : null;
+  if (reviewResponse) return reviewResponse;
   if (!body || Array.isArray(body) || Object.keys(body).some((key) => !["email", "installation_id", "password"].includes(key))) {
     return response({ ok: false, reason: "invalid_credentials" }, 401);
   }
@@ -79,6 +87,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const reviewResponse = storeReviewAuthResponse(request, "driver");
+  if (reviewResponse) return reviewResponse;
   if (!sameOriginPortalRequest(request, "driver-account-sign-out")) {
     return response({ ok: false, reason: "unauthorized" }, 401);
   }

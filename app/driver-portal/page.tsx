@@ -1,5 +1,6 @@
 "use client";
 
+import { StoreReviewSignIn, StoreReviewSessionNotice } from "../store-review-sign-in";
 import { reportDriverActivity } from "../../lib/driver-activity-client";
 
 import {DriverComboTrips, type DriverComboTripSummary} from "../driver-job/driver-combo-trips";
@@ -14,6 +15,7 @@ import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 import { AndroidAppUpdate } from "../android-app-update";
 
 type DriverPortalJob = {
+  review_job_path?: string;
   combo?:{vehicle:string;trips:DriverComboTripSummary[]};
   job_key: string;
   payload: SafeDriverJobPayload;
@@ -88,6 +90,7 @@ type DriverPortalReadState =
   | { kind: "loading" }
   | {
       accountSession: boolean;
+      reviewSession: boolean;
       alertCount: number;
       alerts: DriverPortalNotificationAlert[];
       alertsAvailable: boolean;
@@ -311,7 +314,7 @@ export default function DriverPortalPage() {
     installationId &&
     (
       readState.kind === "blocked" ||
-      (readState.kind === "ready" && !readState.accountSession)
+      (readState.kind === "ready" && !readState.accountSession && !readState.reviewSession)
     ),
   );
 
@@ -343,7 +346,7 @@ export default function DriverPortalPage() {
         jobs?: DriverPortalJob[];
         ok?: boolean;
         reason?: string;
-        session?: "account" | "link";
+        session?: "account" | "link" | "reviewer";
       };
       if (revision !== jobsReadRevisionRef.current) return;
       if (!response.ok || result.ok !== true) {
@@ -359,14 +362,16 @@ export default function DriverPortalPage() {
       }
 
       if (result.session === "account") reportDriverActivity(nativeInstallationId);
-      const publicKey = typeof result.device_alerts?.public_key === "string"
+      const publicKey = result.session !== "reviewer" && typeof result.device_alerts?.public_key === "string"
         ? result.device_alerts.public_key
         : "";
       setAlertReadiness({
         publicKey,
         ready: result.device_alerts?.ready === true && Boolean(publicKey),
       });
-      if (nativeInstallationId && result.session === "account") {
+      if (result.session === "reviewer") {
+        setAlertState("unavailable");
+      } else if (nativeInstallationId && result.session === "account") {
         const nativeWindow = window as DriverNativeWindow;
         const registrationReady = result.device_alerts?.native_registration_ready;
         if (nativeAlertRecoveryRef.current !== "pending") {
@@ -408,13 +413,14 @@ export default function DriverPortalPage() {
           : await readDriverPortalAlertState(),
       );
       if (revision !== jobsReadRevisionRef.current) return;
-      if (nativeInstallationId && Array.isArray(result.dismiss_notification_keys)) {
+      if (result.session !== "reviewer" && nativeInstallationId && Array.isArray(result.dismiss_notification_keys)) {
         await dismissNativeAlerts([...new Set([...result.dismiss_notification_keys, ...viewedJobKeys])],
           result.native_badge_count ?? null, viewedJobKeys.length > 0);
         if (revision !== jobsReadRevisionRef.current) return;
       }
       setReadState({
         accountSession: result.session === "account",
+        reviewSession: result.session === "reviewer",
         alertCount: Number.isSafeInteger(result.alert_count) && Number(result.alert_count) >= 0
           ? Number(result.alert_count)
           : 0,
@@ -708,6 +714,8 @@ export default function DriverPortalPage() {
   }
 
   async function enableJobAlerts() {
+    // A server denial happens too late to prevent device permission/registration.
+    if (readState.kind === "ready" && readState.reviewSession) return;
     if (nativeBridgeReady) {
       if (readState.kind === "ready" && readState.accountSession &&
         (window as DriverNativeWindow).__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__ === true) {
@@ -859,6 +867,18 @@ export default function DriverPortalPage() {
   }
 
   async function openJob(job: DriverPortalJob, openMessages = false) {
+    if (readState.kind === "ready" && readState.reviewSession) {
+      if (!openMessages && (window.location.origin === "https://app.prestigelimo.sg" || (process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname))) &&
+          /^\/driver-job\/review-[1-9][0-9]{0,15}$/.test(job.review_job_path || "")) {
+        window.location.assign(job.review_job_path!);
+        return;
+      }
+      setOpenFeedback((current) => ({
+        ...current,
+        [job.job_key]: "QA job access is not ready. This reviewer session can view the test booking only.",
+      }));
+      return;
+    }
     setOpeningJobKey(job.job_key);
     setOpenFeedback((current) => ({ ...current, [job.job_key]: "" }));
     try {
@@ -976,6 +996,7 @@ export default function DriverPortalPage() {
                     className="flex min-h-16 w-full items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left ring-1 ring-slate-200"
                     data-driver-notification-job={alert.job_key}
                     data-driver-notification-purpose="job-update"
+                    disabled={readState.reviewSession}
                     key={alert.job_key}
                     onClick={() => void openJob(job, true)}
                     type="button"
@@ -1020,6 +1041,8 @@ export default function DriverPortalPage() {
           ) : null}
         </header>
 
+        {readState.kind === "blocked" ? <StoreReviewSignIn role="driver" /> : null}
+        {readState.kind === "ready" && readState.reviewSession ? <StoreReviewSessionNotice role="driver" qaAcknowledgement={readState.jobs.some(job => Boolean(job.review_job_path))} /> : null}
         {readState.kind === "loading" ? (
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-loading="true">
             <p className="text-sm font-semibold text-slate-700">Loading assigned jobs…</p>
@@ -1052,6 +1075,7 @@ export default function DriverPortalPage() {
                 type="button"
               >{accountPinOnly ? "First sign-in" : "Use PIN"}</button>
             ) : null}
+
             {!pinRecoveryOpen && (!accountPinOnly && !accountEmailConfirmed ? (
               <form
                 className="space-y-3"
@@ -1196,7 +1220,7 @@ export default function DriverPortalPage() {
                 ) : null}
               </div>
             ) : null}
-            <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm" data-driver-portal-alert-setup={alertState}>
+            {!readState.reviewSession ? <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm" data-driver-portal-alert-setup={alertState}>
               <h2 className="text-base font-bold text-sky-950">Job alerts</h2>
               <p className="mt-1 text-sm font-medium leading-6 text-sky-900">
                 Enable once on this device to receive newly issued jobs and Driver Job updates.
@@ -1232,7 +1256,7 @@ export default function DriverPortalPage() {
                   This device is ready for Driver Job alerts.
                 </p>
               ) : null}
-            </div>
+            </div> : null}
 
             {driverPoolAccountSession && (availableJobsEnabled || Boolean(availableJobsError)) ? (
               <section className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm" data-driver-pool-available-jobs="true" id="available-jobs">
@@ -1357,11 +1381,11 @@ export default function DriverPortalPage() {
                 <button
                   className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
                   data-driver-portal-open-job={job.job_key}
-                  disabled={openingJobKey === job.job_key}
+                  disabled={(readState.reviewSession && !job.review_job_path) || openingJobKey === job.job_key}
                   onClick={() => void openJob(job)}
                   type="button"
                 >
-                  {openingJobKey === job.job_key ? "Opening…" : job.state === "pending_ack" ? "Open & acknowledge" : "Open Driver Job"}
+                  {readState.reviewSession ? job.review_job_path ? "Open QA job" : "QA job access pending" : openingJobKey === job.job_key ? "Opening…" : job.state === "pending_ack" ? "Open & acknowledge" : "Open Driver Job"}
                 </button>
                 {openFeedback[job.job_key] ? (
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900" data-driver-portal-open-feedback={job.job_key}>

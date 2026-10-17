@@ -1,3 +1,4 @@
+import { storeReviewAuthResponse, resolveStoreReviewSession, storeReviewBlockedResponse } from "../../../lib/store-review-access";
 import {
   assertActiveCustomerPrincipalSession,
   completeCustomerPrincipalActivation,
@@ -62,6 +63,8 @@ export async function POST(request: Request) {
     return responseFor({ error: "Customer app access is required.", ok: false, status: 403 });
   }
   const body = await safeJsonBody(request);
+  const reviewResponse = storeReviewAuthResponse(request, "customer", body);
+  if (reviewResponse) return reviewResponse;
   const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
   if (action === "start_activation" || action === "start_new_device" || action === "start_recovery") {
     return responseFor(await startCustomerPrincipalEmailChallenge({
@@ -92,6 +95,12 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   if (!sameOriginCustomerRequest(request)) {
     return responseFor({ error: "Customer app access is required.", ok: false, status: 403 });
+  }
+  const review = resolveStoreReviewSession(request.headers.get("cookie"));
+  if (review.state !== "absent") {
+    if (review.state !== "valid" || review.role !== "customer" || request.headers.get("x-prestige-customer-purpose") !== "customer-principal-access-read") return storeReviewBlockedResponse();
+    return responseFor({ ok: true, data: { review_access: true, principal_role: "pa", normalized_email: "",
+      memberships: [{ company_id: review.scope.companyId, booker_id: review.scope.bookerId, traveler_id: null }] } });
   }
   const token = readCustomerPrincipalTokenFromRequest(request);
   if (!token) return responseFor({ error: "Customer app access is required.", ok: false, status: 403 });

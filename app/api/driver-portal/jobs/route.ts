@@ -1,4 +1,6 @@
-import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
+import { createClient } from "@supabase/supabase-js";
+import { resolveStoreReviewSession, resolveStoreReviewJobRequest, storeReviewReadFetch, storeReviewBlockedResponse, storeReviewRequestOriginAllowed } from "../../../../lib/store-review-access";
+import { getDriverJobStatusPersistenceClientForProduction, loadDriverJobPayloadThroughStatusPersistence } from "../../../../lib/driver-job-status-persistence";
 import { verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock";
 import { clearDriverPortalAlerts, loadDriverPortalJobs, loadDismissedDriverNotificationKeys } from "../../../../lib/driver-portal-jobs";
 import {
@@ -85,7 +87,11 @@ export async function GET(request: Request) {
     return response({ jobs: [], ok: false, reason: "unauthorized" }, 401);
   }
 
-  const session = resolveDriverPortalSession(request.headers.get("cookie"));
+  const review = resolveStoreReviewSession(request.headers.get("cookie"));
+  if (review.state !== "absent" && (review.state !== "valid" || review.role !== "driver" || !storeReviewRequestOriginAllowed(request))) return storeReviewBlockedResponse();
+  const session = review.state === "valid"
+    ? { ok: true as const, claims: { driverId: review.scope.driverId, issuedAt: Date.now(), accountId: undefined, deviceIdHash: undefined } }
+    : resolveDriverPortalSession(request.headers.get("cookie"));
   if (!session.ok) {
     return response(
       {
@@ -102,6 +108,27 @@ export async function GET(request: Request) {
     return response({ jobs: [], ok: false, reason: "not_configured" }, 503);
   }
 
+  // Use the existing exact-QA reader, including unacknowledged
+  // QA jobs. Never recover an ordinary private token or enter native combo/alerts.
+  if (review.state === "valid" && review.scope.bookingTargets) {
+    const jobs = [];
+    for (const target of review.scope.bookingTargets.filter(target =>
+      !review.scope.driverLinkBookingReference || target.bookingReference === review.scope.driverLinkBookingReference)) {
+      const token = `review-${target.bookingId}`;
+      const jobRequest = new Request(new URL(`/api/driver-job/${token}`, request.url), { headers: request.headers });
+      const access = resolveStoreReviewJobRequest(jobRequest, token);
+      if (access.state !== "review") return storeReviewBlockedResponse();
+      const loaded = await loadDriverJobPayloadThroughStatusPersistence({ client: clientResult.client, token, reviewBooking: access.proof });
+      if (!loaded.ok) return response({ jobs: [], ok: false, reason: "unavailable" }, 403);
+      jobs.push({ job_key: token, review_job_path: `/driver-job/${token}`, payload: loaded.payload,
+        state: loaded.payload.acknowledged ? "assigned" : "pending_ack",
+        state_label: loaded.payload.acknowledged ? "Acknowledged" : "Pending ACK" });
+    }
+    return response({ ok: true, session: "reviewer", jobs, alert_count: 0, alerts: [], alerts_available: false,
+      native_badge_count: null, dismiss_notification_keys: null,
+      device_alerts: { enabled: false, ready: false, public_key: null, native_registration_ready: false } }, 200);
+  }
+
   if (session.claims.accountId && session.claims.deviceIdHash) {
     const activeAccount = await verifyDriverAccountSession({
     sessionIssuedAt: session.claims.issuedAt,
@@ -116,8 +143,11 @@ export async function GET(request: Request) {
     }
   }
 
+  const jobsClient = review.state === "valid" ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { persistSession: false }, global: { fetch: storeReviewReadFetch(review, process.env.SUPABASE_URL!) },
+  }) : clientResult.client;
   const jobsResult = await loadDriverPortalJobs({
-    client: clientResult.client,
+    client: jobsClient,
     driverId: session.claims.driverId,
     includeAlerts: Boolean(session.claims.accountId && session.claims.deviceIdHash),
     includePendingAcknowledgement: Boolean(session.claims.accountId && session.claims.deviceIdHash &&
@@ -139,7 +169,9 @@ export async function GET(request: Request) {
       dismiss_notification_keys: session.claims.accountId && session.claims.deviceIdHash
         ? await loadDismissedDriverNotificationKeys(clientResult.client, session.claims.driverId).catch(() => null) : null,
       device_alerts: {
-        ...publicDriverDeviceAlertReadiness(),
+        ...(review.state === "valid"
+          ? { enabled: false, ready: false, public_key: null }
+          : publicDriverDeviceAlertReadiness()),
         native_registration_ready: badge && !badge.error ? badge.data?.length === 1 : null,
       },
       alert_count: jobsResult.alertCount,
@@ -162,7 +194,7 @@ export async function GET(request: Request) {
         state_label: job.stateLabel,
       })),
       ok: true,
-      session: session.claims.accountId ? "account" : "link",
+      session: review.state === "valid" ? "reviewer" : session.claims.accountId ? "account" : "link",
       version: jobsResult.version,
     },
     200,

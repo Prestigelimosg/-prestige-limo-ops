@@ -1,3 +1,4 @@
+import { isStoreReviewLinkContext, isStoreReviewBookingProof, type StoreReviewBookingProof } from "./store-review-access.ts";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
@@ -122,6 +123,7 @@ type LoadDriverJobPersistenceInput = {
   client: DriverJobStatusPersistenceClient;
   now?: Date | string | number;
   token: string;
+  reviewBooking?: StoreReviewBookingProof;
 };
 
 type SaveDriverJobStatusPersistenceInput = LoadDriverJobPersistenceInput & {
@@ -145,6 +147,7 @@ type SaveDriverJobDetailsPersistenceInput = LoadDriverJobPersistenceInput & {
 type LinkResolveResult =
   | {
       link: DriverJobLinkPersistenceRow;
+      review?: { tokenHash: string; payload: SafeDriverJobPayload };
       ok: true;
     }
   | {
@@ -1286,7 +1289,62 @@ async function resolveLinkForToken({
   client,
   now,
   token,
+  reviewBooking,
 }: LoadDriverJobPersistenceInput): Promise<LinkResolveResult> {
+  if (reviewBooking !== undefined) {
+    if (!isStoreReviewBookingProof(reviewBooking) || token !== `review-${reviewBooking.booking.bookingId}`) {
+      return { ok: false, reason: "unauthorized" };
+    }
+    const target = reviewBooking.booking;
+    // Read link metadata first; job content below comes only from the exact
+    // owner-filtered booking snapshot, never a raw link payload or token.
+    const links = await client.from("driver_job_links").select(`${driverJobLinkSelect},token_hash`)
+      .eq("booking_reference", target.bookingReference).eq("link_status", "active")
+      .order("created_at", { ascending: false }).limit(2);
+    if (links.error) return { ok: false, reason: "not_configured" };
+    const candidates = asArray(links.data);
+    const raw = asRecord(candidates[0]), link = toLinkPersistenceRow(raw);
+    const context = asRecord(raw.safe_link_context);
+    if (isStoreReviewLinkContext(context) && (context.link_purpose !== "store_review_qa" ||
+        "native_handoff_ciphertext" in context ||
+        Object.keys(asRecord(context.store_review_booking)).length !== Object.keys(target).length ||
+        Object.entries(target).some(([key, value]) => asRecord(context.store_review_booking)[key] !== value))) {
+      return { ok: false, reason: "unauthorized" };
+    }
+    if (candidates.length !== 1 || !link || link.driver_id !== target.driverId || link.revoked_at ||
+        isDriverJobLinkExpired(link.expires_at, now) ||
+        isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, now, undefined, context) ||
+        ["combo_id", "combo_revision", "combo_link_batch"].some(key => key in context) ||
+        !/^[a-f0-9]{64}$/.test(String(raw.token_hash || ""))) return { ok: false, reason: "unauthorized" };
+    const query = client.from("bookings").select(`id,company_id,booker_id,customer_id,traveler_id,driver_id,status,driver_name,driver_contact,driver_plate_number,vehicle_type_or_category,${currentSafeBookingScheduleSelect},booking_reference`)
+      .eq("id", target.bookingId).eq("booking_reference", target.bookingReference)
+      .eq("company_id", target.companyId).eq("booker_id", target.bookerId).eq("customer_id", target.customerId).eq("driver_id", target.driverId);
+    const saved = await (target.travelerId === null ? query.is("traveler_id", null) : query.eq("traveler_id", target.travelerId)).maybeSingle();
+    if (saved.error) return { ok: false, reason: "not_configured" };
+    const b = asRecord(saved.data);
+    if (b.id !== target.bookingId || b.booking_reference !== target.bookingReference || b.company_id !== target.companyId ||
+        b.booker_id !== target.bookerId || b.customer_id !== target.customerId || b.driver_id !== target.driverId ||
+        b.traveler_id !== target.travelerId || [b.status,b.admin_internal_status,b.customer_facing_status].some(status =>
+          ["archived","cancelled","canceled","complete","completed","declined","declined_internal","history","job completed","job_completed","deleted"].includes(String(status || "").trim().toLowerCase()))) {
+      return { ok: false, reason: "unauthorized" };
+    }
+    const completed = await client.from("driver_job_status_events").select("id")
+      .eq("booking_reference", target.bookingReference).eq("status_value", "completed").limit(1).maybeSingle();
+    if (completed.error || asRecord(completed.data).id) return { ok: false, reason: "unauthorized" };
+    const pickup = singaporePickupParts(String(b.pickup_at || ""));
+    const revision = context.driver_ack_required_revision || context.job_card_revision;
+    if (!pickup || !/^[a-f0-9]{64}$/.test(String(revision || "")) || !isStoreReviewBookingProof(reviewBooking)) return { ok: false, reason: "unauthorized" };
+    const payload = mapBookingToSafeDriverJobPayload({
+      public_reference: b.public_booking_reference || b.booking_reference, pickup_date: pickup.pickupDate,
+      pickup_datetime: pickup.pickupDateTime, pickup_time: pickup.pickupTime, booking_type: b.service_type,
+      pickup_address: b.pickup_location, dropoff_address: b.dropoff_location, route: b.route_summary,
+      passenger_name: b.passenger_name, flight_no: b.flight_no, status: b.status,
+      driver_name: b.driver_name, driver_contact: b.driver_contact, driver_plate_number: b.driver_plate_number,
+      driver_vehicle_model: b.vehicle_type_or_category, driver_acknowledged_at: context.driver_acknowledged_at,
+      driver_amendment_ack_pending: context.driver_amendment_ack_pending, driver_ack_required_revision: revision,
+    });
+    return { ok: true, link, review: { tokenHash: String(raw.token_hash), payload } };
+  }
   const tokenHash = safeHashToken(token);
 
   if (!tokenHash) {
@@ -1404,6 +1462,8 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
     return linkBlockedResult(resolvedLink.reason);
   }
 
+  if (resolvedLink.review) return { ok: true, jobKey: "", payload: resolvedLink.review.payload, reason: "ok" };
+
   const [statusHistory, currentSafeSchedule] = await Promise.all([
     loadStatusHistoryForLink(input.client, resolvedLink.link),
     loadCurrentSafeBookingSchedule(input.client, resolvedLink.link),
@@ -1484,6 +1544,30 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
   input: SaveDriverJobDetailsPersistenceInput,
 ): Promise<DriverJobProductionDetailsUpdateResult> {
   if (!input.client.rpc) return detailsBlockedResult("not_configured");
+  if (input.reviewBooking !== undefined) {
+    if (!isStoreReviewBookingProof(input.reviewBooking)) return detailsBlockedResult("unauthorized");
+    const resolved = await resolveLinkForToken(input);
+    if (!resolved.ok) return detailsBlockedResult(resolved.reason);
+    if (!resolved.review || input.expectedRevision !== resolved.review.payload.acknowledgementRevision) return detailsBlockedResult("stale_revision");
+    const driver = resolved.review.payload.assignedDriver;
+    if (!driver.name) return detailsBlockedResult("invalid_details");
+    // One established atomic writer, no profile/enrolment/older-link side effects.
+    // Never retry an old SQL signature or fall back to the ordinary path.
+    const { data, error } = await input.client.rpc("acknowledge_current_driver_job_link", {
+      p_booking_reference: input.reviewBooking.booking.bookingReference, p_link_id: resolved.link.id,
+      p_token_hash: resolved.review.tokenHash, p_driver_id: input.reviewBooking.booking.driverId,
+      p_name: driver.name, p_contact: driver.contact, p_plate: driver.plate, p_vehicle: driver.vehicleModel,
+      p_expected_revision: input.expectedRevision, p_expected_review_booking: input.reviewBooking.booking,
+    });
+    if (error) return detailsBlockedResult(error.code === "P0002" ? "stale_revision" : "unauthorized");
+    const updated = toLinkPersistenceRow(asRecord(data));
+    if (!updated || updated.id !== resolved.link.id || updated.booking_reference !== input.reviewBooking.booking.bookingReference ||
+        updated.driver_id !== input.reviewBooking.booking.driverId) return detailsBlockedResult("unauthorized");
+    const context = asRecord(updated.safe_link_context);
+    if (!context.driver_acknowledged_at || context.driver_amendment_ack_pending === true) return detailsBlockedResult("not_configured");
+    return { ok: true, reason: "updated", booking_reference: updated.booking_reference,
+      payload: { ...resolved.review.payload, acknowledged: true, amendmentAckPending: false } };
+  }
   const nextDetails = safeDriverDetailsFromInput(input);
 
   if (!nextDetails.name) {
@@ -1630,6 +1714,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
 export async function saveDriverJobStatusThroughStatusPersistence(
   input: SaveDriverJobStatusPersistenceInput,
 ): Promise<DriverJobProductionStatusUpdateResult> {
+  if (input.reviewBooking !== undefined) return statusBlockedResult("unauthorized");
   const nextStatus = validateDriverJobStatusUpdate(input.status);
 
   if (!nextStatus) {

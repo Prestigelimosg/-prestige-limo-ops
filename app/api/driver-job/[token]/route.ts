@@ -1,3 +1,6 @@
+import { resolveStoreReviewJobRequest, storeReviewBlockedResponse } from "../../../../lib/store-review-access.ts";
+import { getDriverJobStatusPersistenceClientForProduction, loadDriverJobPayloadThroughStatusPersistence,
+  saveDriverJobDetailsThroughStatusPersistence } from "../../../../lib/driver-job-status-persistence.ts";
 import {
   applyDriverJobDetailsUpdateContract,
   getDriverJobPayloadForTokenContract,
@@ -127,6 +130,19 @@ function readDriverDetailsBody(body: unknown) {
 
 export async function GET(request: Request, context: DriverJobRouteContext) {
   const { token } = await context.params;
+  const review = resolveStoreReviewJobRequest(request, token);
+  if (review.state === "blocked") return storeReviewBlockedResponse();
+  if (review.state === "review") {
+    const client = getDriverJobStatusPersistenceClientForProduction();
+    if (!client.ok) return storeReviewBlockedResponse();
+    try {
+      const result = await loadDriverJobPayloadThroughStatusPersistence({ client: client.client, token, reviewBooking: review.proof });
+      if (!result.ok) return storeReviewBlockedResponse();
+      return Response.json({ ok: true, mode: "review", payload: result.payload,
+        device_alerts: { enabled: false, ready: false, public_key: null }, driver_portal: { enrolled: false, link_key: null } },
+        { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", Vary: "Cookie" } });
+    } catch { return storeReviewBlockedResponse(); }
+  }
 
   if (isProductionDriverJobLinkMode()) {
     const result = await getProductionDriverJobPayloadForToken(token);
@@ -213,7 +229,23 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
 
 export async function PATCH(request: Request, context: DriverJobRouteContext) {
   const { token } = await context.params;
+  const review = resolveStoreReviewJobRequest(request, token);
+  if (review.state === "blocked") return storeReviewBlockedResponse();
   const body = await request.json().catch(() => null);
+  if (review.state === "review") {
+    if (!body || Array.isArray(body) || Object.keys(body).sort().join(",") !== "action,expected_revision" ||
+        body.action !== "acknowledge" || typeof body.expected_revision !== "string" || !/^[a-f0-9]{64}$/.test(body.expected_revision)) return storeReviewBlockedResponse();
+    const client = getDriverJobStatusPersistenceClientForProduction();
+    if (!client.ok) return storeReviewBlockedResponse();
+    try {
+      const result = await saveDriverJobDetailsThroughStatusPersistence({ client: client.client, token,
+        reviewBooking: review.proof, expectedRevision: body.expected_revision });
+      if (!result.ok) return storeReviewBlockedResponse();
+      return Response.json({ ok: true, mode: "review", payload: result.payload,
+        device_alerts: { link_key: null, subscription_registered: false }, driver_portal: { enrolled: false, link_key: null } },
+        { headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", Vary: "Cookie" } });
+    } catch { return storeReviewBlockedResponse(); }
+  }
   const nativeDeviceAlertUpdate = readDriverNativeDeviceAlertBody(body);
   const details = readDriverDetailsBody(body);
 

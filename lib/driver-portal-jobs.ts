@@ -1,3 +1,4 @@
+import { isStoreReviewLinkContext } from "./store-review-access";
 import { createHash } from "node:crypto";
 import type {DriverComboView} from "./driver-job-combo";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -327,6 +328,7 @@ export async function loadDriverPortalJobs({
       continue;
     }
     seenNewestActiveReferences.add(bookingReference);
+    if (isStoreReviewLinkContext(link.safe_link_context)) continue;
 
     const acknowledgedAt = cleanText(asRecord(link.safe_link_context).driver_acknowledged_at, 80);
     if (

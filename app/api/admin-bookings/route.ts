@@ -1,3 +1,5 @@
+import { resolveStoreReviewAdminSaveRequest, storeReviewBlockedResponse } from "../../../lib/store-review-access";
+import { saveStoreReviewAdminBags } from "../../../lib/admin-booking-supabase-adapter";
 import {
   createAdminBooking,
   type AdminCustomerAccountCollisionReview,
@@ -394,6 +396,13 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const review = resolveStoreReviewAdminSaveRequest(request);
+    if (review.state === "blocked") return storeReviewBlockedResponse();
+    if (review.state === "review") {
+      const saved = await saveStoreReviewAdminBags(review.proof, await readJsonBody(request));
+      return Response.json(saved.ok ? { ok: true, mode: "review", result: saved.result } : { ok: false, error: saved.error },
+        { status: saved.status, headers: { "cache-control": "private, no-store" } });
+    }
     const boundary = requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {

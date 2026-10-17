@@ -1,5 +1,6 @@
 "use client";
 
+import { StoreReviewSessionNotice } from "../store-review-sign-in";
 import { AndroidAppUpdate } from "../android-app-update";
 
 import Link from "next/link";
@@ -442,7 +443,7 @@ export default function CustomerPortalPage() {
       message: "Checking customer alerts...",
       publicKey: null,
       status: "checking",
-      supported: true,
+      supported: false,
     });
   const [companyProfile, setCompanyProfile] =
     useState<PublicCompanyProfile>(defaultCompanyProfile);
@@ -487,6 +488,7 @@ export default function CustomerPortalPage() {
   const [customerInvoicesLoadState, setCustomerInvoicesLoadState] =
     useState<PortalInvoicesLoadState>("loading");
   const [principalLogoutBusy, setPrincipalLogoutBusy] = useState(false);
+  const [reviewSession, setReviewSession] = useState(false);
   const portalSavedBookingsServerPageRef = useRef(1);
   const portalSavedBookingsTravelerIdRef = useRef<number | null>(null);
   const resolvedCustomerAlertTargetRef = useRef<ReturnType<typeof readCustomerPortalBookingDeepLink>>(null);
@@ -669,6 +671,7 @@ export default function CustomerPortalPage() {
           signal: controller.signal,
         });
         const payload = await response.json().catch(() => null);
+        setReviewSession(response.ok && payload?.data?.review_access === true);
         const role = payload?.data?.principal_role;
         const rootMembership = Array.isArray(payload?.data?.memberships)
           ? payload.data.memberships.some((entry: unknown) => {
@@ -718,67 +721,66 @@ export default function CustomerPortalPage() {
 
   useEffect(() => {
     let cancelled = false;
-
-    const nativeWindow = window as CustomerNativeAlertsWindow;
-    const nativeBridge = customerNativeAlertsBridge();
-    if (nativeBridge) {
-      setCustomerNativeAlertsActive(true);
-      const enabled = nativeWindow.__prestigeCustomerNativeAlerts?.enabled === true;
-      setCustomerDevicePushState({
-        message: enabled
-          ? "Alerts are enabled on this device."
-          : "Tap once to enable booking alerts on this device.",
-        publicKey: null,
-        status: enabled ? "enabled" : "ready",
-        supported: true,
-      });
-
-      const handleNativeAlertsState = (event: Event) => {
-        const detail = (event as CustomEvent<{
-          enabled?: boolean;
-          message?: string;
-          status?: "enabled" | "error" | "ready";
-        }>).detail;
-        if (!detail || typeof detail.enabled !== "boolean" ||
-          !["enabled", "error", "ready"].includes(String(detail.status))) return;
-        setCustomerDevicePushAction(null);
-        setCustomerDevicePushState({
-          message: typeof detail.message === "string"
-            ? detail.message
-            : "Alerts could not be changed. Reload My Bookings and try again.",
-          publicKey: null,
-          status: detail.status || "error",
-          supported: true,
-        });
-      };
-
-      window.addEventListener("prestige-customer-native-alerts", handleNativeAlertsState);
-      return () => {
-        cancelled = true;
-        window.removeEventListener("prestige-customer-native-alerts", handleNativeAlertsState);
-      };
-    }
-
-    if (!customerDevicePushIsSupported()) {
-      setCustomerDevicePushState({
-        message: "Alerts are unavailable on this device.",
-        publicKey: null,
-        status: "unsupported",
-        supported: false,
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
+    let removeNativeListener: (() => void) | undefined;
 
     void (async () => {
       try {
         const result = await updateCustomerDevicePushSubscription("GET");
-        const readiness = result.readiness || {};
-
         if (cancelled) {
           return;
         }
+
+        const nativeWindow = window as CustomerNativeAlertsWindow;
+        const nativeBridge = customerNativeAlertsBridge();
+        if (nativeBridge) {
+          setCustomerNativeAlertsActive(true);
+          const enabled = nativeWindow.__prestigeCustomerNativeAlerts?.enabled === true;
+          setCustomerDevicePushState({
+            message: enabled
+              ? "Alerts are enabled on this device."
+              : "Tap once to enable booking alerts on this device.",
+            publicKey: null,
+            status: enabled ? "enabled" : "ready",
+            supported: true,
+          });
+
+          const handleNativeAlertsState = (event: Event) => {
+            const detail = (event as CustomEvent<{
+              enabled?: boolean;
+              message?: string;
+              status?: "enabled" | "error" | "ready";
+            }>).detail;
+            if (!detail || typeof detail.enabled !== "boolean" ||
+              !["enabled", "error", "ready"].includes(String(detail.status))) return;
+            setCustomerDevicePushAction(null);
+            setCustomerDevicePushState({
+              message: typeof detail.message === "string"
+                ? detail.message
+                : "Alerts could not be changed. Reload My Bookings and try again.",
+              publicKey: null,
+              status: detail.status || "error",
+              supported: true,
+            });
+          };
+
+          window.addEventListener("prestige-customer-native-alerts", handleNativeAlertsState);
+          removeNativeListener = () => {
+            window.removeEventListener("prestige-customer-native-alerts", handleNativeAlertsState);
+          };
+          return;
+        }
+
+        if (!customerDevicePushIsSupported()) {
+          setCustomerDevicePushState({
+            message: "Alerts are unavailable on this device.",
+            publicKey: null,
+            status: "unsupported",
+            supported: false,
+          });
+          return;
+        }
+
+        const readiness = result.readiness || {};
 
         if (!readiness.ready || typeof readiness.public_key !== "string") {
           setCustomerDevicePushState({
@@ -814,13 +816,14 @@ export default function CustomerPortalPage() {
           message: customerDevicePushFailureMessage(error),
           publicKey: null,
           status: "error",
-          supported: true,
+          supported: false,
         });
       }
     })();
 
     return () => {
       cancelled = true;
+      removeNativeListener?.();
     };
   }, []);
 
@@ -1743,6 +1746,8 @@ export default function CustomerPortalPage() {
   }
 
   async function handleCustomerDevicePushEnable() {
+    if (!customerDevicePushState.supported) return;
+
     if (customerNativeAlertsBridge()) {
       setCustomerDevicePushAction("enable");
       setCustomerDevicePushState((current) => ({
@@ -1829,6 +1834,8 @@ export default function CustomerPortalPage() {
   }
 
   async function handleCustomerDevicePushDisable() {
+    if (!customerDevicePushState.supported) return;
+
     if (customerNativeAlertsBridge()) {
       setCustomerDevicePushAction("disable");
       setCustomerDevicePushState((current) => ({
@@ -1969,6 +1976,7 @@ export default function CustomerPortalPage() {
       data-customer-portal-page="true"
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
+        {reviewSession ? <StoreReviewSessionNotice role="customer" /> : null}
         <header className="border-b border-slate-200 px-1 pb-2 pt-1">
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div

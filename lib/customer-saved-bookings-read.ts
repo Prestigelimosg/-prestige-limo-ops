@@ -1,4 +1,5 @@
 import "server-only";
+import { resolveStoreReviewSession, storeReviewReadFetch, type StoreReviewSession } from "./store-review-access";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -22,6 +23,7 @@ export const customerSavedBookingsReadVersion =
 
 export type CustomerSavedBookingsBoundaryContext = {
   auth_user_id: string;
+  review?: StoreReviewSession;
   company_id?: number | null;
   booker_id?: number | null;
   customer_account_reference?: string | null;
@@ -719,7 +721,7 @@ function getServerOnlyCustomerSavedBookingsSupabaseClient(
   if (
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true" &&
     !signedPortalCookieSession &&
-    !principalDeviceSession
+    !principalDeviceSession && !context.review
   ) {
     return {
       error: customerSavedBookingsDisabledError,
@@ -747,6 +749,7 @@ function getServerOnlyCustomerSavedBookingsSupabaseClient(
   try {
     return {
       data: createClient(supabaseUrl, serviceRoleKey, {
+        ...(context.review ? { global: { fetch: storeReviewReadFetch(context.review, supabaseUrl) } } : {}),
         auth: {
           persistSession: false,
         },
@@ -1020,6 +1023,12 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const review = resolveStoreReviewSession(request.headers.get("cookie"));
+  if (review.state !== "absent") {
+    if (review.state !== "valid" || review.role !== "customer" || expectedPurpose !== "customer-saved-bookings-read" || request.method !== "GET") return customerSavedBookingsAuthRequiredResult();
+    return { ok: true, data: { auth_user_id: "store-reviewer", mode: "server-session-cookie", review,
+      source_surface: "customer_api", runtime_gate: { account_allowlist: new Set<string>(), mode: "small-allowlist" } } };
+  }
   const providedToken = readCustomerSavedBookingsSessionToken(request);
 
   const principalSession = resolveCustomerPrincipalSessionToken(providedToken.token);
@@ -1369,6 +1378,16 @@ export async function loadCustomerSavedBookings(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  if (context.review) {
+    const bookingRows = await readCustomerSavedBookingRows(clientResult.data, [], parsed.data);
+    if (!bookingRows.ok) return bookingRows;
+    const rows = bookingRows.data.map(asRecord).map(toCustomerSavedBookingRecord)
+      .filter((row): row is CustomerSavedBookingRecord => Boolean(row));
+    if (parsed.data.booking_reference && rows.length === 0) return customerSavedBookingsAuthRequiredResult();
+    return { ok: true, data: { saved_bookings: rows.slice(0, parsed.data.limit), version: customerSavedBookingsReadVersion,
+      pagination: { has_next_page: rows.length > parsed.data.limit, has_previous_page: parsed.data.page > 1, page: parsed.data.page, page_size: parsed.data.limit } } };
   }
 
   if (context.mode === "principal-device-session") {

@@ -1,7 +1,8 @@
 import "server-only";
 import { decodeDriverRemark, normalizeDriverRemark } from "./driver-job-remark";
 
-import { createHash, randomUUID } from "node:crypto";
+import { isStoreReviewLinkContext, isStoreReviewLinkSetupProof, type StoreReviewLinkSetupProof } from "./store-review-access";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -96,6 +97,7 @@ export type AdminDriverJobLinkCreateResult = {
   disposition: "created" | "reused" | "amended";
   combo_booking_references?: string[];
   driver_job_token: string;
+  review_alias?: string;
   link: AdminDriverJobLinkRecord;
   native_app_alert: {
     provider_accepted: boolean;
@@ -1149,7 +1151,13 @@ async function prepareComboLinkInputs(client: SupabaseClient, refs: string[]) {
 export async function createAdminDriverJobLink(
   input: AdminDriverJobLinkCreateInput,
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewLinkSetupProof,
 ): Promise<AdminBookingResult<AdminDriverJobLinkCreateResult>> {
+  if (review !== undefined && (!isStoreReviewLinkSetupProof(review) ||
+      actor.actor_role !== "admin" || actor.boundary_mode !== "server-session-role-surface" ||
+      input.booking_reference !== review.booking.bookingReference)) {
+    return { ok: false, status: 403, error: "QA link setup is unavailable." };
+  }
   const clientResult = getServerOnlyAdminDriverJobLinkSupabaseClient(actor);
 
   if (!clientResult.ok) {
@@ -1205,6 +1213,39 @@ export async function createAdminDriverJobLink(
     };
   }
 
+  if (review) {
+    // No ordinary bearer token/preimage is created or sealed. Only the existing
+    // authenticated reviewer alias can resolve this server-only random hash.
+    if (!isStoreReviewLinkSetupProof(review)) return { ok: false, status: 403, error: "QA link setup expired." };
+    const applied = await clientResult.data.rpc("apply_admin_driver_job_link", {
+      p_booking_reference: input.booking_reference, p_expected_updated_at: operationalBookingRecord.updated_at,
+      p_driver_id: review.booking.driverId, p_payload: input.driver_job_payload,
+      p_revision: safeDriverJobPayloadRevision(input.driver_job_payload),
+      p_token_hash: randomBytes(32).toString("hex"), p_ciphertext: null,
+      p_expires_at: new Date(Math.min(review.expiresAt, getDriverJobLinkExpiresAt(new Date(), input.ttl_hours).getTime())).toISOString(),
+      p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+      p_expected_driver_state: {
+        driver_name: operationalBookingRecord.driver_name ?? null, driver_contact: operationalBookingRecord.driver_contact ?? null,
+        driver_plate_number: operationalBookingRecord.driver_plate_number ?? null,
+        vehicle_type_or_category: operationalBookingRecord.vehicle_type_or_category ?? null,
+      }, p_review_booking: review.booking,
+    });
+    const data = asRecord(applied.data), raw = asRecord(data.link), context = asRecord(raw.safe_link_context);
+    const link = normalizeDriverJobLinkRecord(raw);
+    const storedScope = asRecord(context.store_review_booking);
+    if (applied.error || !link || !isStoreReviewLinkSetupProof(review) ||
+        link.booking_reference !== review.booking.bookingReference || raw.driver_id !== review.booking.driverId ||
+        context.link_purpose !== "store_review_qa" || "native_handoff_ciphertext" in context ||
+        Object.keys(storedScope).length !== Object.keys(review.booking).length ||
+        Object.entries(review.booking).some(([key, value]) => storedScope[key] !== value) ||
+        !["created", "reused"].includes(String(data.disposition))) {
+      return { ok: false, status: 409, error: "QA link setup could not be verified. Reload before retrying." };
+    }
+    return { ok: true, data: { link, disposition: data.disposition as "created" | "reused",
+      driver_job_token: "", review_alias: `review-${review.booking.bookingId}`,
+      native_app_alert: { provider_accepted: false, reason: "not_available" } } };
+  }
+
   const combo = process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true"
     ? await (await import("./driver-job-combo.ts")).loadDriverCombo(clientResult.data,input.booking_reference) : null;
   const comboInputs = combo ? await prepareComboLinkInputs(clientResult.data,combo.trips.map(t=>t.booking_reference)) : null;
@@ -1222,6 +1263,9 @@ export async function createAdminDriverJobLink(
     .eq("booking_reference", input.booking_reference).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (previousRead.error) return safeAdapterFailure(safeDriverJobLinkCreateError, 500, previousRead.error);
   const previous = asRecord(previousRead.data);
+  if (isStoreReviewLinkContext(previous.safe_link_context)) {
+    return { ok: false, status: 409, error: "This QA link cannot use ordinary issuance." };
+  }
   if (previous.link_status === "active" && !previous.revoked_at && Date.parse(String(previous.expires_at)) > Date.now()) {
     const recovered = openDriverNativeJobHandoff({ bookingReference: input.booking_reference,
       tokenHash: previous.token_hash, ciphertext: asRecord(previous.safe_link_context).native_handoff_ciphertext });

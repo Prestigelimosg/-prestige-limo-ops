@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveStoreReviewSession, storeReviewRequestAllowed, storeReviewBlockedResponse } from "./lib/store-review-access";
 
 import { revalidateAdminAccountSession } from "./lib/admin-account-auth.ts";
 import {
@@ -41,6 +42,22 @@ function clearInvalidSession(response: NextResponse, shouldClear: boolean) {
 }
 
 export async function proxy(request: NextRequest) {
+  const review = resolveStoreReviewSession(request.headers.get("cookie"));
+  if (review.state !== "absent") {
+    const path = request.nextUrl.pathname;
+    const authPath = ["/api/admin-auth/session", "/api/driver-auth/session", "/api/customer-principal-access"].includes(path);
+    // Expired review sessions must still reach the existing sign-in/logout UI.
+    if (request.method === "GET" && ["/admin-sign-in", "/customer-access/sign-in", "/driver-portal"].includes(path)) return NextResponse.next();
+    if ((review.state === "valid" && storeReviewRequestAllowed(review, path, request.method, request)) ||
+        (authPath && ["POST", "DELETE"].includes(request.method))) {
+      const response = NextResponse.next();
+      response.headers.set("cache-control", "private, no-store");
+      if (path.startsWith("/driver-job/review-")) response.headers.set("referrer-policy", "same-origin");
+      return response;
+    }
+    if (request.method === "GET" && (path.startsWith("/icons/") || path === "/favicon.ico")) return NextResponse.next();
+    return storeReviewBlockedResponse();
+  }
   if (!adminAccountAuthIsEnabled()) return NextResponse.next();
 
   const pathname = request.nextUrl.pathname;
@@ -108,12 +125,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/",
-    "/customers/:path*",
-    "/settings/invoice",
-    "/admin-sign-in",
-    "/api/(admin-.*)",
-    "/api/ai-parse",
-  ],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };

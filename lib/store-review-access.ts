@@ -167,6 +167,8 @@ const authPaths: Record<StoreReviewRole, string> = {
 // read-access preparation, not complete store-review feature acceptance.
 export function storeReviewRequestAllowed(session: StoreReviewSession, pathname: string, method: string, request?: Request) {
   if (request ? !storeReviewRequestOriginAllowed(request) : process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL_ENV)) return false;
+  if (request && pathname === "/api/admin-app-notifications" && method === "PATCH" &&
+      resolveStoreReviewAdminNotificationRequest(request).state === "review") return true;
   if (request && pathname === "/api/customer-booking-change-requests" && method === "POST" &&
       resolveStoreReviewCustomerChangeRequest(request).state === "review") return true;
   if (request && session.role === "admin" && method === "GET" &&
@@ -438,4 +440,32 @@ export function resolveStoreReviewCustomerChangeRequest(request: Request):
   });
   customerChangeProofs.add(proof);
   return { state: "review", proof, session };
+}
+
+// Existing notification status control, with its own server-only QA authority.
+const adminNotificationProofs = new WeakSet<object>();
+export function isStoreReviewAdminNotificationProof(value: unknown): value is StoreReviewBookingProof {
+  return Boolean(value && typeof value === "object" && adminNotificationProofs.has(value) &&
+    currentReviewProof(value as StoreReviewBookingProof));
+}
+export function resolveStoreReviewAdminNotificationRequest(request: Request):
+  { state: "ordinary" } | { state: "blocked" } | { state: "review"; proof: StoreReviewBookingProof } {
+  const session = resolveStoreReviewSession(request.headers.get("cookie"));
+  if (session.state === "absent") return { state: "ordinary" };
+  if (session.state !== "valid" || session.role !== "admin" || request.method !== "PATCH" ||
+      !storeReviewSameOrigin(request, "admin") ||
+      request.headers.get("x-prestige-admin-purpose") !== "admin-booking-persistence") return { state: "blocked" };
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/admin-app-notifications" || url.search ||
+      request.headers.get("origin") !== url.origin) return { state: "blocked" };
+  const target = session.scope.bookingTargets?.find(row => row.bookingReference === session.scope.adminSaveBookingReference);
+  const config = configuration(process.env, Date.now());
+  if (!target?.travelerId || !config) return { state: "blocked" };
+  const proof: StoreReviewBookingProof = Object.freeze({
+    booking: Object.freeze({ ...target, companyId: session.scope.companyId, bookerId: session.scope.bookerId,
+      customerId: session.scope.customerId, driverId: session.scope.driverId }),
+    databaseOrigin: session.databaseOrigin, expiresAt: session.expiresAt, origin: url.origin, revision: config.revision,
+  });
+  adminNotificationProofs.add(proof);
+  return { state: "review", proof };
 }

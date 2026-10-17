@@ -1,4 +1,5 @@
 import "server-only";
+import { storeReviewReadFetch, type StoreReviewSession } from "./store-review-access";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -383,6 +384,7 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
 
 function getRateSetupClient(
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): AdminBookingResult<RateSetupClient> {
   const actorResult = validateActor(actor);
 
@@ -409,6 +411,7 @@ function getRateSetupClient(
   try {
     return {
       data: createClient(supabaseUrl, serviceRoleKey, {
+        ...(review ? { global: { fetch: storeReviewReadFetch(review, supabaseUrl) } } : {}),
         auth: {
           persistSession: false,
         },
@@ -505,15 +508,16 @@ function toRateSetupBooker(row: unknown): AdminRateSetupBooker | null {
 
 export async function loadAdminRateSetup(
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): Promise<AdminBookingResult<AdminRateSetupReadResult>> {
-  const clientResult = getRateSetupClient(actor);
+  const clientResult = getRateSetupClient(actor, review);
 
   if (!clientResult.ok) {
     return clientResult;
   }
 
   const [settingsResult, companiesResult, bookersResult, travelersResult] = await Promise.all([
-    clientResult.data
+    review ? Promise.resolve({ data: null, error: null }) : clientResult.data
       .from("rate_settings")
       .select(rateSettingsSelect)
       .eq("id", "default")

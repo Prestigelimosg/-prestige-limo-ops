@@ -1,3 +1,4 @@
+import type { StoreReviewSession } from "./store-review-access";
 import { normalizeDriverRemark } from "./driver-job-remark";
 import {
   createAdminBookingThroughSupabaseAdapter,
@@ -188,6 +189,7 @@ export type AdminBookingAuditInput = {
 };
 
 export type AdminBookingListOptions = {
+  review?: StoreReviewSession;
   limit?: number | null;
 };
 

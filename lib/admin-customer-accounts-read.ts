@@ -1,4 +1,5 @@
 import "server-only";
+import { storeReviewReadFetch, type StoreReviewSession } from "./store-review-access";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -422,7 +423,7 @@ function validServerCredential(value: string | null) {
   );
 }
 
-function customerDirectoryClient() {
+function customerDirectoryClient(review?: StoreReviewSession) {
   const supabaseUrl = configValueOrNull(process.env.SUPABASE_URL);
   const serviceRoleKey = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -432,6 +433,7 @@ function customerDirectoryClient() {
 
   try {
     return createClient(supabaseUrl as string, serviceRoleKey as string, {
+      ...(review ? { global: { fetch: storeReviewReadFetch(review, supabaseUrl as string) } } : {}),
       auth: { persistSession: false },
     });
   } catch {
@@ -617,6 +619,7 @@ export function parseAdminCustomerAccountsReadParams(
 export async function loadAdminCustomerAccounts(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): Promise<AdminBookingResult<AdminCustomerAccountsReadData>> {
   const parsed = parseAdminCustomerAccountsReadParams(input);
 
@@ -626,13 +629,14 @@ export async function loadAdminCustomerAccounts(
 
   const bookingsResult = await listAdminBookings(actor, {
     limit: accountSourceReadLimit,
+    ...(review ? { review } : {}),
   });
 
   if (!bookingsResult.ok) {
     return bookingsResult;
   }
 
-  const client: Pick<SupabaseClient, "from"> | null = customerDirectoryClient();
+  const client: Pick<SupabaseClient, "from"> | null = customerDirectoryClient(review);
 
   if (!client) {
     return {

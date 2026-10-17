@@ -167,6 +167,10 @@ const authPaths: Record<StoreReviewRole, string> = {
 // read-access preparation, not complete store-review feature acceptance.
 export function storeReviewRequestAllowed(session: StoreReviewSession, pathname: string, method: string, request?: Request) {
   if (request ? !storeReviewRequestOriginAllowed(request) : process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL_ENV)) return false;
+  if (request && session.role === "admin" && method === "GET" &&
+      ["/api/admin-rate-setup", "/api/admin-customer-accounts"].includes(pathname) &&
+      storeReviewSameOrigin(request, "admin") &&
+      request.headers.get("x-prestige-admin-purpose") === "admin-booking-persistence") return true;
   if (request && session.role === "customer" && method === "GET" &&
       (pathname === "/api/customer-invoices" || /^\/api\/customer-invoice-pdf\/[A-Z0-9-]+$/.test(pathname)) &&
       storeReviewSameOrigin(request, "customer") &&
@@ -213,7 +217,15 @@ export function storeReviewReadFetch(session: StoreReviewSession, databaseOrigin
       add("driver_id", `eq.${scope.driverId}`);
       if (scope.travelerIds.length) add("or", `(traveler_id.is.null,traveler_id.in.(${scope.travelerIds.join(",")}))`);
       else add("traveler_id", "is.null");
-    } else if (session.role === "customer" && table === "bookers") {
+    } else if (session.role === "admin" && table === "customers") {
+      add("id", `eq.${scope.customerId}`);
+    } else if (session.role === "admin" && table === "companies") {
+      add("id", `eq.${scope.companyId}`);
+    } else if (session.role === "admin" && table === "travelers" && scope.travelerIds.length) {
+      add("id", `in.(${scope.travelerIds.join(",")})`);
+      add("company_id", `eq.${scope.companyId}`);
+      add("booker_id", `eq.${scope.bookerId}`);
+    } else if (["admin", "customer"].includes(session.role) && table === "bookers") {
       add("id", `eq.${scope.bookerId}`);
       add("company_id", `eq.${scope.companyId}`);
       add("customer_id", `eq.${scope.customerId}`);

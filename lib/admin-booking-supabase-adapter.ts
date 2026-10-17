@@ -1,5 +1,5 @@
 import "server-only";
-import { isStoreReviewAdminSaveProof, type StoreReviewAdminSaveProof } from "./store-review-access";
+import { isStoreReviewAdminSaveProof, storeReviewReadFetch, type StoreReviewSession, type StoreReviewAdminSaveProof } from "./store-review-access";
 import { encodeDriverRemark, decodeDriverRemark } from "./driver-job-remark";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -1430,7 +1430,7 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
   };
 }
 
-export function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<SupabaseClient> {
+export function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor, review?: StoreReviewSession): AdminBookingResult<SupabaseClient> {
   const actorResult = validateActor(actor);
 
   if (!actorResult.ok) {
@@ -1474,6 +1474,7 @@ export function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapte
     return {
       ok: true,
       data: createClient(supabaseUrl, serviceRoleKey, {
+        ...(review ? { global: { fetch: storeReviewReadFetch(review, supabaseUrl) } } : {}),
         auth: {
           persistSession: false,
         },
@@ -3511,7 +3512,7 @@ export async function listAdminBookingsThroughSupabaseAdapter(
   actor: AdminBookingPersistenceAdapterActor,
   options: AdminBookingListOptions = {},
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord[]>> {
-  const clientResult = getServerOnlySupabaseClient(actor);
+  const clientResult = getServerOnlySupabaseClient(actor, options.review);
 
   if (!clientResult.ok) {
     return clientResult;

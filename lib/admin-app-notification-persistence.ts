@@ -1,5 +1,5 @@
 import "server-only";
-import { isStoreReviewCustomerChangeProof, storeReviewReadFetch, type StoreReviewSession, type StoreReviewBookingProof } from "./store-review-access";
+import { isStoreReviewAdminNotificationProof, isStoreReviewCustomerChangeProof, storeReviewReadFetch, type StoreReviewSession, type StoreReviewBookingProof } from "./store-review-access";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -1228,4 +1228,31 @@ export async function updateAdminAppNotificationStatus(
     data: notification,
     ok: true,
   };
+}
+
+// No ordinary actor, booking writer, provider, or Calendar handoff is available here.
+export async function updateStoreReviewAdminNotification(proof: StoreReviewBookingProof, body: unknown):
+  Promise<AdminBookingResult<AdminAppNotificationRecord>> {
+  const denied = { ok: false as const, status: 403, error: "QA notification update is unavailable." };
+  if (!isStoreReviewAdminNotificationProof(proof)) return denied;
+  const parsed = parseAdminAppNotificationUpdatePayload(body);
+  if (!parsed.ok) return parsed;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parsed.data.notification_id)) return denied;
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, ""), key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url !== proof.databaseOrigin || !key || process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") return denied;
+  try {
+    const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const b = proof.booking;
+    const { data, error } = await client.rpc("update_admin_reviewer_qa_notification", {
+      p_booking_id: b.bookingId, p_booking_reference: b.bookingReference, p_company_id: b.companyId,
+      p_booker_id: b.bookerId, p_customer_id: b.customerId, p_traveler_id: b.travelerId, p_driver_id: b.driverId,
+      p_notification_id: parsed.data.notification_id, p_status: parsed.data.notification_status,
+    });
+    if (error || !data || data.id !== parsed.data.notification_id ||
+        data.booking_reference !== b.bookingReference || data.actor_label !== "store-review-customer-request" ||
+        data.notification_status !== parsed.data.notification_status) return {
+      ok: false, status: error?.code === "40001" ? 409 : 503, error: "QA notification could not be updated. Refresh the request list.",
+    };
+    return { ok: true, data: normalizeNotificationRecord(asRecord(data)) };
+  } catch { return { ok: false, status: 503, error: "QA notification could not be updated. Refresh the request list." }; }
 }

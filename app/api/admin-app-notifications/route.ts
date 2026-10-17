@@ -1,4 +1,4 @@
-import { resolveStoreReviewSession, storeReviewSameOrigin, storeReviewBlockedResponse } from "../../../lib/store-review-access";
+import { resolveStoreReviewAdminNotificationRequest, resolveStoreReviewSession, storeReviewSameOrigin, storeReviewBlockedResponse } from "../../../lib/store-review-access";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
   adminBookingPersistencePurpose,
@@ -11,6 +11,7 @@ import {
   parseAdminAppNotificationCreatePayload,
   parseAdminAppNotificationUpdatePayload,
   updateAdminAppNotificationStatus,
+  updateStoreReviewAdminNotification,
 } from "../../../lib/admin-app-notification-persistence";
 
 export const dynamic = "force-dynamic";
@@ -151,6 +152,13 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const review = resolveStoreReviewAdminNotificationRequest(request);
+    if (review.state === "blocked") return storeReviewBlockedResponse();
+    if (review.state === "review") {
+      const result = await updateStoreReviewAdminNotification(review.proof, await readJsonBody(request));
+      return result.ok ? Response.json({ ok: true, notification: result.data })
+        : Response.json({ ok: false, error: result.error }, { status: result.status });
+    }
     const boundary = requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {

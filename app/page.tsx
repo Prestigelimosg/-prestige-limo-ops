@@ -19525,6 +19525,27 @@ export default function Home() {
       ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
       : "";
 
+  // Customer Copy alone translates a verified assigned AVF into its customer label.
+  // Never infer the driver's model from booking.vehicle (the service category).
+  const customerCopyAvfLabel = (() => {
+    const driverId = clean(booking.driverId);
+    if (!Number.isSafeInteger(Number(driverId)) || Number(driverId) <= 0 ||
+        ![booking.driverName, booking.driverContact, booking.driverPlate].some((value) => clean(value))) return "";
+    if (clean(assignedDriverRecord?.id) === driverId &&
+        clean(assignedDriverRecord?.vehicle_type).toLowerCase() === "avf") return "Alphard";
+    const reference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
+    const saved = [appliedAdminBookingSnapshot, dispatchReleaseLoadedBookingRecord].find((record) =>
+      reference && cleanReferenceText(record?.booking_reference) === reference);
+    const link = activeAdminDriverJobLink;
+    const acknowledgedAt = Date.parse(link?.safe_summary.acknowledged_at || "");
+    const savedAt = Date.parse(saved?.updated_at || "");
+    return reference && clean(saved?.driver_id) === driverId &&
+      cleanReferenceText(link?.booking_reference) === reference && link?.link_status === "active" &&
+      !link.revoked_at && link.safe_summary.acknowledged && !link.safe_summary.amendment_ack_pending &&
+      Number.isFinite(acknowledgedAt) && Number.isFinite(savedAt) && acknowledgedAt >= savedAt &&
+      clean(link.safe_summary.vehicle).toLowerCase() === "avf" ? "Alphard" : "";
+  })();
+
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
@@ -19557,7 +19578,8 @@ export default function Home() {
     const carType = hasAssignedDriverDetails
       ? safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
         activeDriverJobLinkVehicleModel ||
-        safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type)
+        safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type) ||
+        customerCopyAvfLabel
       : "";
     const driverLines = [
       bookingDriverName ? `Driver: ${bookingDriverName}` : "",
@@ -19588,6 +19610,7 @@ export default function Home() {
       .map((section) => section.join("\n").trim())
       .join("\n\n");
   }, [
+    customerCopyAvfLabel,
     activeAdminDriverJobLink?.booking_reference,
     activeAdminDriverJobLink?.safe_summary.vehicle,
     appliedAdminBookingSnapshot?.booking_reference,
@@ -31266,7 +31289,8 @@ export default function Home() {
   const dispatchReadableCustomerVehicleValue = [
     assignedDriverPlate,
     safeDriverVehicleModelDisplay(booking.driverVehicleModel) ||
-      safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type),
+      safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type) ||
+      customerCopyAvfLabel,
   ].filter(Boolean).join(" / ");
   const dispatchReadableSummaryItems = [
     { label: "Passenger", value: clean(booking.name) || "Passenger not set" },

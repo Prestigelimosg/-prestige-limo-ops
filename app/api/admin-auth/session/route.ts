@@ -1,3 +1,4 @@
+import { storeReviewAuthResponse } from "../../../../lib/store-review-access";
 import {
   resetAdminAccountPinFromRecovery,
   signInAdminAccountWithPin,
@@ -63,6 +64,9 @@ export async function POST(request: Request) {
     return response({ ok: false, reason: "invalid_request" }, 400);
   }
 
+  const reviewResponse = storeReviewAuthResponse(request, "admin", body);
+  if (reviewResponse) return reviewResponse;
+
   if (body.action === "recover_pin") {
     if (purpose !== "admin-account-pin-recovery") {
       return response({ ok: false, reason: "unauthorized" }, 401);
@@ -109,6 +113,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const reviewResponse = storeReviewAuthResponse(request, "admin");
+  if (reviewResponse) return reviewResponse;
   if (!sameOriginAuthRequest(request, "admin-account-sign-out")) {
     return response({ ok: false, reason: "unauthorized" }, 401);
   }

@@ -1,4 +1,5 @@
 import "server-only";
+import { storeReviewReadFetch, type StoreReviewSession } from "./store-review-access";
 import { decodeDriverRemark } from "./driver-job-remark";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -510,6 +511,7 @@ function validateActor(
 
 function getSavedBookingClient(
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): AdminSavedBookingReadResult<SavedBookingClient> {
   const actorResult = validateActor(actor);
 
@@ -531,6 +533,7 @@ function getSavedBookingClient(
   try {
     return {
       data: createClient(supabaseUrl as string, serviceRoleKey as string, {
+        ...(review ? { global: { fetch: storeReviewReadFetch(review, supabaseUrl as string) } } : {}),
         auth: {
           persistSession: false,
         },
@@ -820,6 +823,7 @@ export function parseAdminSavedBookingListReadParams(
 export async function loadAdminSavedBookingById(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): Promise<AdminSavedBookingReadResult<AdminSavedBookingReadData>> {
   const parsed = parseAdminSavedBookingReadParams(input);
 
@@ -827,7 +831,7 @@ export async function loadAdminSavedBookingById(
     return parsed;
   }
 
-  const clientResult = getSavedBookingClient(actor);
+  const clientResult = getSavedBookingClient(actor, review);
 
   if (!clientResult.ok) {
     return clientResult;
@@ -862,6 +866,7 @@ export async function loadAdminSavedBookingById(
 export async function loadAdminSavedBookingList(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
+  review?: StoreReviewSession,
 ): Promise<AdminSavedBookingReadResult<AdminSavedBookingListReadData>> {
   const parsed = parseAdminSavedBookingListReadParams(input);
 
@@ -869,7 +874,7 @@ export async function loadAdminSavedBookingList(
     return parsed;
   }
 
-  const clientResult = getSavedBookingClient(actor);
+  const clientResult = getSavedBookingClient(actor, review);
 
   if (!clientResult.ok) {
     return clientResult;

@@ -1,3 +1,4 @@
+import { resolveStoreReviewSession, storeReviewSameOrigin, storeReviewBlockedResponse } from "../../../lib/store-review-access";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
   adminBookingPersistencePurpose,
@@ -104,7 +105,11 @@ function safeFailureResponse(error = "Admin saved booking read request failed sa
 
 export async function GET(request: Request) {
   try {
-    const boundary = requireAdminDispatcherBoundary(request);
+    const review = resolveStoreReviewSession(request.headers.get("cookie"));
+    if (review.state !== "absent" && (review.state !== "valid" || review.role !== "admin" || !storeReviewSameOrigin(request, "admin") || request.headers.get("x-prestige-admin-purpose") !== adminBookingPersistencePurpose)) return storeReviewBlockedResponse();
+    const boundary: AdminDispatcherBoundaryCheck = review.state === "valid"
+      ? { ok: true, context: { actorLabel: "Store reviewer", role: "admin", mode: "server-session-role-surface" } }
+      : requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {
       return boundary.response;
@@ -119,7 +124,7 @@ export async function GET(request: Request) {
     );
 
     if (isSingleBookingRead) {
-      const result = await loadAdminSavedBookingById(searchParams, actor);
+      const result = await loadAdminSavedBookingById(searchParams, actor, review.state === "valid" ? review : undefined);
 
       if (!result.ok) {
         return Response.json(
@@ -133,12 +138,13 @@ export async function GET(request: Request) {
 
       return Response.json({
         booking: result.data.booking,
+        ...(review.state === "valid" ? { mode: "review" } : {}),
         ok: true,
         version: result.data.version,
       });
     }
 
-    const result = await loadAdminSavedBookingList(searchParams, actor);
+    const result = await loadAdminSavedBookingList(searchParams, actor, review.state === "valid" ? review : undefined);
 
     if (!result.ok) {
       return Response.json(
@@ -152,6 +158,7 @@ export async function GET(request: Request) {
 
     return Response.json({
       bookings: result.data.bookings,
+      ...(review.state === "valid" ? { mode: "review" } : {}),
       ok: true,
       version: result.data.version,
     });

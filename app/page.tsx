@@ -595,6 +595,7 @@ type AdminRateSetupReadResponse = {
 };
 
 type AdminSavedBookingReadResponse = {
+  mode?: "review";
   booking?: BookingRecord | null;
   bookings?: BookingRecord[];
   error?: string;
@@ -15569,6 +15570,8 @@ export default function Home() {
   const [rateOverrideListMessages, setRateOverrideListMessages] =
     useState<{ company?: RateOverrideListMessage; boss?: RateOverrideListMessage }>({});
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
+  const [adminQaReviewSession, setAdminQaReviewSession] = useState(false);
+  const adminQaSaveInFlightRef = useRef(false);
   const [adminBookingPersistenceRecords, setAdminBookingPersistenceRecords] =
     useState<AdminBookingPersistenceRecord[]>([]);
   const loadSelectedBookingRequestRevisionRef = useRef(0);
@@ -16590,7 +16593,7 @@ export default function Home() {
         text: "Checking admin device push readiness...",
       },
       status: "checking",
-      supported: true,
+      supported: false,
     }));
 
     void (async () => {
@@ -16668,7 +16671,7 @@ export default function Home() {
           },
           publicKey: null,
           status: "error",
-          supported: true,
+          supported: false,
         });
       }
     })();
@@ -24846,6 +24849,7 @@ export default function Home() {
           savedBookingsBody?.ok === true &&
           Array.isArray(savedBookingsBody.bookings)
         ) {
+          setAdminQaReviewSession(savedBookingsBody.mode === "review");
           return {
             bookings: savedBookingsBody.bookings,
             ok: true,
@@ -27463,9 +27467,66 @@ export default function Home() {
     }
   }
 
+  async function saveAdminQaBags(options: { assignmentOnly?: boolean; cancelDriverAssignment?: boolean } = {}) {
+    if (adminQaSaveInFlightRef.current) return;
+    const notice = (tone: Message["tone"], text: string) => {
+      const value = { tone, text };
+      setAdminBookingPersistenceMessage(value); setMessage(value); setBookingSaveMessage(value);
+    };
+    const baseline = loadedAdminBookingBaselineRef.current;
+    const reference = cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current);
+    if (!(window.location.origin === "https://app.prestigelimo.sg" || (process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname))) ||
+        options.assignmentOnly || options.cancelDriverAssignment || !baseline || !reference ||
+        baseline.bookingReference !== reference || !baseline.updatedAt || booking.luggageCount !== "2" ||
+        adminBookingFormSyncSignature({ ...booking, luggageCount: baseline.form.luggageCount }) !== baseline.formSignature) {
+      notice("error", "Load the designated QA booking and change only Number of bags to 2. Other actions remain unavailable.");
+      return;
+    }
+    const signature = adminBookingFormSyncSignature(booking);
+    const stillCurrent = () => loadedAdminBookingBaselineRef.current === baseline &&
+      appliedAdminBookingSnapshotReferenceRef.current === reference &&
+      adminBookingFormSyncSignature(bookingFormRef.current) === signature;
+    adminQaSaveInFlightRef.current = true;
+    setAdminBookingPersistenceAction("update");
+    try {
+      const response = await fetch("/api/admin-bookings", { method: "PATCH", headers: {
+        "Content-Type": "application/json", "x-prestige-admin-purpose": "admin-qa-bags-save",
+      }, body: JSON.stringify({ target_booking_reference: reference, expected_updated_at: baseline.updatedAt, luggage_count: 2 }) });
+      const result = await response.json();
+      if (!response.ok || result?.ok !== true || result.mode !== "review" ||
+          result.result?.booking_reference !== reference || result.result?.luggage_count !== 2 ||
+          typeof result.result?.updated_at !== "string" || typeof result.result?.noop !== "boolean") throw new Error("unconfirmed");
+      const read = await fetch(`${adminSavedBookingsApiPath}?${new URLSearchParams({ booking_reference: reference })}`, {
+        cache: "no-store", headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+      });
+      const refreshed = await read.json() as AdminSavedBookingReadResponse;
+      if (!read.ok || !refreshed.ok || refreshed.mode !== "review" || !refreshed.booking ||
+          bookingRecordPersistedReference(refreshed.booking) !== reference ||
+          refreshed.booking.updated_at !== result.result.updated_at || refreshed.booking.luggage_count !== 2) throw new Error("reload");
+      if (!stillCurrent()) return;
+      const saved = bookingRecordToAdminBookingPersistenceRecord(refreshed.booking);
+      if (!saved) throw new Error("reload");
+      markAdminBookingAsActiveForUpdates(reference, saved, { ...booking });
+      upsertLoadedBookingFromAdminRecord(saved);
+      notice("success", result.result.noop ? "QA bag count is already 2. No change was saved." : "QA bag count saved.");
+    } catch {
+      if (stillCurrent()) {
+        loadedAdminBookingBaselineRef.current = null;
+        notice("error", "QA save could not be confirmed. Reload this test booking before trying again; no automatic retry was made.");
+      }
+    } finally {
+      adminQaSaveInFlightRef.current = false;
+      setAdminBookingPersistenceAction(null);
+    }
+  }
+
   async function updateAppliedAdminBookingOperationalSnapshot(
     options: { assignmentOnly?: boolean; cancelDriverAssignment?: boolean } = {},
   ) {
+    if (adminQaReviewSession) {
+      await saveAdminQaBags(options);
+      return;
+    }
     const cancelDriverAssignment = options.cancelDriverAssignment === true;
     const assignmentOnly = options.assignmentOnly === true || cancelDriverAssignment;
     const targetBookingReference =
@@ -37869,7 +37930,9 @@ export default function Home() {
       appliedAdminBookingSnapshotRequestReviewStatus !== "approved" &&
       appliedAdminBookingSnapshotRequestReviewStatus !== "declined",
   );
-  const bookingSaveButtonLabel = saving
+  const bookingSaveButtonLabel = adminQaReviewSession
+    ? bookingUpdateInFlight ? "Saving QA bags..." : "Save QA bags"
+    : saving
     ? "Saving..."
     : bookingUpdateInFlight
       ? "Updating..."
@@ -37885,6 +37948,10 @@ export default function Home() {
           : "Update + Cal"
       : "Save + CRM";
   function handleJobCardPrimaryBookingAction() {
+    if (adminQaReviewSession) {
+      void updateAppliedAdminBookingOperationalSnapshot();
+      return;
+    }
     if (activeAppliedBookingReference) {
       void updateAppliedAdminBookingOperationalSnapshot();
       return;

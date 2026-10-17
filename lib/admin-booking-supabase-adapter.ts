@@ -1,4 +1,5 @@
 import "server-only";
+import { isStoreReviewAdminSaveProof, type StoreReviewAdminSaveProof } from "./store-review-access";
 import { encodeDriverRemark, decodeDriverRemark } from "./driver-job-remark";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -3533,4 +3534,41 @@ export async function listAdminBookingsThroughSupabaseAdapter(
     ok: true,
     data: asArray(data).map(asRecord).map(toAdminBookingDto),
   };
+}
+
+// Narrow QA operation; never calls the ordinary updater or its downstream writers.
+export async function saveStoreReviewAdminBags(proof: StoreReviewAdminSaveProof, body: unknown) {
+  const denied = { ok: false as const, status: 403, error: "QA save is unavailable. Reload the test booking." };
+  if (!isStoreReviewAdminSaveProof(proof)) return denied;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return denied;
+  const input = body as Record<string, unknown>;
+  if (Object.keys(input).sort().join(",") !== "expected_updated_at,luggage_count,target_booking_reference" ||
+      input.target_booking_reference !== proof.booking.bookingReference || input.luggage_count !== 2 ||
+      typeof input.expected_updated_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(input.expected_updated_at) ||
+      !Number.isFinite(Date.parse(input.expected_updated_at))) return denied;
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url !== proof.databaseOrigin || !key || process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") return denied;
+  try {
+    // Separate purpose proof, same existing transport/credentials; no ordinary Admin actor.
+    const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    const b = proof.booking;
+    const { data, error } = await client.rpc("save_admin_reviewer_qa_bags", {
+      p_booking_id: b.bookingId, p_booking_reference: b.bookingReference,
+      p_company_id: b.companyId, p_booker_id: b.bookerId, p_customer_id: b.customerId,
+      p_traveler_id: b.travelerId, p_driver_id: b.driverId,
+      p_expected_updated_at: input.expected_updated_at, p_luggage_count: 2,
+    });
+    if (error || !data || data.booking_reference !== b.bookingReference || data.luggage_count !== 2 ||
+        typeof data.updated_at !== "string" || !Number.isFinite(Date.parse(data.updated_at)) || typeof data.noop !== "boolean") {
+      return { ok: false as const, status: error?.code === "40001" ? 409 : 503,
+        error: "QA save could not be confirmed. Reload the test booking before trying again." };
+    }
+    return { ok: true as const, status: 200, result: {
+      booking_reference: b.bookingReference, luggage_count: 2, updated_at: data.updated_at, noop: data.noop,
+    } };
+  } catch {
+    return { ok: false as const, status: 503, error: "QA save could not be confirmed. Reload the test booking before trying again." };
+  }
 }

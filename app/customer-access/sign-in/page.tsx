@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
+import { StoreReviewSignIn } from "../../store-review-sign-in";
 
 type Mode = "login" | "new_device" | "recovery";
 
@@ -163,6 +164,7 @@ export default function CustomerAccessSignInPage() {
         )}
         {message ? <p className="rounded-xl bg-slate-100 px-4 py-3 text-sm" role="status">{message}</p> : null}
       </section>
+      <StoreReviewSignIn role="customer" />
     </main>
   );
 }

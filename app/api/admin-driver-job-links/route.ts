@@ -1,3 +1,4 @@
+import { resolveStoreReviewLinkSetupRequest, storeReviewBlockedResponse } from "../../../lib/store-review-access";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
   adminBookingPersistencePurpose,
@@ -168,7 +169,9 @@ export async function POST(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await createAdminDriverJobLink(parsed.data, actor);
+    const review = resolveStoreReviewLinkSetupRequest(request, actor);
+    if (review.state === "blocked") return storeReviewBlockedResponse();
+    const result = await createAdminDriverJobLink(parsed.data, actor, review.state === "review" ? review.proof : undefined);
 
     if (!result.ok) {
       return Response.json(
@@ -180,6 +183,12 @@ export async function POST(request: Request) {
       );
     }
 
+    if (result.data.review_alias) {
+      return Response.json({ ok: true, disposition: result.data.disposition,
+        review_alias: result.data.review_alias, link: result.data.link,
+        live_location: null, native_app_alert: result.data.native_app_alert },
+        { headers: { "cache-control": "private, no-store" } });
+    }
     const liveLocationAuthorization = result.data.disposition === "created" ? await authorizeLiveLocationForDriverJobLink({
       bookingReference: result.data.link.booking_reference,
       context: boundary.context,

@@ -1,3 +1,4 @@
+import { isStoreReviewLinkContext } from "./store-review-access";
 import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -102,7 +103,8 @@ function eligibleCandidate(link: UnknownRecord, nowMs: number): boolean {
   const context = record(link.safe_link_context);
 
   return Boolean(
-    uuidPattern.test(text(link.id, 80)) &&
+    !isStoreReviewLinkContext(context) &&
+      uuidPattern.test(text(link.id, 80)) &&
       text(link.booking_reference, 120) &&
       positiveInteger(link.driver_id) &&
       link.link_status === "active" &&

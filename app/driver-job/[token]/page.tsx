@@ -57,7 +57,7 @@ type DriverJobApiResponse =
         vehicle_model: string;
       } | null;
       ok: true;
-      mode: "mock" | "production";
+      mode: "mock" | "production" | "review";
       payload: SafeDriverJobPayload;
       combo?: DriverComboView|null;
       status?: string;
@@ -1017,6 +1017,9 @@ export default function DriverJobPage() {
 
     return Array.isArray(rawToken) ? rawToken[0] || "" : rawToken || "";
   }, [params]);
+  // The alias suppresses ordinary side effects even before authentication finishes.
+  // It grants no access: the server checks the reviewer session and exact QA tuple.
+  const reviewJob = token.startsWith("review-");
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
   const [embeddedDriverApp, setEmbeddedDriverApp] = useState(false);
   const [androidBrowser, setAndroidBrowser] = useState(false);
@@ -1102,9 +1105,11 @@ export default function DriverJobPage() {
     () => Boolean(savedDriverDetails && driverDetailsMatch(driverDetails, savedDriverDetails)),
     [driverDetails, savedDriverDetails],
   );
+  const visibleDriverDetails = savedDriverDetails || (reviewJob ? driverDetails : null);
   const amendmentAckPending = pageState.kind === "ready" && pageState.job.amendmentAckPending === true;
 
   useEffect(() => {
+    if (reviewJob) return;
     const embeddedDetectionFrame = window.requestAnimationFrame(() => {
       setEmbeddedDriverApp(isVerifiedEmbeddedDriverApp());
       const setup=(window as EmbeddedDriverWindow).__PRESTIGE_DRIVER_ACCOUNT_SETUP__;
@@ -1114,7 +1119,7 @@ export default function DriverJobPage() {
     });
 
     return () => window.cancelAnimationFrame(embeddedDetectionFrame);
-  }, []);
+  }, [reviewJob]);
 
   useEffect(() => {
     if (
@@ -1143,6 +1148,7 @@ export default function DriverJobPage() {
 
   const requestEmbeddedNativeNotificationsOnce = useCallback(() => {
     if (
+      reviewJob ||
       !embeddedDriverApp ||
       !token ||
       loadedDriverJobTokenRef.current !== token ||
@@ -1160,7 +1166,7 @@ export default function DriverJobPage() {
     }
 
     return requested;
-  }, [embeddedDriverApp, token]);
+  }, [embeddedDriverApp, reviewJob, token]);
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -1307,7 +1313,7 @@ export default function DriverJobPage() {
   const refreshDriverAppUpdates = useCallback(async (
     { preserveContent = false }: { preserveContent?: boolean } = {},
   ) => {
-    if (!token) {
+    if (reviewJob || !token) {
       return;
     }
 
@@ -1467,7 +1473,7 @@ export default function DriverJobPage() {
         driverAppUpdatesAbortControllerRef.current = null;
       }
     }
-  }, [token]);
+  }, [reviewJob, token]);
 
   useEffect(() => {
     let active = true;
@@ -1481,6 +1487,34 @@ export default function DriverJobPage() {
 
       if (!token) {
         setPageState({ kind: "blocked", reason: "unauthorized" });
+        return;
+      }
+
+      if (reviewJob) {
+        setPageState({ kind: "loading" });
+        setAcknowledged(false);
+        setSavedDriverDetails(null);
+        setDetailsFeedback(null);
+        if (!(window.location.origin === "https://app.prestigelimo.sg" || (process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)))) {
+          setPageState({ kind: "blocked", reason: "unauthorized" });
+          return;
+        }
+        try {
+          const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, { cache: "no-store" });
+          const result = await response.json() as DriverJobApiResponse;
+          if (!active) return;
+          if (!response.ok || !result.ok || result.mode !== "review") {
+            setPageState({ kind: "blocked", reason: "unauthorized" });
+            return;
+          }
+          const details = result.payload.assignedDriver;
+          setDriverDetails(details);
+          setSavedDriverDetails(result.payload.acknowledged ? details : null);
+          setAcknowledged(result.payload.acknowledged);
+          setPageState({ kind: "ready", job: result.payload });
+        } catch {
+          if (active) setPageState({ kind: "blocked", reason: "unavailable" });
+        }
         return;
       }
 
@@ -1670,10 +1704,10 @@ export default function DriverJobPage() {
       driverAppUpdatesAbortControllerRef.current?.abort();
       driverAppUpdatesRequestSequenceRef.current += 1;
     };
-  }, [refreshDriverAppUpdates, stopDriverLiveLocationBrowserWatch, token]);
+  }, [refreshDriverAppUpdates, reviewJob, stopDriverLiveLocationBrowserWatch, token]);
 
   useEffect(() => {
-    if (!token || pageState.kind !== "ready") {
+    if (reviewJob || !token || pageState.kind !== "ready") {
       return;
     }
 
@@ -1701,7 +1735,7 @@ export default function DriverJobPage() {
       document.removeEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
       window.removeEventListener("pageshow", refreshDriverAppUpdatesOnForeground);
     };
-  }, [pageState.kind, refreshDriverAppUpdates, token]);
+  }, [pageState.kind, refreshDriverAppUpdates, reviewJob, token]);
 
   useEffect(() => {
     return () => {
@@ -1710,7 +1744,7 @@ export default function DriverJobPage() {
   }, [stopDriverLiveLocationBrowserWatch]);
 
   useEffect(() => {
-    if (!embeddedDriverApp || !isVerifiedEmbeddedDriverApp()) {
+    if (reviewJob || !embeddedDriverApp || !isVerifiedEmbeddedDriverApp()) {
       return;
     }
 
@@ -1804,7 +1838,7 @@ export default function DriverJobPage() {
         handleNativeNotificationResult,
       );
     };
-  }, [embeddedDriverApp]);
+  }, [embeddedDriverApp, reviewJob]);
 
   useEffect(() => {
     if (pageState.kind !== "ready" || !acknowledged) {
@@ -1856,6 +1890,31 @@ export default function DriverJobPage() {
   }
 
   async function saveAndAcknowledgeJob() {
+    if (reviewJob) {
+      if (pageState.kind !== "ready" || savingDriverDetails || !(window.location.origin === "https://app.prestigelimo.sg" || (process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)))) return;
+      setSavingDriverDetails(true);
+      setDetailsFeedback(null);
+      try {
+        const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "acknowledge", expected_revision: pageState.job.acknowledgementRevision }),
+        });
+        const result = await response.json() as DriverJobApiResponse;
+        if (!response.ok || !result.ok || result.mode !== "review" || !result.payload.acknowledged) {
+          setPageState({ kind: "blocked", reason: "unauthorized" });
+          return;
+        }
+        setDriverDetails(result.payload.assignedDriver);
+        setSavedDriverDetails(result.payload.assignedDriver);
+        setAcknowledged(true);
+        setPageState({ kind: "ready", job: result.payload });
+      } catch {
+        setDetailsFeedback({ tone: "error", text: "QA acknowledgement could not be confirmed. Refresh before trying again." });
+      } finally {
+        setSavingDriverDetails(false);
+      }
+      return;
+    }
     if(accountActivationRequired && !accountActivationPassed)return;
     const nextDetails = cleanDriverDetails(driverDetails);
     const refreshAmendedCalendar = acknowledged && pageState.kind === "ready" &&
@@ -2819,7 +2878,7 @@ export default function DriverJobPage() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950" data-driver-job-page="true">
-      <dialog
+      {!reviewJob ? <dialog
         ref={completionDialogRef}
         aria-labelledby="driver-completion-title"
         aria-describedby="driver-completion-description"
@@ -2849,10 +2908,10 @@ export default function DriverJobPage() {
             Confirm
           </button>
         </div>
-      </dialog>
+      </dialog> : null}
       <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6">
         <header className="space-y-1 border-b border-stone-200 pb-3">
-          {embeddedDriverApp ? (
+          {embeddedDriverApp || reviewJob ? (
             <button type="button" data-driver-back-to-jobs="true"
               className="mb-1 min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold"
               onClick={() => window.location.assign("/driver-portal")}>
@@ -2862,7 +2921,7 @@ export default function DriverJobPage() {
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
           <PublicAppBuildMarker />
-          {!embeddedDriverApp ? (
+          {reviewJob ? <p className="rounded-md bg-amber-50 p-3 text-sm" data-driver-review-boundary="true">QA review: view this designated test job and acknowledge it. Other actions are unavailable.</p> : !embeddedDriverApp ? (
             <p
               className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
               data-driver-job-mobile-web-note="true"
@@ -2870,7 +2929,7 @@ export default function DriverJobPage() {
               Mobile web driver card. Keep this link private and use it only for this assigned job.
             </p>
           ) : null}
-          {(androidBrowser || iosBrowser) && !embeddedDriverApp && pageState.kind === "ready" ? (
+          {!reviewJob && (androidBrowser || iosBrowser) && !embeddedDriverApp && pageState.kind === "ready" ? (
             <div className="space-y-1 pt-2" data-driver-beta-install="true">
               <div className="flex flex-wrap items-center gap-2">
                 <Image
@@ -2915,7 +2974,7 @@ export default function DriverJobPage() {
           ) : null}
         </header>
 
-        {embeddedDriverApp && accountActivationRequired && pageState.kind === "ready" ? <DriverAccountActivation token={token} acknowledged={acknowledged} onReady={accountReady=>{setAccountActivationPassed(true);if(accountReady)setHasVerifiedDriverAccount(true);}}/>:null}
+        {!reviewJob && embeddedDriverApp && accountActivationRequired && pageState.kind === "ready" ? <DriverAccountActivation token={token} acknowledged={acknowledged} onReady={accountReady=>{setAccountActivationPassed(true);if(accountReady)setHasVerifiedDriverAccount(true);}}/>:null}
 
         {pageState.kind === "loading" ? (
           <section
@@ -2967,6 +3026,7 @@ export default function DriverJobPage() {
               </dl>
             </section>
 
+            {!reviewJob ? <>
             <section
               className="order-[90] space-y-2"
               aria-labelledby="driver-app-updates-heading"
@@ -3092,6 +3152,7 @@ export default function DriverJobPage() {
               </div>
             </section>
 
+            </> : null}
             <section
               className="order-2 space-y-2"
               aria-labelledby="driver-details-heading"
@@ -3105,7 +3166,7 @@ export default function DriverJobPage() {
                   className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-acknowledged-state="true"
                 >
-                  {amendmentAckPending ? "Job amended — review the latest details and acknowledge." : acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
+                  {amendmentAckPending ? "Job amended — review the latest details and acknowledge." : acknowledged ? "Acknowledged" : reviewJob ? "Confirm this QA job using its saved test driver details." : "Paste or confirm driver details once before starting the job."}
                 </p>
                 {!acknowledged || amendmentAckPending ? (
                 <details
@@ -3118,13 +3179,13 @@ export default function DriverJobPage() {
                     className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2 text-sm font-semibold text-slate-900 ring-1 ring-slate-200"
                     data-driver-job-details-editor-summary="true"
                   >
-                    <span>{amendmentAckPending ? "Confirm amended job" : driverDetailsSavedAndUnchanged ? "Confirmed driver details" : "Enter driver details"}</span>
+                    <span>{reviewJob ? "Confirm QA job" : amendmentAckPending ? "Confirm amended job" : driverDetailsSavedAndUnchanged ? "Confirmed driver details" : "Enter driver details"}</span>
                     <span className="shrink-0 text-xs font-bold text-slate-600">
                       {amendmentAckPending ? "Required" : driverDetailsSavedAndUnchanged ? "Edit" : acknowledged ? "Review" : "Required"}
                     </span>
                   </summary>
                   <div className="mt-2.5 space-y-2.5">
-                {!acknowledged ? <>
+                {!acknowledged && !reviewJob ? <>
                 <div className="grid gap-2">
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Paste Driver Details</span>
@@ -3229,7 +3290,7 @@ export default function DriverJobPage() {
                       {detailsFeedback.text}
                     </p>
                   ) : null}
-                  {embeddedDriverApp ? (
+                  {reviewJob ? <p className="text-xs text-slate-600">Acknowledgement uses the saved QA driver details only.</p> : embeddedDriverApp ? (
                     <p className="text-xs font-medium leading-5 text-slate-500">
                       This saves the same acknowledgement used by Dispatch and Driver Reports.
                     </p>
@@ -3250,28 +3311,28 @@ export default function DriverJobPage() {
                   </div>
                 </details>
                 ) : null}
-                {savedDriverDetails ? (
+                {visibleDriverDetails ? (
                   <div
                     className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900"
                     data-driver-job-saved-details="true"
                   >
-                    <p className="font-semibold">Confirmed driver and vehicle details</p>
+                    <p className="font-semibold">{reviewJob && !acknowledged ? "Saved QA driver and vehicle details" : "Confirmed driver and vehicle details"}</p>
                     <dl className="grid gap-1">
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Name</dt>
-                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.name)}</dd>
+                        <dd className="min-w-0 break-words">{displayValue(visibleDriverDetails.name)}</dd>
                       </div>
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Contact</dt>
-                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.contact)}</dd>
+                        <dd className="min-w-0 break-words">{displayValue(visibleDriverDetails.contact)}</dd>
                       </div>
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Plate</dt>
-                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.plate)}</dd>
+                        <dd className="min-w-0 break-words">{displayValue(visibleDriverDetails.plate)}</dd>
                       </div>
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Vehicle</dt>
-                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.vehicleModel)}</dd>
+                        <dd className="min-w-0 break-words">{displayValue(visibleDriverDetails.vehicleModel)}</dd>
                       </div>
                     </dl>
                   </div>
@@ -3297,7 +3358,7 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section
+            {!reviewJob ? <section
               className="order-3 flex flex-col gap-2 pb-4"
               aria-labelledby="driver-status-heading"
               data-driver-primary-step="status-workflow"
@@ -3534,9 +3595,9 @@ export default function DriverJobPage() {
                   Times are recorded automatically after accepted status updates.
                 </p>
               </div>
-            </section>
+            </section> : null}
 
-            {acknowledged ? (
+            {!reviewJob && acknowledged ? (
               <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">
                 {!hasVerifiedDriverAccount && !accountActivationRequired && appOnlyAccountSetup ? <p className="rounded-md border border-violet-200 bg-violet-50 p-3 text-sm" data-driver-account-app-only="true">Create your account inside Prestige Driver. Save your email and six-digit PIN, then return to Admin&apos;s message and tap this Job Link to activate it.</p>:null}
                 {!hasVerifiedDriverAccount && !accountActivationRequired && !appOnlyAccountSetup ? (
@@ -3776,7 +3837,7 @@ export default function DriverJobPage() {
 
 
 
-            <details
+            {!reviewJob ? <details
               className="order-[94] rounded-md border border-stone-200 bg-white p-2.5"
               data-driver-job-workflow-handoff="true"
             >
@@ -3857,7 +3918,7 @@ export default function DriverJobPage() {
               >
                 Private account and internal compensation details are not shown here.
               </p>
-            </details>
+            </details> : null}
           </>
         ) : null}
       </div>

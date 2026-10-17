@@ -1,3 +1,4 @@
+import { isStoreReviewLinkContext } from "./store-review-access";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -100,6 +101,7 @@ function terminalBooking(booking: UnknownRecord): boolean {
 function activeLink(link: UnknownRecord, now: Date): boolean {
   const expiresAt = cleanText(link.expires_at, 80);
   return (
+    !isStoreReviewLinkContext(link.safe_link_context) &&
     link.link_status === "active" &&
     !link.revoked_at &&
     Boolean(expiresAt) &&
@@ -368,14 +370,17 @@ async function readLocationFollowupEvidence(
   if (!booking || !driverId || terminalBooking(booking)) return null;
   const [linksRead, driverBookingsRead] = await Promise.all([
     client.from("driver_job_links")
-      .select("id, booking_reference, driver_id, link_status, revoked_at, expires_at, created_at")
+      .select("id, booking_reference, driver_id, link_status, revoked_at, expires_at, safe_link_context, created_at")
       .eq("driver_id", driverId).eq("link_status", "active")
       .order("created_at", { ascending: false }).limit(locationReadLimit + 1),
     client.from("bookings")
       .select("booking_reference, driver_id, status, admin_internal_status, customer_facing_status, cancellation_review_status")
       .eq("driver_id", driverId).limit(locationReadLimit + 1),
   ]);
-  const links = asRows(linksRead.data);
+  // Preserve this reader's original expiry behavior for ordinary links: it
+  // previously omitted context. Load the added field only to reject QA links.
+  const links = asRows(linksRead.data).map(link => isStoreReviewLinkContext(link.safe_link_context)
+    ? link : { ...link, safe_link_context: undefined });
   const driverBookings = asRows(driverBookingsRead.data);
   if (linksRead.error || driverBookingsRead.error || links.length > locationReadLimit ||
     driverBookings.length > locationReadLimit) throw new Error("Location follow-up assignment read unavailable");

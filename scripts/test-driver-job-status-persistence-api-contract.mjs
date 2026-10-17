@@ -7,6 +7,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const sourceFiles = [
+  "lib/store-review-access.ts",
   "lib/driver-job-remark.ts",
   "lib/driver-job-status-workflow.ts",
   "lib/driver-job-link.ts",

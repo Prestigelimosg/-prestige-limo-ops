@@ -1,3 +1,4 @@
+import { isStoreReviewLinkContext } from "./store-review-access";
 import "server-only";
 
 import { randomUUID } from "node:crypto";
@@ -157,6 +158,7 @@ export async function createAdminDriverAckReminder(
 
   if (
     linkError ||
+    isStoreReviewLinkContext(link.safe_link_context) ||
     linkId !== input.driver_job_link_id ||
     bookingReference !== input.booking_reference ||
     !linkIsActive(link) ||

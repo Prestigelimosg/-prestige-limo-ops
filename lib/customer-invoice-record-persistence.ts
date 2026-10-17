@@ -29,6 +29,7 @@ import {
 import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
 import { assertActiveCustomerPrincipalSession } from "./customer-principal-access";
 import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-bookings-read";
+import { storeReviewReadFetch, type StoreReviewSession } from "./store-review-access";
 
 export const customerInvoiceRecordVersion = "customer-invoice-record-v1";
 export const customerInvoiceRecordTableName = "customer_invoice_records";
@@ -211,11 +212,12 @@ const invoiceNumberPattern = /^(?:(INV|QUO|CN)-\d{8}-\d{4}|[A-Z0-9]{2,12}-\d{4,}
 const originalInvoiceNumberPattern = /^(?:INV-\d{8}-\d{4}|[A-Z0-9]{2,12}-\d{4,})$/;
 const localJpegLogoPattern = /^\/[a-z0-9][a-z0-9/_-]*\.jpe?g$/i;
 
-function createServerClient() {
+function createServerClient(review?: StoreReviewSession) {
   return createClient(process.env.SUPABASE_URL || "", process.env.SUPABASE_SERVICE_ROLE_KEY || "", {
     auth: {
       persistSession: false,
     },
+    ...(review ? { global: { fetch: storeReviewReadFetch(review, process.env.SUPABASE_URL || "") } } : {}),
   });
 }
 
@@ -2256,6 +2258,32 @@ async function resolveCustomerInvoicePortalAccount(
   context: CustomerSavedBookingsBoundaryContext,
   client: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<{ customer_account_reference: string; booker_id: number | null }>> {
+  if (context.review) {
+    const review = context.review, scope = review.scope;
+    if (review.state !== "valid" || review.role !== "customer" || review.expiresAt <= Date.now() ||
+        review.databaseOrigin !== process.env.SUPABASE_URL?.replace(/\/$/, "") ||
+        !scope.bookingTargets?.length || !scope.travelerIds.length) return safeFailure(safeCustomerAuthError, 403);
+    const profile = await client.from("bookers").select("id, company_id, customer_id")
+      .eq("id", scope.bookerId).eq("company_id", scope.companyId).eq("customer_id", scope.customerId).maybeSingle();
+    const booker = asRecord(profile.data);
+    if (profile.error || positiveIdentityId(booker.id) !== scope.bookerId ||
+        positiveIdentityId(booker.company_id) !== scope.companyId ||
+        safeText(booker.customer_id, 160) !== String(scope.customerId)) return safeFailure(safeCustomerAuthError, 403);
+    // Check the current exact QA bindings before opening any related document.
+    const bookings = await client.from("bookings")
+      .select("id, booking_reference, company_id, booker_id, customer_id, traveler_id, driver_id")
+      .in("id", scope.bookingIds).in("booking_reference", scope.bookingReferences)
+      .eq("company_id", scope.companyId).eq("booker_id", scope.bookerId)
+      .eq("customer_id", scope.customerId).eq("driver_id", scope.driverId);
+    const rows = asArray(bookings.data).map(asRecord);
+    if (bookings.error || rows.length !== scope.bookingTargets.length || scope.bookingTargets.some(target =>
+      !rows.some(row => positiveIdentityId(row.id) === target.bookingId && row.booking_reference === target.bookingReference &&
+        positiveIdentityId(row.company_id) === scope.companyId && positiveIdentityId(row.booker_id) === scope.bookerId &&
+        positiveIdentityId(row.customer_id) === scope.customerId && positiveIdentityId(row.driver_id) === scope.driverId &&
+        positiveIdentityId(row.traveler_id) === target.travelerId))) return safeFailure(safeCustomerAuthError, 403);
+    return { ok: true, version: customerInvoiceRecordVersion,
+      data: { customer_account_reference: String(scope.customerId), booker_id: scope.bookerId } };
+  }
   if (context.mode === "principal-device-session") {
     const access = context.principal_session_token
       ? await assertActiveCustomerPrincipalSession(context.principal_session_token)
@@ -2296,6 +2324,18 @@ async function resolveCustomerInvoicePortalAccount(
     : safeFailure(safeCustomerAuthError, 403);
 }
 
+function isReviewerInvoiceRow(row: UnknownRecord, review: StoreReviewSession) {
+  const scope = review.scope;
+  const items = safeLineItems(row.line_items);
+  return safeText(row.customer_id, 160) === String(scope.customerId) &&
+    positiveIdentityId(row.booker_id) === scope.bookerId &&
+    scope.travelerIds.includes(positiveIdentityId(row.traveler_id) || 0) &&
+    row.document_state === "issued" && scope.bookingReferences.includes(String(row.reference)) &&
+    Boolean(items?.length && items.every(item => item.bookingReference &&
+      scope.bookingTargets?.some(target => target.bookingReference === item.bookingReference &&
+        target.travelerId === positiveIdentityId(row.traveler_id))));
+}
+
 export async function loadCustomerInvoiceRecordsForPortal(
   context: CustomerSavedBookingsBoundaryContext,
   client?: CustomerInvoiceClient,
@@ -2306,7 +2346,7 @@ export async function loadCustomerInvoiceRecordsForPortal(
     return safeFailure(safePersistenceConfigError, 503);
   }
 
-  const invoiceClient = client ?? createServerClient();
+  const invoiceClient = client ?? createServerClient(context.review);
   const activeAccount = await resolveCustomerInvoicePortalAccount(context, invoiceClient);
 
   if (!activeAccount.ok) {
@@ -2336,7 +2376,7 @@ export async function loadCustomerInvoiceRecordsForPortal(
   let { data, error } = await invoiceQuery;
 
   if (error) {
-    if (context.mode === "principal-device-session" || !lifecycleColumnUnavailableError(error)) {
+    if (context.review || context.mode === "principal-device-session" || !lifecycleColumnUnavailableError(error)) {
       return safeFailure(safeReadError, 500);
     }
 
@@ -2362,6 +2402,9 @@ export async function loadCustomerInvoiceRecordsForPortal(
     }
   }
 
+  if (context.review && asArray(data).some(row => !isReviewerInvoiceRow(asRecord(row), context.review!))) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
   return {
     data: asArray(data)
       .map(asRecord)
@@ -2384,7 +2427,7 @@ export async function loadCustomerInvoicePdfForPortal(
     return safeFailure(safePersistenceConfigError, 503);
   }
 
-  const invoiceClient = client ?? createServerClient();
+  const invoiceClient = client ?? createServerClient(context.review);
   const activeAccount = await resolveCustomerInvoicePortalAccount(context, invoiceClient);
 
   if (!activeAccount.ok) {
@@ -2404,7 +2447,7 @@ export async function loadCustomerInvoicePdfForPortal(
 
   let pdfQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
-    .select(customerInvoicePdfSelect)
+    .select(context.review ? `${customerInvoicePdfSelect}, booker_id, traveler_id, reference, line_items` : customerInvoicePdfSelect)
     .eq("invoice_number", invoiceNumber)
     .eq("document_state", "issued");
   if (portalBookerId) {
@@ -2417,7 +2460,7 @@ export async function loadCustomerInvoicePdfForPortal(
   let error = pdfResult.error;
 
   if (error) {
-    if (context.mode === "principal-device-session" || !lifecycleColumnUnavailableError(error)) {
+    if (context.review || context.mode === "principal-device-session" || !lifecycleColumnUnavailableError(error)) {
       return safeFailure(safeReadError, 500);
     }
 
@@ -2443,6 +2486,9 @@ export async function loadCustomerInvoicePdfForPortal(
   }
 
   const row = asRecord(data);
+  if (context.review && (!isReviewerInvoiceRow(row, context.review) || row.invoice_number !== invoiceNumber)) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
   const bytes = bytesFromBase64(row.pdf_base64);
   const documentType = safeDocumentType(row.document_type) || inferBillingDocumentType(invoiceNumber);
   const documentState = safeDocumentState(row.document_state) || "issued";

@@ -2830,7 +2830,7 @@ async function applyAdminDriverReassignmentTransaction(
     };
   }
 
-  if (previousDriverId === newDriverId) {
+  if (combo && previousDriverId === newDriverId) {
     return {
       error: "The selected Driver is already assigned to this booking.",
       ok: false,
@@ -2874,6 +2874,26 @@ async function applyAdminDriverReassignmentTransaction(
     }
 
     return safeAdapterFailure(safeUpdateError, 500, error, "booking_row");
+  }
+
+  if (!cancellation && previousDriverId === newDriverId) {
+    // Same-driver correction is handled atomically by the existing transaction.
+    // It has no expired links or notification and must never use generic writers.
+    const receipt = asRecord(data);
+    if (receipt.driver_details_updated !== true ||
+        receipt.booking_reference !== input.target_booking_reference ||
+        String(receipt.booking_id) !== String(existing.id) ||
+        positiveSafeInteger(receipt.previous_driver_id) !== previousDriverId ||
+        positiveSafeInteger(receipt.new_driver_id) !== previousDriverId) {
+      return { ok: false, status: 409, error: "Driver detail correction could not be confirmed. Reload this booking before trying again." };
+    }
+    const corrected = await fetchAdminBookingById(client, existing.id);
+    if (!corrected.ok) return corrected;
+    if (corrected.data.booking_reference !== input.target_booking_reference ||
+        positiveSafeInteger(corrected.data.driver_id) !== previousDriverId) {
+      return { ok: false, status: 409, error: safeUpdateConflictError };
+    }
+    return corrected;
   }
 
   const reassignment = normalizeAdminDriverReassignmentRpcRecord(data);
@@ -3338,15 +3358,6 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     }
 
     if (existingDriverId) {
-      if (existingDriverId === requestedDriverId) {
-        return {
-          error: "The selected Driver is already assigned to this booking.",
-          ok: false,
-          operation: "booking_row",
-          status: 409,
-        };
-      }
-
       return applyAdminDriverReassignmentTransaction(
         client,
         input,

@@ -460,8 +460,17 @@ function safeDriverDetailsFromInput(input: SaveDriverJobDetailsPersistenceInput)
   };
 }
 
+function normalizeSubmittedDriverContact(value: unknown) {
+  const contact = safeTextFromDb(value, 120);
+  const compact = contact.replace(/[\s()-]/g, "");
+
+  if (/^\d{8}$/.test(compact)) return `+65 ${compact}`;
+  if (/^65\d{8}$/.test(compact)) return `+65 ${compact.slice(2)}`;
+  return contact;
+}
+
 function normalizedDriverContact(value: unknown) {
-  return safeTextFromDb(value, 120).replace(/[^\d+]/g, "");
+  return normalizeSubmittedDriverContact(value).replace(/[^\d+]/g, "");
 }
 
 function normalizedDriverName(value: unknown) {
@@ -715,10 +724,23 @@ async function resolveAcknowledgedDriverIdentity(
     return { ok: false, reason: "invalid_details" };
   }
 
+  const canonicalContact = normalizedDriverContact(nextDetails.contact);
+  const localContact = /^\+65\d{8}$/.test(canonicalContact) ? canonicalContact.slice(3) : null;
+  const contactCandidates = [...new Set([
+    nextDetails.contact,
+    ...(localContact ? [
+      localContact,
+      `${localContact.slice(0, 4)} ${localContact.slice(4)}`,
+      `65${localContact}`,
+      `+65${localContact}`,
+      `+65 ${localContact}`,
+      `+65 ${localContact.slice(0, 4)} ${localContact.slice(4)}`,
+    ] : []),
+  ])];
   const { data: matchingDrivers, error: matchingDriversError } = await client
     .from("drivers")
     .select("id")
-    .eq("contact_number", nextDetails.contact)
+    .in("contact_number", contactCandidates)
     .limit(2);
 
   if (matchingDriversError) {
@@ -741,7 +763,7 @@ async function resolveAcknowledgedDriverIdentity(
     .from("drivers")
     .insert({
       availability_status: "available",
-      contact_number: nextDetails.contact,
+      contact_number: normalizeSubmittedDriverContact(nextDetails.contact),
       driver_name: nextDetails.name,
       plate_number: nextDetails.plate || null,
       vehicle_type: nextDetails.vehicleModel || null,
@@ -761,6 +783,7 @@ async function syncVerifiedAccountDriverProfile(
   client: DriverJobStatusPersistenceClient,
   verifiedAccountDriverId: number,
   nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
+  contactNormalizationOnly = false,
 ): Promise<{ ok: true } | { ok: false; reason: "invalid_details" | "not_configured" }> {
   const { data: driverRows, error: driversError } = await client
     .from("drivers")
@@ -774,6 +797,7 @@ async function syncVerifiedAccountDriverProfile(
   const normalizedName = normalizedDriverName(nextDetails.name);
   const normalizedPlate = normalizedDriverPlate(nextDetails.plate);
   let exactDriverFound = false;
+  let previousContact: string | null = null;
 
   for (const row of asArray(driverRows)) {
     const record = asRecord(row);
@@ -781,13 +805,14 @@ async function syncVerifiedAccountDriverProfile(
 
     if (driverId === verifiedAccountDriverId) {
       exactDriverFound = true;
+      previousContact = typeof record.contact_number === "string" ? record.contact_number : null;
       continue;
     }
 
     if (
       (normalizedContact && normalizedDriverContact(record.contact_number) === normalizedContact) ||
-      (normalizedName && normalizedDriverName(record.driver_name) === normalizedName) ||
-      (normalizedPlate && normalizedDriverPlate(record.plate_number) === normalizedPlate)
+      (!contactNormalizationOnly && normalizedName && normalizedDriverName(record.driver_name) === normalizedName) ||
+      (!contactNormalizationOnly && normalizedPlate && normalizedDriverPlate(record.plate_number) === normalizedPlate)
     ) {
       return { ok: false, reason: "invalid_details" };
     }
@@ -797,17 +822,25 @@ async function syncVerifiedAccountDriverProfile(
     return { ok: false, reason: "invalid_details" };
   }
 
-  const { data: updatedDriver, error: updateError } = await client
+  if (contactNormalizationOnly && previousContact === nextDetails.contact) return { ok: true };
+
+  // A token-bound submission may add its country code without changing the
+  // directory's name, plate or vehicle. Do not overwrite a concurrent contact edit.
+  let profileUpdate = client
     .from("drivers")
-    .update({
+    .update(contactNormalizationOnly ? { contact_number: nextDetails.contact } : {
       contact_number: nextDetails.contact || null,
       driver_name: nextDetails.name,
       plate_number: nextDetails.plate || null,
       vehicle_type: nextDetails.vehicleModel || null,
     })
-    .eq("id", verifiedAccountDriverId)
-    .select("id")
-    .single();
+    .eq("id", verifiedAccountDriverId);
+  if (contactNormalizationOnly) {
+    profileUpdate = previousContact === null
+      ? profileUpdate.is("contact_number", null)
+      : profileUpdate.eq("contact_number", previousContact);
+  }
+  const { data: updatedDriver, error: updateError } = await profileUpdate.select("id").single();
 
   if (
     updateError ||
@@ -1535,12 +1568,17 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
 
   const verifiedDriverId = identity.driverId;
   const verifiedAccountDriverId = positiveIntegerFromDb(input.verifiedAccountDriverId);
+  const normalizedContact = normalizeSubmittedDriverContact(nextDetails.contact);
+  const contactNeedsCountryCode = normalizedContact !== nextDetails.contact;
+  // Existing acknowledgements returned above retain their exact locked details.
+  nextDetails.contact = normalizedContact;
 
-  if (verifiedAccountDriverId) {
+  if (verifiedAccountDriverId || contactNeedsCountryCode) {
     const profileSync = await syncVerifiedAccountDriverProfile(
       input.client,
-      verifiedAccountDriverId,
+      verifiedAccountDriverId || verifiedDriverId,
       nextDetails,
+      !verifiedAccountDriverId,
     );
 
     if (!profileSync.ok) {

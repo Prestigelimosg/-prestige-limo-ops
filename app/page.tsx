@@ -17633,6 +17633,13 @@ export default function Home() {
         return currentBooking;
       }
 
+      // Compare the immutable ACK time, never mutable link/reminder metadata.
+      // A later booking save is authoritative, including deliberately blank fields.
+      const baseline = loadedAdminBookingBaselineRef.current;
+      const savedAt = Date.parse(baseline?.updatedAt || "");
+      const acknowledgedAt = Date.parse(link.safe_summary.acknowledged_at || "");
+      if (baseline?.bookingReference === currentBookingReference && Number.isFinite(savedAt) &&
+          (!Number.isFinite(acknowledgedAt) || acknowledgedAt <= savedAt)) return currentBooking;
       const nextBooking = {
         ...currentBooking,
         driverContact: driverContact || currentBooking.driverContact,
@@ -23489,6 +23496,9 @@ export default function Home() {
 
       setDrivers((data ?? []) as DriverRecord[]);
       setDriverProfileDisplayDrivers(displayDrivers);
+      setDriverAssignmentDisplayDrivers(displayDrivers);
+      driverAssignmentDisplayDriversRef.current = displayDrivers;
+      driverAssignmentDisplayLoadedAt.current = Date.now();
       setMessage({ tone: "success", text: successText });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver load error.";
@@ -24630,6 +24640,13 @@ export default function Home() {
     const recordReference =
       cleanReferenceText(record.booking_reference) || cleanReferenceText(record.id);
     const currentBookingReference = cleanReferenceText(dispatchReleaseWorkflowBookingReference);
+    if (!recordReference || recordReference !== currentBookingReference) return;
+    const baseline = loadedAdminBookingBaselineRef.current;
+    if (baseline?.bookingReference === recordReference) {
+      const savedAt = Date.parse(baseline.updatedAt);
+      const responseAt = Date.parse(clean(record.updated_at));
+      if (Number.isFinite(savedAt) && (!Number.isFinite(responseAt) || responseAt < savedAt)) return;
+    }
 
     if (!driverName && !driverContact && !driverPlate && !driverVehicleModel) {
       return;
@@ -27879,9 +27896,21 @@ export default function Home() {
           driverPlate: cancelDriverAssignment ? "" : booking.driverPlate,
           driverVehicleModel: cancelDriverAssignment ? "" : booking.driverVehicleModel,
         };
+        const sameDriverCorrection = !cancelDriverAssignment &&
+          String(appliedSnapshot?.driver_id || "") === String(updatedBooking.driver_id || "");
+        if (sameDriverCorrection) {
+          Object.assign(retainedAssignmentBooking, {
+            driverName: clean(updatedBooking.driver_name),
+            driverContact: clean(updatedBooking.driver_contact),
+            driverPlate: clean(updatedBooking.driver_plate_number),
+            driverVehicleModel: clean(updatedBooking.vehicle_type_or_category),
+          });
+        }
         const assignmentMessage = {
           tone: "success",
-          text: cancelDriverAssignment
+          text: sameDriverCorrection
+            ? `Driver details saved for this booking. Customer Copy updated.`
+            : cancelDriverAssignment
             ? "Driver cancelled. Alert queued. Booking stays active."
             : `Driver assignment saved: ${updatedBookingReference}.${updatedBooking.assignment_payout ? " Payout saved." : ""} Create Link is ready. Operations Calendar will receive the confirmed plate after Driver Save & Acknowledge Job; Update + Cal remains available for recovery.`,
         } satisfies Message;

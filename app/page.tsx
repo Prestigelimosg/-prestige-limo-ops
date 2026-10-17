@@ -27479,10 +27479,20 @@ export default function Home() {
     const reference = cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current);
     if (!(window.location.origin === "https://app.prestigelimo.sg" || (process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname))) ||
         options.assignmentOnly || options.cancelDriverAssignment || !baseline || !reference ||
-        baseline.bookingReference !== reference || !baseline.updatedAt || booking.luggageCount !== "2" ||
-        adminBookingFormSyncSignature({ ...booking, luggageCount: baseline.form.luggageCount }) !== baseline.formSignature) {
-      notice("error", "Load the designated QA booking and change only Number of bags to 2. Other actions remain unavailable.");
+        baseline.bookingReference !== reference || !baseline.updatedAt ||
+        adminBookingFormSyncSignature({ ...booking, luggageCount: baseline.form.luggageCount, name: baseline.form.name,
+          pax: baseline.form.pax, flight: baseline.form.flight, vehicle: baseline.form.vehicle }) !== baseline.formSignature) {
+      notice("error", "Load the designated QA booking. Only passenger name, passenger count, flight, vehicle and bags can be saved here.");
       return;
+    }
+    const luggageCount = Number(booking.luggageCount);
+    const details = { passenger_name: clean(booking.name), pax_count: Number(booking.pax),
+      flight_no: clean(booking.flight), vehicle_type_or_category: clean(booking.vehicle) };
+    if (!/^\d+$/.test(booking.luggageCount) || !Number.isInteger(luggageCount) || luggageCount < 0 || luggageCount > 100 ||
+        !/^\d+$/.test(booking.pax) || !Number.isInteger(details.pax_count) || details.pax_count < 1 || details.pax_count > 100 ||
+        !details.passenger_name || details.passenger_name.length > 160 || details.flight_no.length > 80 ||
+        !details.vehicle_type_or_category || details.vehicle_type_or_category.length > 80) {
+      notice("error", "Enter a passenger name, 1–100 passengers, a vehicle, and 0–100 bags."); return;
     }
     const signature = adminBookingFormSyncSignature(booking);
     const stillCurrent = () => loadedAdminBookingBaselineRef.current === baseline &&
@@ -27493,10 +27503,11 @@ export default function Home() {
     try {
       const response = await fetch("/api/admin-bookings", { method: "PATCH", headers: {
         "Content-Type": "application/json", "x-prestige-admin-purpose": "admin-qa-bags-save",
-      }, body: JSON.stringify({ target_booking_reference: reference, expected_updated_at: baseline.updatedAt, luggage_count: 2 }) });
+      }, body: JSON.stringify({ target_booking_reference: reference, expected_updated_at: baseline.updatedAt, luggage_count: luggageCount, details }) });
       const result = await response.json();
       if (!response.ok || result?.ok !== true || result.mode !== "review" ||
-          result.result?.booking_reference !== reference || result.result?.luggage_count !== 2 ||
+          result.result?.booking_reference !== reference || result.result?.luggage_count !== luggageCount ||
+          !result.result?.details || Object.entries(details).some(([key, value]) => result.result.details[key] !== value) ||
           typeof result.result?.updated_at !== "string" || typeof result.result?.noop !== "boolean") throw new Error("unconfirmed");
       const read = await fetch(`${adminSavedBookingsApiPath}?${new URLSearchParams({ booking_reference: reference })}`, {
         cache: "no-store", headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
@@ -27504,13 +27515,15 @@ export default function Home() {
       const refreshed = await read.json() as AdminSavedBookingReadResponse;
       if (!read.ok || !refreshed.ok || refreshed.mode !== "review" || !refreshed.booking ||
           bookingRecordPersistedReference(refreshed.booking) !== reference ||
-          refreshed.booking.updated_at !== result.result.updated_at || refreshed.booking.luggage_count !== 2) throw new Error("reload");
+          refreshed.booking.updated_at !== result.result.updated_at || refreshed.booking.luggage_count !== luggageCount ||
+          refreshed.booking.passenger_name !== details.passenger_name || refreshed.booking.pax_count !== details.pax_count ||
+          (refreshed.booking.flight_no || "") !== details.flight_no || refreshed.booking.vehicle_type_or_category !== details.vehicle_type_or_category) throw new Error("reload");
       if (!stillCurrent()) return;
       const saved = bookingRecordToAdminBookingPersistenceRecord(refreshed.booking);
       if (!saved) throw new Error("reload");
       markAdminBookingAsActiveForUpdates(reference, saved, { ...booking });
       upsertLoadedBookingFromAdminRecord(saved);
-      notice("success", result.result.noop ? "QA bag count is already 2. No change was saved." : "QA bag count saved.");
+      notice("success", result.result.noop ? "QA booking details are unchanged." : "QA booking details saved.");
     } catch {
       if (stillCurrent()) {
         loadedAdminBookingBaselineRef.current = null;
